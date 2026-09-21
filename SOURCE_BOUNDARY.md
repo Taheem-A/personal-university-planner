@@ -1,10 +1,11 @@
 # Source boundary
 
-This implementation intentionally uses only:
+Product behavior, domain semantics, planner rules, trust rules, UX, visual design, accessibility, and acceptance criteria come from:
 
-1. The **Personal University Planning System** master document.
-2. The approved University Planner UI images supplied with the project.
+1. The **Personal University Planning System** master specification.
+2. The **University Planner — Implementation Roadmap**.
+3. The approved University Planner UI images supplied with the project.
 
-No web research, external visual references, copied component implementations, or additional product requirements were used while creating this codebase.
+External official documentation may be consulted only to verify current implementation details such as supported runtime/framework versions, security releases, provider compatibility, and deployment/toolchain behavior. External sources do not silently introduce product requirements or replace the project specifications.
 
-Where the generated mockups conflict with the written implementation contract, the document wins. In particular, decorative motivational filler present in some mockups is intentionally omitted because the frozen MVP interface contract rejects motivational filler and dashboard decoration.
+Where a mockup conflicts with the written implementation contract, the written specification wins.

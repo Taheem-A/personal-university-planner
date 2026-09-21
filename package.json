@@ -1,17 +1,43 @@
 {
   "name": "personal-university-planner",
   "private": true,
-  "version": "0.1.0",
-  "description": "Personal University Planning System implementation grounded only in the approved master specification and UI mockups.",
-  "scripts": {
-    "build:core": "tsc -p tsconfig.core.json",
-    "test:core": "npm run build:core && node --test tests/planner.test.js tests/analytics.test.js",
-    "preview": "http-server preview -p 4173 -c-1",
-    "check": "npm run test:core && node --check preview/app.js && python tests/ui-smoke.py"
+  "version": "0.2.0",
+  "description": "Production implementation of the Personal University Planning System.",
+  "packageManager": "npm@11.19.0",
+  "engines": {
+    "node": "24.21.0",
+    "npm": "11.19.0"
   },
-  "dependencies": {
-    "playwright": "^1.63.0",
-    "tsc": "^2.0.4",
-    "typescript": "^7.0.2"
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @university-planner/web",
+    "build": "npm run build:core && npm run build -w @university-planner/web",
+    "build:core": "tsc -p tsconfig.core.json",
+    "typecheck": "npm run typecheck:core && npm run typecheck -w @university-planner/web",
+    "typecheck:core": "tsc -p tsconfig.core.json --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify:boundaries": "node scripts/verify-boundaries.mjs",
+    "test:unit": "npm run build:core && node --test tests/planner.test.js tests/analytics.test.js",
+    "test:integration": "node --test tests/integration/*.test.mjs",
+    "test:e2e": "playwright test",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run verify:boundaries && npm run test:unit && npm run test:integration && npm run build && npm run test:e2e",
+    "check": "npm run verify",
+    "preview": "http-server preview -p 4173 -c-1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "16.3.3",
+    "http-server": "^14.1.1",
+    "prettier": "^3.0.0",
+    "typescript": "5.9.3"
   }
 }

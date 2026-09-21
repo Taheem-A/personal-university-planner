@@ -1,10 +1,21 @@
-# Production web boundary
+# Production web application
 
-The master specification freezes `apps/web` as the Next.js + TypeScript production client. The current execution environment cannot reach the npm registry, so Next/React/Motion cannot be installed here.
+This directory is now the real **Next.js + TypeScript** production application boundary.
 
-The runnable implementation in `../../preview` is therefore a dependency-free browser implementation of the approved UI and interaction contract. It is intentionally organized around the same view models and domain vocabulary that `apps/web` will consume.
+Milestone 0 intentionally contains only the runtime/bootstrap shell. The approved product UI remains in `../../preview` as a regression reference until the application-service/planner boundaries can supply canonical view models.
 
-When package installation is available, port in this order from the frozen handoff:
+## Commands
+
+From the repository root:
+
+```bash
+npm run dev
+npm run typecheck
+npm run build
+npm run test:e2e
+```
+
+## Frozen production port order
 
 1. Token/theme foundation and IBM Plex configuration.
 2. Owned shadcn primitives.
@@ -19,4 +30,4 @@ When package installation is available, port in this order from the frozen hando
 11. Courses / Availability / Integrations / Settings / Onboarding.
 12. Mobile transformations.
 
-The domain and planner packages in this repository are already framework-independent and should be consumed directly by the production application services.
+Production routes must not import fixture schedule data from `preview/`.

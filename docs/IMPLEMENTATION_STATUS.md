@@ -1,48 +1,35 @@
 # Implementation status
 
-## Implemented and runnable
+## Roadmap state
 
-- Approved application shell and navigation.
-- Today, Week, Upcoming, Inbox, Courses, Availability, Integrations, Settings, Onboarding.
-- Contextual detail panels, Planner command surface, Scenario Preview, Conflict Resolution.
-- Responsive mobile Today and mobile Week agenda.
-- Core interaction states and keyboard navigation.
-- Deterministic planner-core with validation and explicit infeasibility.
-- Non-mutating protected-window scenario simulation.
-- Conservative estimate-learning function.
-- Canonical PostgreSQL/Prisma schema source.
-- Provider-neutral integration and assistant boundaries.
+- Pre-build specification package: **COMPLETE**
+- UX / information architecture: **COMPLETE**
+- Visual design system and approved screen family: **COMPLETE**
+- Interactive browser preview: **COMPLETE AS PREVIEW, NOT PRODUCTION**
+- Framework-independent domain/planner foundation: **PARTIALLY IMPLEMENTED**
+- Milestone 0 — Production Bootstrap and Baseline Preservation: **IN PROGRESS**
 
-## Verified
+## Milestone 0 completed in this slice
 
-- Planner sessions do not overlap hard events in tested scenarios.
-- Feasible work is fully scheduled in the canonical test fixture.
-- Protected-time scenarios do not mutate canonical input.
-- Infeasible work is surfaced with unscheduled minutes.
-- Learning does not automatically adapt before three useful observations.
-- UI smoke flow covers Today, Week, Scenario, Upcoming detail, Inbox capture, Planner palette, and mobile Week.
-- Final desktop/mobile QA screenshots reviewed against the approved visual direction.
+- Confirmed `Taheem-A/personal-university-planner` as the authoritative implementation repository.
+- Preserved `preview/` and `qa/` as non-production visual/regression references.
+- Added npm workspace boundaries for `apps/*` and `packages/*`.
+- Added a real Next.js 16 production runtime in `apps/web`.
+- Added shared strict TypeScript configuration.
+- Added ESLint, Prettier, Playwright, integration-test, and package-boundary commands.
+- Added typed Zod environment schemas and a complete secret-free `.env.example`.
+- Documented development / preview / production environment isolation.
+- Added CI and dependency-review workflow configuration.
+- Recorded concrete bootstrap/provider choices in ADR 0001.
 
-## Scaffolded but awaiting production dependencies/services
+## Still required before Milestone 0 can be marked GATE PASSED
 
-- Next.js application runtime.
-- Auth.js.
-- Prisma client + first database migration against actual PostgreSQL.
-- Zod transport validation.
-- Google Calendar and LMS adapter implementations.
-- Motion.dev implementation of the frozen motion contract.
-- shadcn-owned primitive layer.
-- deployment/monitoring/background jobs.
+- Generate and commit the npm lockfile from a networked install.
+- Prove a fresh networked install succeeds.
+- Run the complete `npm run verify` suite in CI, including Next.js build and Playwright browser checks.
+- Resolve any dependency/toolchain incompatibilities surfaced by that first CI run.
+- Confirm required branch checks can be enforced for pull requests.
 
-## Production continuation order
+## Exact next work item
 
-1. Install/freeze production dependencies.
-2. Validate Prisma schema and create the first migration.
-3. Implement authenticated application/service layer around canonical state.
-4. Port the approved shell/components from `preview/` into `apps/web` using the frozen token/component contracts.
-5. Connect Today and Week view models to real services/planner output.
-6. Implement complete/partial/skip/move/lock transactions.
-7. Implement Inbox/Assessment/Course CRUD.
-8. Add Planner structured tool layer and scenario API.
-9. Add Google Calendar read sync before deeper LMS automation.
-10. Run the full acceptance/security/accessibility suite before production trust.
+Use the networked CI run from this branch to generate the lockfile, fix any bootstrap failures, then re-run the full verification suite. Once green, mark Milestone 0 **GATE PASSED** and move directly to Milestone 1: canonical database/time foundation and first migration history.

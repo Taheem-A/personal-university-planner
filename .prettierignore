@@ -1,0 +1,13 @@
+node_modules
+.next
+dist
+coverage
+playwright-report
+test-results
+preview
+qa
+University-Planner.html
+packages/*/src
+packages/database/prisma
+tests/ui-smoke.py
+package-lock.json
