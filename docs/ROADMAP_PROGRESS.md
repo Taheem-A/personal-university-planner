@@ -37,3 +37,27 @@ None for Milestone 0. Neon/Vercel/Auth.js/Sentry resources and secrets remain un
 ### Exact next work item
 
 Start Milestone 1 with the canonical Prisma schema/time-semantics review, then create and test the first migration and deterministic seed on a disposable Neon development branch.
+
+## 2026-09-21 — Milestone 1: IN PROGRESS
+
+### What changed
+
+- Completed the pre-migration entity/field audit against the roadmap and master product specification; recorded it in ADR 0002.
+- Corrected PostgreSQL semantics for date-only values, recurring local wall-clock values, and UTC-safe instants.
+- Added direct user scope and ownership-safe composite relations, history-preserving deletion behavior, typed planning preferences, scoped external identities, provenance, and the missing `RecurringWorkRule`.
+- Kept Assessment submission distinct from Task work completion and separated original/current/remaining/actual duration meanings.
+- Aligned framework-independent domain terminology without importing Prisma types.
+
+### Tests passed
+
+- Prisma format and validation pass for the corrected schema.
+- `pnpm verify` passes: formatting, ESLint, package boundaries, strict core/web TypeScript, 6 unit tests, 2 integration tests, Prisma validation, core/Next.js production builds, and 2 Chromium E2E tests.
+- The local host reported Node 24.19.0/pnpm 11.19.0 below the repository-pinned Node 24.21.0/pnpm 12.5.1 versions; this produced engine warnings but no check failures.
+
+### Blockers
+
+None. Migration history remains absent by design for this slice.
+
+### Exact next work item
+
+Complete the time foundation before freezing migration 001.

@@ -226,6 +226,7 @@ function placeTask(
     const endAt = addMinutes(startAt, target);
     sessions.push({
       id: `generated-${sessionCounter.value++}`,
+      userId: input.userId,
       taskId: task.id,
       startAt,
       endAt,
@@ -354,6 +355,7 @@ export function simulateProtectedWindow(
   const before = generatePlan(input);
   const synthetic: CalendarEvent = {
     id: `scenario:${request.title}`,
+    userId: input.userId,
     title: request.title,
     startAt: request.startAt,
     endAt: request.endAt,

@@ -2,9 +2,9 @@
 
 ## Current active milestone
 
-**Milestone 1 — Canonical Domain, Database, Time, and Migrations: NOT STARTED**
+**Milestone 1 — Canonical Domain, Database, Time, and Migrations: IN PROGRESS**
 
-Milestone 0 passed its repository/toolchain gate on 2026-09-21. The production application is intentionally still a bootstrap shell; the approved interactive product remains a non-production regression reference.
+Milestone 0 passed its repository/toolchain gate on 2026-09-21. The pre-migration canonical schema/domain audit is complete, but the time foundation, migration 001, seed, repositories, and Milestone-1 exit gate remain unfinished. The production application is intentionally still a bootstrap shell.
 
 ## Production bootstrap now implemented
 
@@ -38,10 +38,18 @@ Milestone 0 passed its repository/toolchain gate on 2026-09-21. The production a
 - Production UI migration from the approved preview.
 - Google Calendar, Quercus/LMS, assistant execution, advanced optimization, background jobs, or microservices.
 
+## Milestone 1 work completed so far
+
+- Audited every roadmap entity and recorded the decisions in ADR 0002.
+- Corrected date-only, local wall-clock, and UTC-instant storage paths.
+- Added direct/composite user ownership, explicit history-preserving relations, typed preferences, account-scoped external identity, and the missing `RecurringWorkRule`.
+- Separated assessment submission from task completion and original/current/remaining/actual duration meanings.
+- Kept migration history absent intentionally until the time foundation is complete.
+
 ## Blockers
 
-None for the Milestone-0 gate. Managed service projects and credentials are intentionally not provisioned by this repository commit.
+None. Managed service projects and credentials remain intentionally unprovisioned.
 
 ## Exact next work item
 
-Begin Milestone 1 by reviewing `packages/database/prisma/schema.prisma` against the canonical entity/time semantics, then create the first source-controlled Prisma migration and prove zero-to-current migration plus deterministic seed bootstrap against a disposable Neon development branch.
+Complete the time foundation before freezing migration 001.
