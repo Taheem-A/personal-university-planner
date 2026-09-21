@@ -1,0 +1,17 @@
+{
+  "name": "personal-university-planner",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Personal University Planning System implementation grounded only in the approved master specification and UI mockups.",
+  "scripts": {
+    "build:core": "tsc -p tsconfig.core.json",
+    "test:core": "npm run build:core && node --test tests/planner.test.js tests/analytics.test.js",
+    "preview": "http-server preview -p 4173 -c-1",
+    "check": "npm run test:core && node --check preview/app.js && python tests/ui-smoke.py"
+  },
+  "dependencies": {
+    "playwright": "^1.63.0",
+    "tsc": "^2.0.4",
+    "typescript": "^7.0.2"
+  }
+}

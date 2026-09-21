@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    // "moduleResolution": "Node",
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "sourceMap": true,
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
+  },
+  "include": [
+    "packages/domain/src/**/*.ts",
+    "packages/shared/src/**/*.ts",
+    "packages/planner-core/src/**/*.ts",
+    "packages/integrations/src/**/*.ts",
+    "packages/assistant/src/**/*.ts",
+    "packages/analytics/src/**/*.ts"
+  ]
+}
