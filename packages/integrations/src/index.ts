@@ -1,9 +1,5 @@
 export type ExternalSourceConfidence =
-  | "DIRECT_API"
-  | "CALENDAR_FEED"
-  | "DOCUMENT_EXTRACTION"
-  | "AI_EXTRACTED"
-  | "MANUAL";
+  "DIRECT_API" | "CALENDAR_FEED" | "DOCUMENT_EXTRACTION" | "AI_EXTRACTED" | "MANUAL";
 
 export interface ImportedCourse {
   externalId: string;

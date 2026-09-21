@@ -4,22 +4,10 @@ export type EnergyLevel = "LOW" | "MEDIUM" | "HIGH";
 export type ConstraintLevel = "HARD" | "SOFT" | "INFORMATIONAL";
 export type PlanningMode = "AUTO" | "MANUAL" | "UNSCHEDULED";
 export type TaskStatus =
-  | "INBOX"
-  | "READY"
-  | "IN_PROGRESS"
-  | "BLOCKED"
-  | "COMPLETED"
-  | "CANCELLED"
-  | "DEFERRED";
+  "INBOX" | "READY" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED" | "CANCELLED" | "DEFERRED";
 
 export type WorkSessionState =
-  | "PLANNED"
-  | "ACTIVE"
-  | "COMPLETED"
-  | "PARTIAL"
-  | "SKIPPED"
-  | "CANCELLED"
-  | "SUPERSEDED";
+  "PLANNED" | "ACTIVE" | "COMPLETED" | "PARTIAL" | "SKIPPED" | "CANCELLED" | "SUPERSEDED";
 
 export type LocationTag =
   | "ANYWHERE"

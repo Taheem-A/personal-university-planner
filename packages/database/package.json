@@ -1,0 +1,15 @@
+{
+  "name": "@university-planner/database",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "db:format": "prisma format --schema prisma/schema.prisma",
+    "db:validate": "prisma validate --config prisma.config.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "7.10.0"
+  },
+  "devDependencies": {
+    "prisma": "7.10.0"
+  }
+}

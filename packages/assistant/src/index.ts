@@ -20,7 +20,13 @@ export type AssistantMutation =
   | { type: "CREATE_TASK"; title: string; dueAt?: Date; estimatedMinutes?: number; courseId?: Id }
   | { type: "UPDATE_TASK_STATUS"; taskId: Id; status: TaskStatus }
   | { type: "RECORD_PARTIAL"; taskId: Id; remainingMinutes: number }
-  | { type: "CREATE_PROTECTED_WINDOW"; startAt: Date; endAt: Date; protection: "HARD" | "SOFT"; reason: string }
+  | {
+      type: "CREATE_PROTECTED_WINDOW";
+      startAt: Date;
+      endAt: Date;
+      protection: "HARD" | "SOFT";
+      reason: string;
+    }
   | { type: "UPDATE_PLANNING_PREFERENCES"; patch: Partial<PlanningPreferences> }
   | { type: "REPLAN"; mode: "INCREMENTAL" | "FULL" };
 

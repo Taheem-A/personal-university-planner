@@ -10,12 +10,12 @@ export function addMinutes(date: Date, minutes: number): Date {
 
 export function maxDate(...dates: Date[]): Date {
   if (dates.length === 0) throw new Error("maxDate requires at least one date");
-  return dates.reduce((max, current) => current.getTime() > max.getTime() ? current : max);
+  return dates.reduce((max, current) => (current.getTime() > max.getTime() ? current : max));
 }
 
 export function minDate(...dates: Date[]): Date {
   if (dates.length === 0) throw new Error("minDate requires at least one date");
-  return dates.reduce((min, current) => current.getTime() < min.getTime() ? current : min);
+  return dates.reduce((min, current) => (current.getTime() < min.getTime() ? current : min));
 }
 
 export function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {

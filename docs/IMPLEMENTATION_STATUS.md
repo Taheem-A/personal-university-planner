@@ -1,48 +1,47 @@
 # Implementation status
 
-## Implemented and runnable
+## Current active milestone
 
-- Approved application shell and navigation.
-- Today, Week, Upcoming, Inbox, Courses, Availability, Integrations, Settings, Onboarding.
-- Contextual detail panels, Planner command surface, Scenario Preview, Conflict Resolution.
-- Responsive mobile Today and mobile Week agenda.
-- Core interaction states and keyboard navigation.
-- Deterministic planner-core with validation and explicit infeasibility.
-- Non-mutating protected-window scenario simulation.
-- Conservative estimate-learning function.
-- Canonical PostgreSQL/Prisma schema source.
-- Provider-neutral integration and assistant boundaries.
+**Milestone 1 — Canonical Domain, Database, Time, and Migrations: NOT STARTED**
 
-## Verified
+Milestone 0 passed its repository/toolchain gate on 2026-09-21. The production application is intentionally still a bootstrap shell; the approved interactive product remains a non-production regression reference.
 
-- Planner sessions do not overlap hard events in tested scenarios.
-- Feasible work is fully scheduled in the canonical test fixture.
-- Protected-time scenarios do not mutate canonical input.
-- Infeasible work is surfaced with unscheduled minutes.
-- Learning does not automatically adapt before three useful observations.
-- UI smoke flow covers Today, Week, Scenario, Upcoming detail, Inbox capture, Planner palette, and mobile Week.
-- Final desktop/mobile QA screenshots reviewed against the approved visual direction.
+## Production bootstrap now implemented
 
-## Scaffolded but awaiting production dependencies/services
+- Real Next.js App Router application at `apps/web` with strict TypeScript and a health endpoint.
+- pnpm modular-monolith workspace covering web, database, planner-core, domain, integrations, assistant, analytics, and shared packages.
+- Node.js 24.21.0 LTS and pnpm 12.5.1 pinned across local version files, package metadata, and CI.
+- Typed development/preview/production environment validation and a complete secret-free `.env.example`.
+- Formatting, lint, package-boundary, typecheck, unit, integration, Prisma validation, production build, and browser/E2E commands.
+- GitHub Actions CI plus dependency/license review.
+- Registry audit passes at the configured high-severity gate; patched transitive Prisma tooling versions are pinned explicitly.
+- Neon, Vercel, Google-only Auth.js, and Sentry decisions recorded; explicit background jobs deferred to the first asynchronous integration.
+- Existing planner/domain/shared/integration/assistant/analytics sources preserved and built as the framework-independent core.
+- Static preview isolated under `prototypes/approved-preview`; approved screenshots and QA captures isolated under `docs/regression-reference`.
+- Generated `dist` output removed from version control; tests build it locally before execution.
 
-- Next.js application runtime.
-- Auth.js.
-- Prisma client + first database migration against actual PostgreSQL.
-- Zod transport validation.
-- Google Calendar and LMS adapter implementations.
-- Motion.dev implementation of the frozen motion contract.
-- shadcn-owned primitive layer.
-- deployment/monitoring/background jobs.
+## Verified at this milestone
 
-## Production continuation order
+- Existing six planner and estimate-learning unit tests pass.
+- Workspace and real-source package-boundary integration tests pass.
+- Prisma 7 validates the existing PostgreSQL schema through `prisma.config.ts`.
+- Next.js production build completes and emits `/` plus `/api/health`.
+- Playwright boots the real Next.js app and exercises the preserved interactive preview.
+- The full `pnpm verify` command passes.
+- `pnpm check:dependencies` reports no known vulnerabilities.
 
-1. Install/freeze production dependencies.
-2. Validate Prisma schema and create the first migration.
-3. Implement authenticated application/service layer around canonical state.
-4. Port the approved shell/components from `preview/` into `apps/web` using the frozen token/component contracts.
-5. Connect Today and Week view models to real services/planner output.
-6. Implement complete/partial/skip/move/lock transactions.
-7. Implement Inbox/Assessment/Course CRUD.
-8. Add Planner structured tool layer and scenario API.
-9. Add Google Calendar read sync before deeper LMS automation.
-10. Run the full acceptance/security/accessibility suite before production trust.
+## Deliberately not implemented
+
+- Live PostgreSQL provisioning, first migration, seed data, or repository layer.
+- Auth.js runtime and user isolation.
+- Application services or canonical state writes.
+- Production UI migration from the approved preview.
+- Google Calendar, Quercus/LMS, assistant execution, advanced optimization, background jobs, or microservices.
+
+## Blockers
+
+None for the Milestone-0 gate. Managed service projects and credentials are intentionally not provisioned by this repository commit.
+
+## Exact next work item
+
+Begin Milestone 1 by reviewing `packages/database/prisma/schema.prisma` against the canonical entity/time semantics, then create the first source-controlled Prisma migration and prove zero-to-current migration plus deterministic seed bootstrap against a disposable Neon development branch.

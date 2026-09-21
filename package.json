@@ -1,17 +1,39 @@
 {
   "name": "personal-university-planner",
   "private": true,
-  "version": "0.1.0",
-  "description": "Personal University Planning System implementation grounded only in the approved master specification and UI mockups.",
-  "scripts": {
-    "build:core": "tsc -p tsconfig.core.json",
-    "test:core": "npm run build:core && node --test tests/planner.test.js tests/analytics.test.js",
-    "preview": "http-server preview -p 4173 -c-1",
-    "check": "npm run test:core && node --check preview/app.js && python tests/ui-smoke.py"
+  "version": "0.2.0",
+  "description": "Production monorepo for the Personal University Planning System.",
+  "packageManager": "pnpm@12.5.1",
+  "engines": {
+    "node": ">=24.21.0 <25"
   },
-  "dependencies": {
-    "playwright": "^1.63.0",
-    "tsc": "^2.0.4",
-    "typescript": "^7.0.2"
+  "scripts": {
+    "dev": "pnpm --filter @university-planner/web dev",
+    "build": "pnpm run build:core && pnpm --filter @university-planner/web build",
+    "start": "pnpm --filter @university-planner/web start",
+    "preview": "pnpm --filter @university-planner/web start",
+    "preview:approved": "node scripts/serve-static.mjs prototypes/approved-preview 4173",
+    "build:core": "tsc -p tsconfig.core.json",
+    "typecheck": "tsc -p tsconfig.core.json --noEmit && pnpm --filter @university-planner/web typecheck",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:boundaries": "node scripts/check-package-boundaries.mjs",
+    "check:dependencies": "pnpm audit --audit-level high",
+    "test": "pnpm test:unit",
+    "test:unit": "pnpm build:core && node --test tests/unit/*.test.js",
+    "test:integration": "node --test tests/integration/*.test.mjs",
+    "test:e2e": "playwright test",
+    "db:validate": "pnpm --filter @university-planner/database db:validate",
+    "verify": "pnpm format:check && pnpm lint && pnpm check:boundaries && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm db:validate && pnpm build && pnpm test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.13.6",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.5",
+    "prettier": "3.9.8",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.1"
   }
 }

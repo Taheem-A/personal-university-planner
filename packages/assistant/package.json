@@ -1,0 +1,12 @@
+{
+  "name": "@university-planner/assistant",
+  "private": true,
+  "version": "0.1.0",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@university-planner/domain": "workspace:*"
+  }
+}
