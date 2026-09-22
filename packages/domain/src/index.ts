@@ -97,20 +97,32 @@ export interface Task {
   description?: string;
   status: TaskStatus;
   priorityOverride?: number;
-  availableFrom: Date;
+  availableFrom?: Date;
   dueAt?: Date;
   preferredCompletionAt?: Date;
+  currentEstimatedMinutes?: number;
+  originalEstimatedMinutes?: number;
+  remainingMinutes?: number;
+  energyRequirement?: EnergyLevel;
+  locationRequirements: LocationTag[];
+  minimumSessionMinutes?: number;
+  preferredSessionMinutes?: number;
+  maximumSessionMinutes?: number;
+  splittable: boolean;
+  interruptible: boolean;
+  planningMode: PlanningMode;
+}
+
+/** A canonical Task after application services have supplied every planner prerequisite. */
+export interface PlannableTask extends Task {
+  availableFrom: Date;
   currentEstimatedMinutes: number;
   originalEstimatedMinutes: number;
   remainingMinutes: number;
   energyRequirement: EnergyLevel;
-  locationRequirements: LocationTag[];
   minimumSessionMinutes: number;
   preferredSessionMinutes: number;
   maximumSessionMinutes: number;
-  splittable: boolean;
-  interruptible: boolean;
-  planningMode: PlanningMode;
 }
 
 export interface TaskDependency {
@@ -197,10 +209,11 @@ export interface CompletionRecord {
 
 export interface PlannerInput {
   userId: Id;
+  timezone: IanaTimezone;
   now: Date;
   horizonStart: Date;
   horizonEnd: Date;
-  tasks: Task[];
+  tasks: PlannableTask[];
   events: CalendarEvent[];
   availability: AvailabilityWindow[];
   lockedSessions: WorkSession[];

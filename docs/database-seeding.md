@@ -9,6 +9,7 @@ The development/test seed is an entirely synthetic Fall 2026 engineering semeste
 - The fixture uses a single explicitly synthetic user in `America/Toronto` and generic course-style codes.
 - `PlannerRun` is intentionally empty because no Planner Service exists yet. User-created work-session history exercises completion, locks, and supersession without claiming a planner ran.
 - Re-running the seed is idempotent: fixed-ID upserts restore fixture values and do not delete unrelated records.
+- The single coherent seed transaction uses explicit bounded startup/runtime limits so a waking disposable Neon compute can be retried deterministically without weakening atomicity.
 
 ## Commands
 

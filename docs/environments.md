@@ -19,3 +19,5 @@ The destructive bootstrap verifier uses a separate `MIGRATION_TEST_DATABASE_URL`
 Synthetic seed loading uses a separate direct `SEED_DATABASE_URL`, requires `APP_ENV=development` or `test`, and requires an exact confirmation value. See [database seeding](./database-seeding.md) for fixture policy, repeat behavior, and clean recreation.
 
 Repository integration tests use `REPOSITORY_TEST_DATABASE_URL`, never the ambient runtime URL. The URL must be a direct, non-pooler Neon connection to a database whose name begins with `up_m1_seed_`; the test process also requires `APP_ENV=test` and `CONFIRM_REPOSITORY_TEST_DATABASE=RUN_REPOSITORY_INTEGRATION_TESTS`. The database client refuses `getDatabase()` while either `APP_ENV` or `NODE_ENV` is `test`, so tests cannot silently fall through to `DATABASE_URL`.
+
+Milestone-1 final acceptance used the expiring, non-production Neon branch `milestone-1-final-gate-20260922` (`br-red-wave-b5l6p77k`). Its acceptance databases contain synthetic data only, and the branch expires on 2026-09-29.

@@ -71,6 +71,8 @@ No migration or live database was created or contacted for this decision.
 - A nonexistent recurrence occurrence is skipped by default because no such local instant occurs; strict callers may request rejection. Ambiguous occurrences use the same explicit earlier/later/reject policy as direct conversion.
 - The implementation uses the platform `Date` and `Intl.DateTimeFormat` IANA database behind a shared API. No third-party dependency is admitted because the required recurrence subset and deterministic DST policy are small, tested, and do not justify another time system.
 - Planner scheduling precision defaults to five minutes. Shared helpers validate, round up/down, and test quantum alignment; persisted instants retain millisecond precision.
+- Planner inputs carry the user's explicit IANA timezone. Wall-clock policy such as avoiding late high-energy work converts instants through the shared timezone API and never reads the host process's local clock.
+- Canonical Tasks keep unknown estimates and availability nullable. `PlannableTask` is the narrower post-validation input supplied to planner-core once application services have resolved every planner prerequisite; normalization does not manufacture persisted facts.
 
 ## Consequences
 

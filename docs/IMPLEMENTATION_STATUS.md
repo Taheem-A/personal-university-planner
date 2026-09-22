@@ -1,10 +1,10 @@
 # Implementation status
 
-## Current active milestone
+## Current milestone status
 
-**Milestone 1 — Canonical Domain, Database, Time, and Migrations: IN PROGRESS**
+**Milestone 1 — GATE PASSED**
 
-Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical schema/domain audit, time foundation, first source-controlled migration, deterministic synthetic semester seed, and persistence/repository boundary are complete. Clean migration deployment, seed loading, relational assertions, repeat-seed stability, scoped repository round trips, and transaction rollback are proven on disposable Neon. The final Milestone-1 exit-gate verification and PR remain unfinished.
+The canonical schema/domain audit, centralized time foundation, first source-controlled migration, deterministic synthetic semester seed, and persistence/repository boundary are complete. Final acceptance proved zero-to-current deployment and reproducibility on fresh disposable Neon databases, every canonical repository family, transaction rollback, Toronto DST behavior, architecture boundaries, full builds, and browser regressions. See [Milestone 1 exit gate](./milestone-1-exit-gate.md).
 
 ## Production bootstrap now implemented
 
@@ -55,8 +55,8 @@ Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical sc
 
 ## Blockers
 
-None for this slice. Milestone 1 remains **IN PROGRESS** until the final full exit-gate verification is complete and reviewed in a PR.
+None. The remaining risks recorded in the exit-gate audit are intentionally assigned to later milestones and do not require a Milestone-1 schema redesign.
 
 ## Exact next work item
 
-Run the full Milestone-1 exit-gate verification and open the Milestone-1 PR.
+Begin **Milestone 2 — Authentication, Authorization, Validation, and Application Services** after the Milestone-1 PR is reviewed and merged.

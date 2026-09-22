@@ -13,6 +13,7 @@ function d(value) {
 function baseInput() {
   return {
     userId: "user-1",
+    timezone: "America/Toronto",
     now: d("2026-09-21T08:00:00-04:00"),
     horizonStart: d("2026-09-21T08:00:00-04:00"),
     horizonEnd: d("2026-09-24T22:00:00-04:00"),
@@ -147,4 +148,48 @@ test("infeasible workload is surfaced explicitly", () => {
     ),
   );
   assert.ok(out.unscheduledMinutesByTask.civ > 0);
+});
+
+test("late-work policy uses the user's explicit timezone, not the host timezone", () => {
+  const input = baseInput();
+  input.tasks = [
+    {
+      ...input.tasks[0],
+      availableFrom: d("2026-09-22T00:00:00.000Z"),
+      dueAt: d("2026-09-22T12:00:00.000Z"),
+      remainingMinutes: 30,
+      currentEstimatedMinutes: 30,
+      originalEstimatedMinutes: 30,
+      minimumSessionMinutes: 30,
+      preferredSessionMinutes: 30,
+      maximumSessionMinutes: 30,
+    },
+  ];
+  input.events = [];
+  input.availability = [
+    {
+      id: "toronto-daytime",
+      userId: "user-1",
+      startAt: d("2026-09-22T00:00:00.000Z"),
+      endAt: d("2026-09-22T00:30:00.000Z"),
+      capacityFactor: 1,
+      energyLevel: "HIGH",
+      allowedLocationTags: ["DESK"],
+    },
+    {
+      id: "toronto-late",
+      userId: "user-1",
+      startAt: d("2026-09-22T01:00:00.000Z"),
+      endAt: d("2026-09-22T01:30:00.000Z"),
+      capacityFactor: 1,
+      energyLevel: "HIGH",
+      allowedLocationTags: ["DESK"],
+    },
+  ];
+  input.now = d("2026-09-22T00:00:00.000Z");
+  input.horizonStart = input.now;
+  input.horizonEnd = d("2026-09-22T12:00:00.000Z");
+
+  const out = generatePlan(input);
+  assert.equal(out.sessions[0].startAt.toISOString(), "2026-09-22T00:00:00.000Z");
 });

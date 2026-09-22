@@ -171,3 +171,33 @@ None for this slice. Authentication, authorization, application services, API ro
 ### Exact next work item
 
 Run the full Milestone-1 exit-gate verification and open the Milestone-1 PR.
+
+## 2026-09-22 — Milestone 1: GATE PASSED
+
+Every literal Milestone-1 exit criterion is satisfied. The detailed evidence and residual-risk review are recorded in [Milestone 1 exit gate](./milestone-1-exit-gate.md).
+
+### Final fixes
+
+- Removed the final host-local time dependency from planner-core: late-work policy now converts instants using the user's explicit IANA timezone through `packages/shared`.
+- Split nullable canonical `Task` facts from the validated `PlannableTask` input so unknown estimates remain unknown until a later application service deliberately resolves them.
+- Added explicit bounded transaction startup/runtime limits to the atomic seed after a fresh-Neon reproducibility run exposed a transient transaction-start timeout.
+
+### Exit-gate proof
+
+- Migration `0001_canonical_foundation` deployed from zero and reported current on fresh database `up_m1_seed_final_20260922`; drift comparison reported no difference and introspection succeeded.
+- The deterministic synthetic semester seeded successfully, all four live repository integration tests passed, and fixture integrity assertions passed.
+- A second untouched blank database, `up_m1_seed_final_repro_20260922`, independently deployed migration history, reported current, seeded, passed integrity assertions, and repeated the idempotent seed plus assertions successfully.
+- Toronto spring-forward, fall-back, ambiguous/nonexistent local-time, recurrence, interval algebra, and explicit planner-timezone tests passed.
+- Repository-wide searches and package checks found no Prisma access outside `packages/database`, production fixture imports, committed credentials, Milestone-2 implementation, or competing wall-clock implementation.
+- `pnpm verify` passed formatting, ESLint, package boundaries, strict core/database/web TypeScript, 20 unit tests, 15 integration tests, Prisma validation, core/database/Next.js production builds, and 2 Chromium E2E tests.
+- Prisma formatting and client generation passed; the guarded live Neon repository suite passed 4 tests; `pnpm check:dependencies` reported no known vulnerabilities.
+
+### Remaining known risks
+
+- Authorization enforcement, trusted request validation, dependency-cycle validation, and application error mapping belong to Milestone 2; the schema and repositories are authorization-ready but do not impersonate those services.
+- The canonical recurrence implementation intentionally supports the documented MVP daily/weekly subset. Provider-specific recurrence translation remains integration work.
+- The disposable acceptance branch contains synthetic data only and expires automatically on 2026-09-29.
+
+### Exact next work item
+
+Begin **Milestone 2 — Authentication, Authorization, Validation, and Application Services** after this milestone's pull request is reviewed and merged.
