@@ -10,6 +10,13 @@
 - Local service tests exercise two-user scoping, stale versions, invalid dates, null facts, task hierarchy, and dependency cycles. The service tests use a repository simulation; live service/database integration and transaction rollback still need a disposable database reachable from the test process. Milestone 2 remains **IN PROGRESS**.
 - Exact next work item: run live database integration and browser E2E when their runtimes are accessible, then add CalendarEvent, AvailabilityRule, ProtectedTimeRule, PlanningPreference, and InboxItem services with conditional versions and wall-clock validation (Prompt 5).
 
+### Schedule state and inbox slice (Prompt 5): IN PROGRESS
+
+- Added authenticated CalendarEvent CRUD/archive, AvailabilityRule and ProtectedTimeRule creation/update/deactivation, PlanningPreference create/get/update, and InboxItem capture/proposal/resolve/dismiss service boundaries. Canonical events are local/manual only; no provider call or calendar scope is involved.
+- Migration 0005 adds explicit optimistic versions for these five state families; conditional repository updates prevent stale editor writes. Recurrence retains date-only effective dates, Toronto-compatible local wall-clock strings, timezone, overnight flags, and the documented daily/weekly subset. Inbox raw text and manual provenance remain intact.
+- Local repository-simulation tests exercise guessed IDs, interval ordering, recurrence ordering, stale versions, preferences, protected overnight time, inbox text, and forward-only migration SQL. Direct disposable-database service tests and browser E2E remain to be run in a runtime with Neon and Chromium connectivity.
+- Exact next work item: complete WorkSession/CompletionRecord/PlannerRun/IntegrationAccount access and account export/deletion lifecycle (Prompt 6), then execute live database integration and browser E2E. Milestone 2 remains **IN PROGRESS**.
+
 - Added a stable, unique authentication identity to canonical User mapping with atomic first-login provisioning and Toronto initial timezone.
 - Added migration 0002, server-only web composition root, and package import enforcement. ADR 0003 records credential minimization and future integration separation.
 - Added stable NextAuth.js 4 Google-only OAuth route, JWT session, sign-out through Auth.js, server-side canonical actor resolution, and an authenticated account status endpoint. Only the `openid` login scope is requested; callbacks expose only canonical user ID and do not persist Google tokens.

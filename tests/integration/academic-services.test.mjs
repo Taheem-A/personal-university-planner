@@ -43,7 +43,19 @@ const validation = load("validation", { "./errors": errors });
 const dependencies = load("dependencies", { "./errors": errors });
 const user = { userId: "owner" };
 const other = { userId: "other" };
-const rows = { terms: [], courses: [], meetings: [], assessments: [], tasks: [], edges: [] };
+const rows = {
+  terms: [],
+  courses: [],
+  meetings: [],
+  assessments: [],
+  tasks: [],
+  edges: [],
+  events: [],
+  availability: [],
+  protection: [],
+  preferences: [],
+  inbox: [],
+};
 const owned = (collection, userId, id) =>
   rows[collection].find((r) => r.userId === userId && r.id === id) ?? null;
 const repo = {
@@ -120,6 +132,61 @@ const repo = {
       );
     },
   },
+  calendarEvents: {
+    create: async (r) => {
+      rows.events.push(r);
+      return r;
+    },
+    getForUser: async (u, id) => owned("events", u, id),
+    listForRange: async (u, s, e) =>
+      rows.events.filter((r) => r.userId === u && r.startAt < e && r.endAt > s),
+    updateIfCurrent: async (u, id, version, patch) => conditional("events", u, id, version, patch),
+  },
+  availabilityRules: {
+    create: async (r) => {
+      rows.availability.push(r);
+      return r;
+    },
+    getForUser: async (u, id) => owned("availability", u, id),
+    listActive: async (u) => rows.availability.filter((r) => r.userId === u && r.active),
+    updateIfCurrent: async (u, id, version, patch) =>
+      conditional("availability", u, id, version, patch),
+  },
+  protectedTimeRules: {
+    create: async (r) => {
+      rows.protection.push(r);
+      return r;
+    },
+    getForUser: async (u, id) => owned("protection", u, id),
+    listActive: async (u) => rows.protection.filter((r) => r.userId === u && r.active),
+    updateIfCurrent: async (u, id, version, patch) =>
+      conditional("protection", u, id, version, patch),
+  },
+  planningPreferences: {
+    create: async (r) => {
+      rows.preferences.push(r);
+      return r;
+    },
+    getForUser: async (u) => rows.preferences.find((r) => r.userId === u) ?? null,
+    updateIfCurrent: async (u, version, patch) =>
+      conditional(
+        "preferences",
+        u,
+        rows.preferences.find((r) => r.userId === u)?.id,
+        version,
+        patch,
+      ),
+  },
+  inboxItems: {
+    create: async (r) => {
+      rows.inbox.push(r);
+      return r;
+    },
+    getForUser: async (u, id) => owned("inbox", u, id),
+    listByStatus: async (u, status) =>
+      rows.inbox.filter((r) => r.userId === u && r.status === status),
+    updateIfCurrent: async (u, id, version, patch) => conditional("inbox", u, id, version, patch),
+  },
 };
 function conditional(collection, userId, id, version, patch) {
   const row = owned(collection, userId, id);
@@ -144,6 +211,17 @@ const serviceUtils = load("service", {
 const academic = load("academic", {
   "./authorization": auth,
   "./dependencies": dependencies,
+  "./errors": errors,
+  "./service": serviceUtils,
+  "./validation": validation,
+});
+const schedule = load("schedule", {
+  "./authorization": auth,
+  "./errors": errors,
+  "./service": serviceUtils,
+  "./validation": validation,
+});
+const inbox = load("inbox", {
   "./errors": errors,
   "./service": serviceUtils,
   "./validation": validation,
@@ -249,4 +327,132 @@ test("ordinary academic capture cannot claim external or system provenance", asy
   const created = (await academic.tasks.create({ title: "Manual" })).value;
   assert.equal(created.source, "MANUAL");
   assert.equal(created.sourceAuthority, "USER");
+});
+
+test("calendar isolation, recurrence validation, inbox text and stale edits", async () => {
+  const bad = await schedule.calendarEvents.create({
+    title: "Exam",
+    eventType: "EXAM",
+    startAt: "2026-10-01T12:00:00Z",
+    endAt: "2026-10-01T11:00:00Z",
+    constraintLevel: "HARD",
+  });
+  assert.equal(bad.error.code, "VALIDATION_ERROR");
+  const event = (
+    await schedule.calendarEvents.create({
+      title: "Lecture",
+      eventType: "CLASS",
+      startAt: "2026-10-01T11:00:00Z",
+      endAt: "2026-10-01T12:00:00Z",
+      constraintLevel: "HARD",
+    })
+  ).value;
+  rows.events.push({ ...event, id: "other-event", userId: other.userId });
+  assert.equal((await schedule.calendarEvents.get({ id: "other-event" })).error.code, "NOT_FOUND");
+  assert.equal(
+    (await schedule.calendarEvents.update({ id: event.id, expectedVersion: 0, title: "Updated" }))
+      .value.version,
+    1,
+  );
+  assert.equal(
+    (await schedule.calendarEvents.update({ id: event.id, expectedVersion: 0, title: "Stale" }))
+      .error.code,
+    "STALE_WRITE",
+  );
+  const rule = (
+    await schedule.availabilityRules.create({
+      recurrenceRule: "FREQ=WEEKLY;BYDAY=MO",
+      startTimeLocal: "09:00",
+      endTimeLocal: "17:00",
+      timezone: "America/Toronto",
+      effectiveFrom: "2026-03-01",
+      capacityFactor: 1,
+      energyLevel: "HIGH",
+    })
+  ).value;
+  assert.equal(rule.startTimeLocal, "09:00");
+  assert.equal(rule.effectiveUntil, null);
+  assert.equal(
+    (
+      await schedule.availabilityRules.update({
+        id: rule.id,
+        expectedVersion: 0,
+        endTimeLocal: "08:00",
+      })
+    ).error.code,
+    "VALIDATION_ERROR",
+  );
+  const captured = (await inbox.inboxItems.capture({ rawText: "Maybe assignment due Tuesday" }))
+    .value;
+  assert.equal(captured.rawText, "Maybe assignment due Tuesday");
+  assert.equal(captured.source, "MANUAL");
+  assert.equal(
+    (await inbox.inboxItems.process({ id: captured.id, expectedVersion: 0 })).value.status,
+    "PROCESSED",
+  );
+});
+
+test("preferences and protected time use versions and retain local wall-clock fields", async () => {
+  const preference = (
+    await schedule.planningPreferences.create({
+      preferredDailyStudyLimitMinutes: 300,
+      minimumFreeTimeMinutes: 30,
+      preferredDeadlineBufferHours: 12,
+      avoidLateHighEnergyTasks: true,
+      maximumConsecutiveWorkMinutes: 120,
+      minimumBreakMinutes: 10,
+      scheduleCommuteWork: false,
+      weekendWorkBias: -0.5,
+      planStabilityWindowMinutes: 180,
+    })
+  ).value;
+  assert.equal(preference.version, 0);
+  assert.equal(
+    (await schedule.planningPreferences.update({ expectedVersion: 0, weekendWorkBias: 0 })).value
+      .version,
+    1,
+  );
+  assert.equal(
+    (await schedule.planningPreferences.update({ expectedVersion: 0, weekendWorkBias: 0.5 })).error
+      .code,
+    "STALE_WRITE",
+  );
+  const protection = (
+    await schedule.protectedTimeRules.create({
+      recurrenceRule: "FREQ=DAILY",
+      startTimeLocal: "23:00",
+      endTimeLocal: "07:00",
+      spansNextDay: true,
+      timezone: "America/Toronto",
+      effectiveFrom: "2026-03-01",
+      protectionLevel: "HARD",
+      reason: "Sleep",
+    })
+  ).value;
+  assert.equal(protection.spansNextDay, true);
+  assert.equal(protection.startTimeLocal, "23:00");
+  assert.equal(
+    (await schedule.protectedTimeRules.deactivate({ id: protection.id, expectedVersion: 0 })).value
+      .active,
+    false,
+  );
+});
+
+test("migration 0005 retains canonical rows and adds conditional versions", () => {
+  const sql = readFileSync(
+    "packages/database/prisma/migrations/0005_schedule_state_versions/migration.sql",
+    "utf8",
+  );
+  for (const table of [
+    "CalendarEvent",
+    "AvailabilityRule",
+    "ProtectedTimeRule",
+    "PlanningPreference",
+    "InboxItem",
+  ])
+    assert.match(
+      sql,
+      new RegExp(`ALTER TABLE "${table}" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 0`),
+    );
+  assert.doesNotMatch(sql, /DROP TABLE|DROP COLUMN|CASCADE/);
 });

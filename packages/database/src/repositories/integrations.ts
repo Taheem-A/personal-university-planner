@@ -90,9 +90,22 @@ export function createIntegrationRepositories(db: DatabaseExecutor): {
       async updateStatus(userId, id, status, processedAt) {
         const row = await db.inboxItem.update({
           where: { id, userId },
-          data: { status, processedAt },
+          data: { status, processedAt, version: { increment: 1 } },
         });
         return toPlainRecord<InboxItemRecord>(row);
+      },
+      async updateIfCurrent(userId, id, version, patch) {
+        const rows = await db.inboxItem.updateManyAndReturn({
+          where: { id, userId, version },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.InboxItemUncheckedUpdateManyInput,
+        });
+        if (rows[0]) return { status: "UPDATED", record: toPlainRecord<InboxItemRecord>(rows[0]) };
+        return {
+          status: (await db.inboxItem.findFirst({ where: { id, userId } })) ? "STALE" : "NOT_FOUND",
+        };
       },
     },
   };

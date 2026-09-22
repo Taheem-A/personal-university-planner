@@ -222,6 +222,24 @@ export interface CalendarEventRepository {
   getForUser(userId: string, id: string): Promise<CalendarEventRecord | null>;
   listForRange(userId: string, startAt: Date, endAt: Date): Promise<CalendarEventRecord[]>;
   archive(userId: string, id: string, archivedAt: Date): Promise<CalendarEventRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Partial<
+      Pick<
+        CalendarEventRecord,
+        | "title"
+        | "eventType"
+        | "startAt"
+        | "endAt"
+        | "location"
+        | "constraintLevel"
+        | "courseId"
+        | "archivedAt"
+      >
+    >,
+  ): Promise<ConditionalMutation<CalendarEventRecord>>;
 }
 
 export interface AvailabilityRuleRepository {
@@ -229,6 +247,14 @@ export interface AvailabilityRuleRepository {
   getForUser(userId: string, id: string): Promise<AvailabilityRuleRecord | null>;
   listActive(userId: string): Promise<AvailabilityRuleRecord[]>;
   setActive(userId: string, id: string, active: boolean): Promise<AvailabilityRuleRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Partial<
+      Omit<AvailabilityRuleRecord, "id" | "userId" | "version" | "createdAt" | "updatedAt">
+    >,
+  ): Promise<ConditionalMutation<AvailabilityRuleRecord>>;
 }
 
 export interface ProtectedTimeRuleRepository {
@@ -236,11 +262,27 @@ export interface ProtectedTimeRuleRepository {
   getForUser(userId: string, id: string): Promise<ProtectedTimeRuleRecord | null>;
   listActive(userId: string): Promise<ProtectedTimeRuleRecord[]>;
   setActive(userId: string, id: string, active: boolean): Promise<ProtectedTimeRuleRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Partial<
+      Omit<ProtectedTimeRuleRecord, "id" | "userId" | "version" | "createdAt" | "updatedAt">
+    >,
+  ): Promise<ConditionalMutation<ProtectedTimeRuleRecord>>;
 }
 
 export interface PlanningPreferenceRepository {
   getForUser(userId: string): Promise<PlanningPreferenceRecord | null>;
+  create(record: PlanningPreferenceRecord): Promise<PlanningPreferenceRecord>;
   upsert(record: PlanningPreferenceRecord): Promise<PlanningPreferenceRecord>;
+  updateIfCurrent(
+    userId: string,
+    version: number,
+    patch: Partial<
+      Omit<PlanningPreferenceRecord, "id" | "userId" | "version" | "createdAt" | "updatedAt">
+    >,
+  ): Promise<ConditionalMutation<PlanningPreferenceRecord>>;
 }
 
 export interface WorkSessionRepository {
@@ -314,6 +356,14 @@ export interface InboxItemRepository {
     status: InboxStatus,
     processedAt: Date | null,
   ): Promise<InboxItemRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Partial<
+      Pick<InboxItemRecord, "status" | "proposedEntityType" | "proposedPayload" | "processedAt">
+    >,
+  ): Promise<ConditionalMutation<InboxItemRecord>>;
 }
 
 export interface CanonicalRepositories {

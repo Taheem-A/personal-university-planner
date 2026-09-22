@@ -197,6 +197,7 @@ export interface RecurringWorkRuleRecord extends AuditFields {
 
 export interface CalendarEventRecord extends AuditFields, ProvenanceFields {
   id: string;
+  version: number;
   userId: string;
   courseId: string | null;
   integrationAccountId: string | null;
@@ -213,6 +214,7 @@ export interface CalendarEventRecord extends AuditFields, ProvenanceFields {
 
 export interface AvailabilityRuleRecord extends AuditFields, LocalRecurrenceFields {
   id: string;
+  version: number;
   userId: string;
   capacityFactor: number;
   energyLevel: EnergyLevel;
@@ -222,6 +224,7 @@ export interface AvailabilityRuleRecord extends AuditFields, LocalRecurrenceFiel
 
 export interface ProtectedTimeRuleRecord extends AuditFields, LocalRecurrenceFields {
   id: string;
+  version: number;
   userId: string;
   protectionLevel: ConstraintLevel;
   reason: string;
@@ -230,6 +233,7 @@ export interface ProtectedTimeRuleRecord extends AuditFields, LocalRecurrenceFie
 
 export interface PlanningPreferenceRecord extends AuditFields {
   id: string;
+  version: number;
   userId: string;
   preferredDailyStudyLimitMinutes: number;
   minimumFreeTimeMinutes: number;
@@ -326,6 +330,7 @@ export interface ExternalObjectMapRecord extends AuditFields {
 
 export interface InboxItemRecord extends AuditFields, ProvenanceFields {
   id: string;
+  version: number;
   userId: string;
   rawText: string;
   status: InboxStatus;

@@ -141,6 +141,14 @@ export function createPlanningRepositories(db: DatabaseExecutor): {
       },
     },
     planningPreferences: {
+      async create(record) {
+        const row = await db.planningPreference.create({
+          data: toPersistenceData(
+            record,
+          ) as unknown as Prisma.PlanningPreferenceUncheckedCreateInput,
+        });
+        return toPlainRecord<PlanningPreferenceRecord>(row);
+      },
       async getForUser(userId) {
         const row = await db.planningPreference.findUnique({ where: { userId } });
         return row ? toPlainRecord<PlanningPreferenceRecord>(row) : null;
@@ -153,6 +161,22 @@ export function createPlanningRepositories(db: DatabaseExecutor): {
           update: data as Prisma.PlanningPreferenceUncheckedUpdateInput,
         });
         return toPlainRecord<PlanningPreferenceRecord>(row);
+      },
+      async updateIfCurrent(userId, version, patch) {
+        const rows = await db.planningPreference.updateManyAndReturn({
+          where: { userId, version },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.PlanningPreferenceUncheckedUpdateManyInput,
+        });
+        if (rows[0])
+          return { status: "UPDATED", record: toPlainRecord<PlanningPreferenceRecord>(rows[0]) };
+        return {
+          status: (await db.planningPreference.findUnique({ where: { userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
       },
     },
   };
