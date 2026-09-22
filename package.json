@@ -9,12 +9,12 @@
   },
   "scripts": {
     "dev": "pnpm --filter @university-planner/web dev",
-    "build": "pnpm run build:core && pnpm --filter @university-planner/web build",
+    "build": "pnpm run build:core && pnpm --filter @university-planner/database build && pnpm --filter @university-planner/web build",
     "start": "pnpm --filter @university-planner/web start",
     "preview": "pnpm --filter @university-planner/web start",
     "preview:approved": "node scripts/serve-static.mjs prototypes/approved-preview 4173",
     "build:core": "tsc -p tsconfig.core.json",
-    "typecheck": "tsc -p tsconfig.core.json --noEmit && pnpm --filter @university-planner/web typecheck",
+    "typecheck": "tsc -p tsconfig.core.json --noEmit && pnpm --filter @university-planner/database typecheck && pnpm --filter @university-planner/web typecheck",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -24,8 +24,17 @@
     "test:unit": "pnpm build:core && node --test tests/unit/*.test.js",
     "test:integration": "node --test tests/integration/*.test.mjs",
     "test:e2e": "playwright test",
+    "db:generate": "pnpm --filter @university-planner/database db:generate",
+    "db:migrate:create": "pnpm --filter @university-planner/database db:migrate:create",
+    "db:migrate:deploy": "pnpm --filter @university-planner/database db:migrate:deploy",
+    "db:migrate:status": "pnpm --filter @university-planner/database db:migrate:status",
+    "db:seed": "pnpm --filter @university-planner/database db:seed",
+    "db:seed:assert": "pnpm --filter @university-planner/database db:seed:assert",
+    "db:bootstrap:seed": "pnpm --filter @university-planner/database db:bootstrap:seed",
+    "db:bootstrap:verify": "pnpm --filter @university-planner/database db:bootstrap:verify",
+    "db:repositories:verify": "pnpm --filter @university-planner/database build && node --test tests/database/repositories.integration.mjs",
     "db:validate": "pnpm --filter @university-planner/database db:validate",
-    "verify": "pnpm format:check && pnpm lint && pnpm check:boundaries && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm db:validate && pnpm build && pnpm test:e2e"
+    "verify": "pnpm format:check && pnpm lint && pnpm check:boundaries && pnpm db:generate && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm db:validate && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

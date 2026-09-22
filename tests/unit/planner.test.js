@@ -12,17 +12,20 @@ function d(value) {
 
 function baseInput() {
   return {
+    userId: "user-1",
+    timezone: "America/Toronto",
     now: d("2026-09-21T08:00:00-04:00"),
     horizonStart: d("2026-09-21T08:00:00-04:00"),
     horizonEnd: d("2026-09-24T22:00:00-04:00"),
     tasks: [
       {
         id: "civ",
+        userId: "user-1",
         title: "CIV100 Assignment 2",
         status: "READY",
         availableFrom: d("2026-09-21T08:00:00-04:00"),
         dueAt: d("2026-09-23T23:59:00-04:00"),
-        estimatedMinutes: 120,
+        currentEstimatedMinutes: 120,
         originalEstimatedMinutes: 120,
         remainingMinutes: 120,
         energyRequirement: "HIGH",
@@ -36,11 +39,12 @@ function baseInput() {
       },
       {
         id: "aps",
+        userId: "user-1",
         title: "APS110 Reading",
         status: "READY",
         availableFrom: d("2026-09-21T08:00:00-04:00"),
         dueAt: d("2026-09-22T18:00:00-04:00"),
-        estimatedMinutes: 30,
+        currentEstimatedMinutes: 30,
         originalEstimatedMinutes: 30,
         remainingMinutes: 30,
         energyRequirement: "LOW",
@@ -56,6 +60,7 @@ function baseInput() {
     events: [
       {
         id: "class",
+        userId: "user-1",
         title: "MAT186 Lecture",
         startAt: d("2026-09-21T10:00:00-04:00"),
         endAt: d("2026-09-21T11:00:00-04:00"),
@@ -65,6 +70,7 @@ function baseInput() {
     availability: [
       {
         id: "monday",
+        userId: "user-1",
         startAt: d("2026-09-21T08:00:00-04:00"),
         endAt: d("2026-09-21T18:00:00-04:00"),
         capacityFactor: 1,
@@ -73,6 +79,7 @@ function baseInput() {
       },
       {
         id: "tuesday",
+        userId: "user-1",
         startAt: d("2026-09-22T09:00:00-04:00"),
         endAt: d("2026-09-22T18:00:00-04:00"),
         capacityFactor: 1,
@@ -133,7 +140,7 @@ test("protected-window scenario never mutates canonical input and returns a prev
 
 test("infeasible workload is surfaced explicitly", () => {
   const input = baseInput();
-  input.tasks[0] = { ...input.tasks[0], remainingMinutes: 1500, estimatedMinutes: 1500 };
+  input.tasks[0] = { ...input.tasks[0], remainingMinutes: 1500, currentEstimatedMinutes: 1500 };
   const out = generatePlan(input);
   assert.ok(
     out.warnings.some(
@@ -141,4 +148,48 @@ test("infeasible workload is surfaced explicitly", () => {
     ),
   );
   assert.ok(out.unscheduledMinutesByTask.civ > 0);
+});
+
+test("late-work policy uses the user's explicit timezone, not the host timezone", () => {
+  const input = baseInput();
+  input.tasks = [
+    {
+      ...input.tasks[0],
+      availableFrom: d("2026-09-22T00:00:00.000Z"),
+      dueAt: d("2026-09-22T12:00:00.000Z"),
+      remainingMinutes: 30,
+      currentEstimatedMinutes: 30,
+      originalEstimatedMinutes: 30,
+      minimumSessionMinutes: 30,
+      preferredSessionMinutes: 30,
+      maximumSessionMinutes: 30,
+    },
+  ];
+  input.events = [];
+  input.availability = [
+    {
+      id: "toronto-daytime",
+      userId: "user-1",
+      startAt: d("2026-09-22T00:00:00.000Z"),
+      endAt: d("2026-09-22T00:30:00.000Z"),
+      capacityFactor: 1,
+      energyLevel: "HIGH",
+      allowedLocationTags: ["DESK"],
+    },
+    {
+      id: "toronto-late",
+      userId: "user-1",
+      startAt: d("2026-09-22T01:00:00.000Z"),
+      endAt: d("2026-09-22T01:30:00.000Z"),
+      capacityFactor: 1,
+      energyLevel: "HIGH",
+      allowedLocationTags: ["DESK"],
+    },
+  ];
+  input.now = d("2026-09-22T00:00:00.000Z");
+  input.horizonStart = input.now;
+  input.horizonEnd = d("2026-09-22T12:00:00.000Z");
+
+  const out = generatePlan(input);
+  assert.equal(out.sessions[0].startAt.toISOString(), "2026-09-22T00:00:00.000Z");
 });

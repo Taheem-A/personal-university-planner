@@ -21,12 +21,11 @@ enum MeetingType {
   OTHER
 }
 
-enum AssessmentStatus {
-  UPCOMING
-  AVAILABLE
-  IN_PROGRESS
+enum AssessmentSubmissionStatus {
+  NOT_SUBMITTED
   SUBMITTED
   GRADED
+  EXEMPT
   CANCELLED
 }
 
@@ -38,6 +37,10 @@ enum TaskStatus {
   COMPLETED
   CANCELLED
   DEFERRED
+}
+
+enum TaskDependencyType {
+  FINISH_TO_START
 }
 
 enum PlanningMode {
@@ -105,49 +108,91 @@ enum InboxStatus {
   DISMISSED
 }
 
+enum RecordSource {
+  MANUAL
+  INTEGRATION
+  ASSISTANT
+  SYSTEM
+}
+
+enum SourceAuthority {
+  USER
+  EXTERNAL
+  SYSTEM
+  INFERRED
+}
+
+enum SourceConfidence {
+  DIRECT_API
+  CALENDAR_FEED
+  DOCUMENT_EXTRACTION
+  AI_EXTRACTED
+  MANUAL
+  USER_CONFIRMED
+}
+
+enum IntegrationAccountStatus {
+  ACTIVE
+  DISCONNECTED
+  ERROR
+}
+
+enum ExternalObjectType {
+  COURSE
+  ASSESSMENT
+  CALENDAR_EVENT
+  TASK
+}
+
 model User {
-  id             String   @id @default(cuid())
-  name           String
-  timezone       String
-  defaultDayStart String?
-  defaultDayEnd   String?
-  locale         String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String    @id @default(cuid())
+  name            String?
+  timezone        String
+  defaultDayStart DateTime? @db.Time(0)
+  defaultDayEnd   DateTime? @db.Time(0)
+  locale          String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
 
   academicTerms       AcademicTerm[]
   courses             Course[]
+  courseMeetings      CourseMeeting[]
+  assessments         Assessment[]
   tasks               Task[]
+  taskDependencies    TaskDependency[]
+  recurringWorkRules  RecurringWorkRule[]
   calendarEvents      CalendarEvent[]
   availabilityRules   AvailabilityRule[]
   protectedTimeRules  ProtectedTimeRule[]
-  planningPreferences PlanningPreference[]
+  planningPreference  PlanningPreference?
   workSessions        WorkSession[]
+  completionRecords   CompletionRecord[]
   estimateProfiles    EstimateProfile[]
   plannerRuns         PlannerRun[]
+  integrationAccounts IntegrationAccount[]
   externalObjectMaps  ExternalObjectMap[]
   inboxItems          InboxItem[]
-  integrationAccounts IntegrationAccount[]
 }
 
 model AcademicTerm {
   id        String             @id @default(cuid())
   userId    String
   name      String
-  startDate DateTime
-  endDate   DateTime
+  startDate DateTime           @db.Date
+  endDate   DateTime           @db.Date
   status    AcademicTermStatus
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  createdAt DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime           @updatedAt @db.Timestamptz(3)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courses   Course[]
 
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  courses Course[]
-
-  @@index([userId, status])
+  @@unique([id, userId])
+  @@unique([userId, name])
+  @@index([userId, status, startDate, endDate])
 }
 
 model Course {
-  id                  String   @id @default(cuid())
+  id                  String              @id @default(cuid())
   userId              String
   academicTermId      String
   code                String
@@ -155,324 +200,416 @@ model Course {
   section             String?
   instructorName      String?
   colorReference      String?
-  creditValue         Float?
+  creditValue         Decimal?            @db.Decimal(5, 2)
   defaultTaskEnergy   EnergyLevel?
   defaultTaskLocation String[]
-  archived            Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  source              RecordSource        @default(MANUAL)
+  sourceAuthority     SourceAuthority     @default(USER)
+  sourceConfidence    SourceConfidence?
+  archivedAt          DateTime?           @db.Timestamptz(3)
+  createdAt           DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime            @updatedAt @db.Timestamptz(3)
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  academicTerm        AcademicTerm        @relation(fields: [academicTermId, userId], references: [id, userId], onDelete: Restrict)
+  meetings            CourseMeeting[]
+  assessments         Assessment[]
+  tasks               Task[]
+  recurringWorkRules  RecurringWorkRule[]
+  calendarEvents      CalendarEvent[]
 
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  academicTerm  AcademicTerm  @relation(fields: [academicTermId], references: [id], onDelete: Cascade)
-  meetings      CourseMeeting[]
-  assessments   Assessment[]
-  tasks         Task[]
-  calendarEvents CalendarEvent[]
-
-  @@index([userId, academicTermId, archived])
-  @@index([academicTermId, code])
+  @@unique([id, userId])
+  @@unique([userId, academicTermId, code])
+  @@index([userId, academicTermId, archivedAt])
+  @@index([userId, code])
 }
 
 model CourseMeeting {
-  id                 String      @id @default(cuid())
+  id                 String              @id @default(cuid())
+  userId             String
   courseId           String
   meetingType        MeetingType
   recurrenceRule     String
-  startTimeLocal     String
-  endTimeLocal       String
+  startTimeLocal     DateTime            @db.Time(0)
+  endTimeLocal       DateTime            @db.Time(0)
+  spansNextDay       Boolean             @default(false)
   timezone           String
   location           String?
-  startDate          DateTime
-  endDate            DateTime
-  attendanceRequired Boolean     @default(true)
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  effectiveFrom      DateTime            @db.Date
+  effectiveUntil     DateTime?           @db.Date
+  attendanceRequired Boolean             @default(true)
+  createdAt          DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @db.Timestamptz(3)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course             Course              @relation(fields: [courseId, userId], references: [id, userId], onDelete: Restrict)
+  recurringWorkRules RecurringWorkRule[]
 
-  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-
-  @@index([courseId, startDate, endDate])
+  @@unique([id, userId])
+  @@index([userId, courseId, effectiveFrom, effectiveUntil])
 }
 
 model Assessment {
-  id                    String           @id @default(cuid())
+  id                    String                     @id @default(cuid())
+  userId                String
   courseId              String
   title                 String
   assessmentType        String
-  releaseAt             DateTime?
-  dueAt                 DateTime?
-  preferredCompletionAt DateTime?
-  gradeWeight           Float?
+  releaseAt             DateTime?                  @db.Timestamptz(3)
+  dueAt                 DateTime?                  @db.Timestamptz(3)
+  preferredCompletionAt DateTime?                  @db.Timestamptz(3)
+  gradeWeight           Decimal?                   @db.Decimal(5, 2)
+  gradeReceived         Decimal?                   @db.Decimal(6, 2)
+  notes                 String?
   instructionsUrl       String?
   submissionUrl         String?
-  status                AssessmentStatus
-  source                String?
-  sourceConfidence      String?
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
+  submissionStatus      AssessmentSubmissionStatus @default(NOT_SUBMITTED)
+  submittedAt           DateTime?                  @db.Timestamptz(3)
+  source                RecordSource               @default(MANUAL)
+  sourceAuthority       SourceAuthority            @default(USER)
+  sourceConfidence      SourceConfidence?
+  archivedAt            DateTime?                  @db.Timestamptz(3)
+  createdAt             DateTime                   @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime                   @updatedAt @db.Timestamptz(3)
+  user                  User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course                Course                     @relation(fields: [courseId, userId], references: [id, userId], onDelete: Restrict)
+  tasks                 Task[]
 
-  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  tasks  Task[]
-
-  @@index([courseId, dueAt])
+  @@unique([id, userId])
+  @@index([userId, courseId, dueAt])
+  @@index([userId, submissionStatus, dueAt])
 }
 
 model Task {
-  id                    String       @id @default(cuid())
-  userId                String
-  courseId              String?
-  assessmentId          String?
-  parentTaskId          String?
-  title                 String
-  description           String?
-  status                TaskStatus
-  priorityOverride      Float?
-  availableFrom         DateTime?
-  dueAt                 DateTime?
-  preferredCompletionAt DateTime?
+  id                       String             @id @default(cuid())
+  userId                   String
+  courseId                 String?
+  assessmentId             String?
+  recurringWorkRuleId      String?
+  parentTaskId             String?
+  title                    String
+  description              String?
+  status                   TaskStatus
+  priorityOverride         Float?
+  availableFrom            DateTime?          @db.Timestamptz(3)
+  dueAt                    DateTime?          @db.Timestamptz(3)
+  preferredCompletionAt    DateTime?          @db.Timestamptz(3)
   originalEstimatedMinutes Int?
-  estimatedMinutes      Int?
-  remainingMinutes      Int?
-  energyRequirement     EnergyLevel?
-  locationRequirements  String[]
-  minimumSessionMinutes Int?
-  preferredSessionMinutes Int?
-  maximumSessionMinutes Int?
-  splittable            Boolean      @default(true)
-  interruptible         Boolean      @default(true)
-  planningMode          PlanningMode @default(AUTO)
-  source                String?
-  completedAt           DateTime?
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  currentEstimatedMinutes  Int?
+  remainingMinutes         Int?
+  energyRequirement        EnergyLevel?
+  locationRequirements     String[]
+  minimumSessionMinutes    Int?
+  preferredSessionMinutes  Int?
+  maximumSessionMinutes    Int?
+  splittable               Boolean            @default(true)
+  interruptible            Boolean            @default(true)
+  planningMode             PlanningMode       @default(AUTO)
+  source                   RecordSource       @default(MANUAL)
+  sourceAuthority          SourceAuthority    @default(USER)
+  sourceConfidence         SourceConfidence?
+  completedAt              DateTime?          @db.Timestamptz(3)
+  archivedAt               DateTime?          @db.Timestamptz(3)
+  createdAt                DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime           @updatedAt @db.Timestamptz(3)
+  user                     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course                   Course?            @relation(fields: [courseId, userId], references: [id, userId], onDelete: Restrict)
+  assessment               Assessment?        @relation(fields: [assessmentId, userId], references: [id, userId], onDelete: Restrict)
+  recurringWorkRule        RecurringWorkRule? @relation(fields: [recurringWorkRuleId, userId], references: [id, userId], onDelete: Restrict)
+  parentTask               Task?              @relation("TaskHierarchy", fields: [parentTaskId, userId], references: [id, userId], onDelete: Restrict)
+  subtasks                 Task[]             @relation("TaskHierarchy")
+  prerequisiteLinks        TaskDependency[]   @relation("DependencyPrerequisite")
+  dependentLinks           TaskDependency[]   @relation("DependencyDependent")
+  workSessions             WorkSession[]
+  completionRecords        CompletionRecord[]
 
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  course      Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  assessment  Assessment? @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
-  parentTask  Task?       @relation("TaskHierarchy", fields: [parentTaskId], references: [id], onDelete: SetNull)
-  subtasks    Task[]      @relation("TaskHierarchy")
-  prerequisiteLinks TaskDependency[] @relation("DependencyPrerequisite")
-  dependentLinks    TaskDependency[] @relation("DependencyDependent")
-  workSessions      WorkSession[]
-  completionRecords CompletionRecord[]
-
+  @@unique([id, userId])
   @@index([userId, status, dueAt])
-  @@index([assessmentId])
+  @@index([userId, assessmentId])
+  @@index([userId, parentTaskId])
+  @@index([userId, recurringWorkRuleId])
 }
 
 model TaskDependency {
+  userId             String
   prerequisiteTaskId String
   dependentTaskId    String
-  dependencyType     String @default("FINISH_TO_START")
+  dependencyType     TaskDependencyType @default(FINISH_TO_START)
+  createdAt          DateTime           @default(now()) @db.Timestamptz(3)
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prerequisiteTask   Task               @relation("DependencyPrerequisite", fields: [prerequisiteTaskId, userId], references: [id, userId], onDelete: Cascade)
+  dependentTask      Task               @relation("DependencyDependent", fields: [dependentTaskId, userId], references: [id, userId], onDelete: Cascade)
 
-  prerequisiteTask Task @relation("DependencyPrerequisite", fields: [prerequisiteTaskId], references: [id], onDelete: Cascade)
-  dependentTask    Task @relation("DependencyDependent", fields: [dependentTaskId], references: [id], onDelete: Cascade)
+  @@id([userId, prerequisiteTaskId, dependentTaskId])
+  @@index([userId, dependentTaskId])
+}
 
-  @@id([prerequisiteTaskId, dependentTaskId])
+model RecurringWorkRule {
+  id                       String         @id @default(cuid())
+  userId                   String
+  courseId                 String
+  anchorCourseMeetingId    String?
+  titleTemplate            String
+  descriptionTemplate      String?
+  recurrenceRule           String
+  anchorTimeLocal          DateTime       @db.Time(0)
+  timezone                 String
+  effectiveFrom            DateTime       @db.Date
+  effectiveUntil           DateTime?      @db.Date
+  availableOffsetMinutes   Int            @default(0)
+  dueOffsetMinutes         Int?
+  originalEstimatedMinutes Int?
+  energyRequirement        EnergyLevel?
+  locationRequirements     String[]
+  minimumSessionMinutes    Int?
+  preferredSessionMinutes  Int?
+  maximumSessionMinutes    Int?
+  splittable               Boolean        @default(true)
+  interruptible            Boolean        @default(true)
+  planningMode             PlanningMode   @default(AUTO)
+  active                   Boolean        @default(true)
+  createdAt                DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime       @updatedAt @db.Timestamptz(3)
+  user                     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course                   Course         @relation(fields: [courseId, userId], references: [id, userId], onDelete: Restrict)
+  anchorCourseMeeting      CourseMeeting? @relation(fields: [anchorCourseMeetingId, userId], references: [id, userId], onDelete: Restrict)
+  generatedTasks           Task[]
+
+  @@unique([id, userId])
+  @@index([userId, courseId, active, effectiveFrom, effectiveUntil])
 }
 
 model CalendarEvent {
-  id                String          @id @default(cuid())
-  userId            String
-  courseId          String?
-  title             String
-  eventType         String
-  startAt           DateTime
-  endAt             DateTime
-  location          String?
-  source            String?
-  constraintLevel   ConstraintLevel
-  externalProvider  String?
-  externalId        String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id                   String              @id @default(cuid())
+  userId               String
+  courseId             String?
+  integrationAccountId String?
+  title                String
+  eventType            String
+  startAt              DateTime            @db.Timestamptz(3)
+  endAt                DateTime            @db.Timestamptz(3)
+  location             String?
+  constraintLevel      ConstraintLevel
+  source               RecordSource        @default(MANUAL)
+  sourceAuthority      SourceAuthority     @default(USER)
+  sourceConfidence     SourceConfidence?
+  externalId           String?
+  externalUpdatedAt    DateTime?           @db.Timestamptz(3)
+  archivedAt           DateTime?           @db.Timestamptz(3)
+  createdAt            DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime            @updatedAt @db.Timestamptz(3)
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course               Course?             @relation(fields: [courseId, userId], references: [id, userId], onDelete: Restrict)
+  integrationAccount   IntegrationAccount? @relation(fields: [integrationAccountId, userId], references: [id, userId], onDelete: Restrict)
 
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
-
+  @@unique([integrationAccountId, externalId])
   @@index([userId, startAt, endAt])
-  @@index([externalProvider, externalId])
+  @@index([userId, courseId, startAt])
 }
 
 model AvailabilityRule {
   id                  String      @id @default(cuid())
   userId              String
   recurrenceRule      String
-  startTimeLocal      String
-  endTimeLocal        String
-  timezone             String
+  startTimeLocal      DateTime    @db.Time(0)
+  endTimeLocal        DateTime    @db.Time(0)
+  spansNextDay        Boolean     @default(false)
+  timezone            String
   capacityFactor      Float       @default(1)
   energyLevel         EnergyLevel
   allowedLocationTags String[]
-  effectiveFrom       DateTime?
-  effectiveUntil      DateTime?
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  effectiveFrom       DateTime    @db.Date
+  effectiveUntil      DateTime?   @db.Date
+  active              Boolean     @default(true)
+  createdAt           DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime    @updatedAt @db.Timestamptz(3)
+  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, effectiveFrom, effectiveUntil])
+  @@index([userId, active, effectiveFrom, effectiveUntil])
 }
 
 model ProtectedTimeRule {
-  id              String   @id @default(cuid())
+  id              String          @id @default(cuid())
   userId          String
   recurrenceRule  String
-  startTimeLocal  String
-  endTimeLocal    String
+  startTimeLocal  DateTime        @db.Time(0)
+  endTimeLocal    DateTime        @db.Time(0)
+  spansNextDay    Boolean         @default(false)
   timezone        String
   protectionLevel ConstraintLevel
   reason          String
-  effectiveFrom   DateTime?
-  effectiveUntil  DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  effectiveFrom   DateTime        @db.Date
+  effectiveUntil  DateTime?       @db.Date
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, effectiveFrom, effectiveUntil])
+  @@index([userId, active, effectiveFrom, effectiveUntil])
 }
 
 model PlanningPreference {
-  id        String   @id @default(cuid())
-  userId    String
-  key       String
-  value     Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, key])
+  id                              String   @id @default(cuid())
+  userId                          String   @unique
+  preferredDailyStudyLimitMinutes Int
+  minimumFreeTimeMinutes          Int
+  preferredDeadlineBufferHours    Int
+  avoidLateHighEnergyTasks        Boolean
+  maximumConsecutiveWorkMinutes   Int
+  minimumBreakMinutes             Int
+  scheduleCommuteWork             Boolean
+  weekendWorkBias                 Float
+  planStabilityWindowMinutes      Int
+  createdAt                       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt                       DateTime @updatedAt @db.Timestamptz(3)
+  user                            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model WorkSession {
-  id             String               @id @default(cuid())
-  userId         String
-  taskId         String
-  plannerRunId   String?
-  startAt        DateTime
-  endAt          DateTime
-  plannedMinutes Int
-  state          WorkSessionState
-  generatedBy    WorkSessionGeneratedBy
-  locked         Boolean              @default(false)
-  supersededById String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  task          Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  plannerRun    PlannerRun?  @relation(fields: [plannerRunId], references: [id], onDelete: SetNull)
-  supersededBy  WorkSession? @relation("SessionSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
-  supersedes    WorkSession[] @relation("SessionSupersession")
+  id                String                 @id @default(cuid())
+  userId            String
+  taskId            String
+  plannerRunId      String?
+  startAt           DateTime               @db.Timestamptz(3)
+  endAt             DateTime               @db.Timestamptz(3)
+  plannedMinutes    Int
+  state             WorkSessionState
+  generatedBy       WorkSessionGeneratedBy
+  locked            Boolean                @default(false)
+  supersededById    String?
+  createdAt         DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime               @updatedAt @db.Timestamptz(3)
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task              Task                   @relation(fields: [taskId, userId], references: [id, userId], onDelete: Restrict)
+  plannerRun        PlannerRun?            @relation(fields: [plannerRunId, userId], references: [id, userId], onDelete: Restrict)
+  supersededBy      WorkSession?           @relation("SessionSupersession", fields: [supersededById, userId], references: [id, userId], onDelete: Restrict)
+  supersedes        WorkSession?           @relation("SessionSupersession")
   completionRecords CompletionRecord[]
 
+  @@unique([id, userId])
+  @@unique([supersededById, userId])
   @@index([userId, startAt, endAt])
-  @@index([taskId, state])
+  @@index([userId, taskId, state])
+  @@index([userId, plannerRunId])
 }
 
 model CompletionRecord {
-  id                       String            @id @default(cuid())
-  taskId                   String
-  workSessionId            String?
-  outcome                  CompletionOutcome
-  actualMinutes            Int?
-  completedMinutesEstimate Int?
-  recordedAt               DateTime          @default(now())
-  note                     String?
+  id                    String            @id @default(cuid())
+  userId                String
+  taskId                String
+  workSessionId         String?
+  outcome               CompletionOutcome
+  actualMinutes         Int?
+  remainingAfterMinutes Int?
+  recordedAt            DateTime          @default(now()) @db.Timestamptz(3)
+  note                  String?
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task                  Task              @relation(fields: [taskId, userId], references: [id, userId], onDelete: Restrict)
+  workSession           WorkSession?      @relation(fields: [workSessionId, userId], references: [id, userId], onDelete: Restrict)
 
-  task        Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  workSession WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
-
-  @@index([taskId, recordedAt])
+  @@index([userId, taskId, recordedAt])
+  @@index([userId, workSessionId])
 }
 
 model EstimateProfile {
-  id          String   @id @default(cuid())
-  userId      String
-  contextType String
-  contextId   String?
-  sampleCount Int      @default(0)
-  meanRatio   Float?
-  medianRatio Float?
-  recentRatio Float?
-  confidence  Float    @default(0)
+  id           String   @id @default(cuid())
+  userId       String
+  contextType  String
+  contextKey   String
+  sampleCount  Int      @default(0)
+  meanRatio    Float?
+  medianRatio  Float?
+  recentRatio  Float?
+  confidence   Float    @default(0)
   modelVersion String?
-  updatedAt   DateTime @updatedAt
-  createdAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, contextType, contextId])
+  @@unique([userId, contextType, contextKey])
+  @@index([userId, updatedAt])
 }
 
 model PlannerRun {
   id                   String            @id @default(cuid())
   userId               String
-  startedAt            DateTime          @default(now())
-  completedAt          DateTime?
+  startedAt            DateTime          @default(now()) @db.Timestamptz(3)
+  completedAt          DateTime?         @db.Timestamptz(3)
   triggerType          PlannerRunTrigger
-  planningHorizonStart DateTime
-  planningHorizonEnd   DateTime
+  triggerEntityType    String?
+  triggerEntityId      String?
+  planningHorizonStart DateTime          @db.Timestamptz(3)
+  planningHorizonEnd   DateTime          @db.Timestamptz(3)
   plannerVersion       String
   inputSnapshot        Json
   summary              Json?
   warnings             Json?
-  status                PlannerRunStatus
+  status               PlannerRunStatus
+  user                 User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workSessions         WorkSession[]
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workSessions WorkSession[]
-
+  @@unique([id, userId])
   @@index([userId, startedAt])
+  @@index([userId, triggerType, startedAt])
+}
+
+model IntegrationAccount {
+  id                  String                   @id @default(cuid())
+  userId              String
+  provider            String
+  externalAccountId   String
+  displayName         String?
+  status              IntegrationAccountStatus
+  credentialReference String?
+  lastSyncAt          DateTime?                @db.Timestamptz(3)
+  lastSuccessAt       DateTime?                @db.Timestamptz(3)
+  disconnectedAt      DateTime?                @db.Timestamptz(3)
+  createdAt           DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime                 @updatedAt @db.Timestamptz(3)
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  externalObjectMaps  ExternalObjectMap[]
+  calendarEvents      CalendarEvent[]
+
+  @@unique([id, userId])
+  @@unique([id, userId, provider])
+  @@unique([userId, provider, externalAccountId])
+  @@index([userId, provider, status])
 }
 
 model ExternalObjectMap {
-  id                String   @id @default(cuid())
-  userId            String
-  provider          String
-  externalId        String
-  internalType      String
-  internalId        String
-  externalUpdatedAt DateTime?
-  lastSyncedAt      DateTime?
-  sourceHash        String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                   String             @id @default(cuid())
+  userId               String
+  integrationAccountId String
+  provider             String
+  externalId           String
+  internalType         ExternalObjectType
+  internalId           String
+  externalUpdatedAt    DateTime?          @db.Timestamptz(3)
+  lastSyncedAt         DateTime?          @db.Timestamptz(3)
+  sourceHash           String?
+  createdAt            DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime           @updatedAt @db.Timestamptz(3)
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integrationAccount   IntegrationAccount @relation(fields: [integrationAccountId, userId, provider], references: [id, userId, provider], onDelete: Restrict)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, externalId])
+  @@unique([integrationAccountId, externalId])
+  @@unique([userId, provider, externalId])
+  @@unique([userId, internalType, internalId, integrationAccountId])
   @@index([userId, internalType, internalId])
 }
 
 model InboxItem {
-  id                 String      @id @default(cuid())
+  id                 String            @id @default(cuid())
   userId             String
   rawText            String
-  source             String?
-  status             InboxStatus @default(ACTIVE)
+  source             RecordSource      @default(MANUAL)
+  sourceAuthority    SourceAuthority   @default(USER)
+  sourceConfidence   SourceConfidence?
+  status             InboxStatus       @default(ACTIVE)
   proposedEntityType String?
   proposedPayload    Json?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  processedAt        DateTime?         @db.Timestamptz(3)
+  createdAt          DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(3)
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, createdAt])
-}
-
-model IntegrationAccount {
-  id              String   @id @default(cuid())
-  userId          String
-  provider        String
-  status          String
-  encryptedTokens String?
-  lastSyncAt      DateTime?
-  lastSuccessAt   DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, provider])
 }

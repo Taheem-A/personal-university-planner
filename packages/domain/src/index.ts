@@ -1,8 +1,26 @@
+import type {
+  IanaTimezone,
+  LocalDate,
+  LocalTime,
+  RecurrenceRule,
+} from "@university-planner/shared";
+
+export type {
+  IanaTimezone,
+  LocalDate,
+  LocalTime,
+  RecurrenceRule,
+} from "@university-planner/shared";
+
 export type Id = string;
 
 export type EnergyLevel = "LOW" | "MEDIUM" | "HIGH";
 export type ConstraintLevel = "HARD" | "SOFT" | "INFORMATIONAL";
 export type PlanningMode = "AUTO" | "MANUAL" | "UNSCHEDULED";
+export type AssessmentSubmissionStatus =
+  "NOT_SUBMITTED" | "SUBMITTED" | "GRADED" | "EXEMPT" | "CANCELLED";
+export type RecordSource = "MANUAL" | "INTEGRATION" | "ASSISTANT" | "SYSTEM";
+export type SourceAuthority = "USER" | "EXTERNAL" | "SYSTEM" | "INFERRED";
 export type TaskStatus =
   "INBOX" | "READY" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED" | "CANCELLED" | "DEFERRED";
 
@@ -21,13 +39,57 @@ export type LocationTag =
 
 export interface Course {
   id: Id;
+  userId: Id;
+  academicTermId: Id;
   code: string;
   name: string;
-  colorReference: string;
+  colorReference?: string;
+}
+
+export interface AcademicTerm {
+  id: Id;
+  userId: Id;
+  name: string;
+  startDate: LocalDate;
+  endDate: LocalDate;
+  status: "UPCOMING" | "ACTIVE" | "ARCHIVED";
+}
+
+export interface LocalRecurringWindow {
+  recurrenceRule: RecurrenceRule;
+  startTimeLocal: LocalTime;
+  endTimeLocal: LocalTime;
+  spansNextDay: boolean;
+  timezone: IanaTimezone;
+  effectiveFrom: LocalDate;
+  effectiveUntil?: LocalDate;
+}
+
+export interface CourseMeeting extends LocalRecurringWindow {
+  id: Id;
+  userId: Id;
+  courseId: Id;
+  meetingType: "LECTURE" | "TUTORIAL" | "PRACTICAL" | "LAB" | "SEMINAR" | "OTHER";
+  location?: string;
+  attendanceRequired: boolean;
+}
+
+export interface Assessment {
+  id: Id;
+  userId: Id;
+  courseId: Id;
+  title: string;
+  assessmentType: string;
+  releaseAt?: Date;
+  dueAt?: Date;
+  preferredCompletionAt?: Date;
+  submissionStatus: AssessmentSubmissionStatus;
+  submittedAt?: Date;
 }
 
 export interface Task {
   id: Id;
+  userId: Id;
   courseId?: Id;
   assessmentId?: Id;
   parentTaskId?: Id;
@@ -35,24 +97,61 @@ export interface Task {
   description?: string;
   status: TaskStatus;
   priorityOverride?: number;
-  availableFrom: Date;
+  availableFrom?: Date;
   dueAt?: Date;
   preferredCompletionAt?: Date;
-  estimatedMinutes: number;
-  originalEstimatedMinutes: number;
-  remainingMinutes: number;
-  energyRequirement: EnergyLevel;
+  currentEstimatedMinutes?: number;
+  originalEstimatedMinutes?: number;
+  remainingMinutes?: number;
+  energyRequirement?: EnergyLevel;
   locationRequirements: LocationTag[];
-  minimumSessionMinutes: number;
-  preferredSessionMinutes: number;
-  maximumSessionMinutes: number;
+  minimumSessionMinutes?: number;
+  preferredSessionMinutes?: number;
+  maximumSessionMinutes?: number;
   splittable: boolean;
   interruptible: boolean;
   planningMode: PlanningMode;
 }
 
+/** A canonical Task after application services have supplied every planner prerequisite. */
+export interface PlannableTask extends Task {
+  availableFrom: Date;
+  currentEstimatedMinutes: number;
+  originalEstimatedMinutes: number;
+  remainingMinutes: number;
+  energyRequirement: EnergyLevel;
+  minimumSessionMinutes: number;
+  preferredSessionMinutes: number;
+  maximumSessionMinutes: number;
+}
+
+export interface TaskDependency {
+  userId: Id;
+  prerequisiteTaskId: Id;
+  dependentTaskId: Id;
+  dependencyType: "FINISH_TO_START";
+}
+
+export interface RecurringWorkRule {
+  id: Id;
+  userId: Id;
+  courseId: Id;
+  anchorCourseMeetingId?: Id;
+  titleTemplate: string;
+  recurrenceRule: RecurrenceRule;
+  anchorTimeLocal: LocalTime;
+  timezone: IanaTimezone;
+  effectiveFrom: LocalDate;
+  effectiveUntil?: LocalDate;
+  availableOffsetMinutes: number;
+  dueOffsetMinutes?: number;
+  originalEstimatedMinutes?: number;
+  active: boolean;
+}
+
 export interface CalendarEvent {
   id: Id;
+  userId: Id;
   courseId?: Id;
   title: string;
   startAt: Date;
@@ -64,6 +163,7 @@ export interface CalendarEvent {
 
 export interface AvailabilityWindow {
   id: Id;
+  userId: Id;
   startAt: Date;
   endAt: Date;
   capacityFactor: number;
@@ -73,6 +173,7 @@ export interface AvailabilityWindow {
 
 export interface WorkSession {
   id: Id;
+  userId: Id;
   taskId: Id;
   startAt: Date;
   endAt: Date;
@@ -95,11 +196,24 @@ export interface PlanningPreferences {
   planStabilityWindowMinutes: number;
 }
 
+export interface CompletionRecord {
+  id: Id;
+  userId: Id;
+  taskId: Id;
+  workSessionId?: Id;
+  outcome: "COMPLETED" | "PARTIAL" | "SKIPPED" | "DONE_EARLY" | "CANCELLED";
+  actualMinutes?: number;
+  remainingAfterMinutes?: number;
+  recordedAt: Date;
+}
+
 export interface PlannerInput {
+  userId: Id;
+  timezone: IanaTimezone;
   now: Date;
   horizonStart: Date;
   horizonEnd: Date;
-  tasks: Task[];
+  tasks: PlannableTask[];
   events: CalendarEvent[];
   availability: AvailabilityWindow[];
   lockedSessions: WorkSession[];

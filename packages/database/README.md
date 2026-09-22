@@ -2,4 +2,6 @@
 
 This package owns the PostgreSQL/Prisma persistence boundary and the existing production-oriented schema scaffold.
 
-Milestone 0 installs and validates Prisma but deliberately does not create migration history or connect live data. Milestone 1 will review the schema against canonical semantics, establish the first migration, add deterministic seed data, and test clean-database bootstrap against Neon PostgreSQL.
+Milestone 1 established the canonical schema, migration `0001_canonical_foundation`, a deterministic synthetic semester seed, and the production persistence boundary. Database commands, safety boundaries, and clean recreation are documented in `docs/database-migrations.md`, `docs/database-seeding.md`, and `docs/database-persistence-boundary.md`.
+
+Applications import only the package root. It exposes a server-only database handle, explicit repositories, plain record contracts, transactions, and structured constraint-error inspection. Prisma clients, generated model/input types, and mapping details remain package-private.

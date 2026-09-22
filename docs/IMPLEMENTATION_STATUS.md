@@ -1,10 +1,10 @@
 # Implementation status
 
-## Current active milestone
+## Current milestone status
 
-**Milestone 1 — Canonical Domain, Database, Time, and Migrations: NOT STARTED**
+**Milestone 1 — GATE PASSED**
 
-Milestone 0 passed its repository/toolchain gate on 2026-09-21. The production application is intentionally still a bootstrap shell; the approved interactive product remains a non-production regression reference.
+The canonical schema/domain audit, centralized time foundation, first source-controlled migration, deterministic synthetic semester seed, and persistence/repository boundary are complete. Final acceptance proved zero-to-current deployment and reproducibility on fresh disposable Neon databases, every canonical repository family, transaction rollback, Toronto DST behavior, architecture boundaries, full builds, and browser regressions. See [Milestone 1 exit gate](./milestone-1-exit-gate.md).
 
 ## Production bootstrap now implemented
 
@@ -32,16 +32,31 @@ Milestone 0 passed its repository/toolchain gate on 2026-09-21. The production a
 
 ## Deliberately not implemented
 
-- Live PostgreSQL provisioning, first migration, seed data, or repository layer.
 - Auth.js runtime and user isolation.
 - Application services or canonical state writes.
 - Production UI migration from the approved preview.
 - Google Calendar, Quercus/LMS, assistant execution, advanced optimization, background jobs, or microservices.
 
+## Milestone 1 work completed so far
+
+- Audited every roadmap entity and recorded the decisions in ADR 0002.
+- Corrected date-only, local wall-clock, and UTC-instant storage paths.
+- Added direct/composite user ownership, explicit history-preserving relations, typed preferences, account-scoped external identity, and the missing `RecurringWorkRule`.
+- Separated assessment submission from task completion and original/current/remaining/actual duration meanings.
+- Centralized half-open interval algebra, date-only arithmetic, five-minute quantum helpers, IANA timezone conversion, DST disambiguation, and bounded daily/weekly wall-clock recurrence in `packages/shared`.
+- Refactored planner-core to use shared intersection/subtraction rather than private interval logic.
+- Established `0001_canonical_foundation`, reviewed its PostgreSQL SQL, and added migration-owned check constraints plus guarded migration commands/tests.
+- Rebuilt the empty `up_m1_migration_20260921` database on the disposable Neon branch `milestone-1-migration-bootstrap-20260921` solely from migration history; status, drift, and introspection checks pass.
+- Added a fixed-ID, fixed-date, idempotent synthetic Fall 2026 engineering fixture covering the canonical relational model without private data or credentials.
+- Deployed migration history into empty `up_m1_seed_20260921`, seeded it twice, and verified counts, ownership, hierarchy, dependencies, temporal round trips, null semantics, history links, and external uniqueness after each run.
+- Added the server-only database client, plain record mappings, transaction-bound repository context, and explicit repositories for all 19 canonical entities.
+- Made user scope mandatory on ownership-sensitive reads and mutations, kept Prisma implementation types inside `packages/database`, and extended package-boundary enforcement to block Prisma/pg imports elsewhere.
+- Proved create/read/update/archive behavior, canonical relationships, user isolation, hierarchy, dependencies, work-session supersession, JSON and temporal round trips, structured external-identity uniqueness errors, and all-or-nothing rollback against disposable Neon.
+
 ## Blockers
 
-None for the Milestone-0 gate. Managed service projects and credentials are intentionally not provisioned by this repository commit.
+None. The remaining risks recorded in the exit-gate audit are intentionally assigned to later milestones and do not require a Milestone-1 schema redesign.
 
 ## Exact next work item
 
-Begin Milestone 1 by reviewing `packages/database/prisma/schema.prisma` against the canonical entity/time semantics, then create the first source-controlled Prisma migration and prove zero-to-current migration plus deterministic seed bootstrap against a disposable Neon development branch.
+Begin **Milestone 2 — Authentication, Authorization, Validation, and Application Services** after the Milestone-1 PR is reviewed and merged.

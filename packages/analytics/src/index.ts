@@ -1,5 +1,5 @@
 export interface EstimateObservation {
-  estimatedMinutes: number;
+  originalEstimatedMinutes: number;
   actualMinutes: number;
   occurredAt: Date;
   atypical?: boolean;
@@ -30,12 +30,12 @@ export function deriveEstimateLearning(
   observations: EstimateObservation[],
 ): EstimateLearningResult {
   const usable = observations.filter(
-    (item) => !item.atypical && item.estimatedMinutes > 0 && item.actualMinutes > 0,
+    (item) => !item.atypical && item.originalEstimatedMinutes > 0 && item.actualMinutes > 0,
   );
   if (usable.length === 0) {
     return { sampleCount: 0, medianRatio: null, meanRatio: null, multiplier: 1, confidence: 0 };
   }
-  const ratios = usable.map((item) => item.actualMinutes / item.estimatedMinutes);
+  const ratios = usable.map((item) => item.actualMinutes / item.originalEstimatedMinutes);
   const med = median(ratios);
   const mean = ratios.reduce((sum, value) => sum + value, 0) / ratios.length;
   const confidence =

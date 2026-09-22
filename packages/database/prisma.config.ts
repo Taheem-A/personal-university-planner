@@ -7,10 +7,15 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    seed: "node prisma/seed.mjs",
   },
   datasource: {
-    // `prisma validate` does not connect. Any migration/database command must
-    // receive the real environment-specific DATABASE_URL.
-    url: process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL ?? schemaValidationUrl,
+    // `prisma validate` does not connect. Database-changing commands must use
+    // a direct URL; Neon runtime traffic may use the pooled DATABASE_URL.
+    url:
+      process.env.MIGRATION_DATABASE_URL ??
+      process.env.DATABASE_URL_UNPOOLED ??
+      process.env.DATABASE_URL ??
+      schemaValidationUrl,
   },
 });

@@ -4,26 +4,24 @@ import type {
   PlannerInput,
   PlannerOutput,
   PlannerWarning,
+  PlannableTask,
   ScenarioRequest,
   ScenarioResult,
-  Task,
   TaskPressure,
   WorkSession,
 } from "../../domain/src";
 import {
   addMinutes,
+  instantToLocal,
   maxDate,
+  intersectIntervals,
   minDate,
   minutesBetween,
   overlaps,
   roundUpToQuantum,
   sortByStart,
+  subtractIntervals,
 } from "../../shared/src";
-
-interface Interval {
-  startAt: Date;
-  endAt: Date;
-}
 
 interface CandidateWindow extends AvailabilityWindow {
   startAt: Date;
@@ -36,14 +34,14 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-function energyFit(task: Task, window: CandidateWindow): number {
+function energyFit(task: PlannableTask, window: CandidateWindow): number {
   const rank = { LOW: 0, MEDIUM: 1, HIGH: 2 } as const;
   const delta = rank[window.energyLevel] - rank[task.energyRequirement];
   if (delta >= 0) return 1;
   return delta === -1 ? 0.72 : 0.42;
 }
 
-function locationFits(task: Task, window: CandidateWindow): boolean {
+function locationFits(task: PlannableTask, window: CandidateWindow): boolean {
   if (task.locationRequirements.length === 0 || task.locationRequirements.includes("ANYWHERE"))
     return true;
   return task.locationRequirements.every((requirement) =>
@@ -51,28 +49,7 @@ function locationFits(task: Task, window: CandidateWindow): boolean {
   );
 }
 
-function subtractIntervals(window: Interval, occupied: Interval[]): Interval[] {
-  let parts: Interval[] = [window];
-  for (const block of occupied) {
-    const next: Interval[] = [];
-    for (const part of parts) {
-      if (!overlaps(part.startAt, part.endAt, block.startAt, block.endAt)) {
-        next.push(part);
-        continue;
-      }
-      if (block.startAt > part.startAt) {
-        next.push({ startAt: part.startAt, endAt: minDate(block.startAt, part.endAt) });
-      }
-      if (block.endAt < part.endAt) {
-        next.push({ startAt: maxDate(block.endAt, part.startAt), endAt: part.endAt });
-      }
-    }
-    parts = next.filter((part) => part.endAt > part.startAt);
-  }
-  return parts;
-}
-
-function occupiedIntervals(input: PlannerInput): Interval[] {
+function occupiedIntervals(input: PlannerInput): { startAt: Date; endAt: Date }[] {
   const hardEvents = input.events
     .filter((event) => event.constraintLevel === "HARD")
     .map((event) => ({ startAt: event.startAt, endAt: event.endAt }));
@@ -86,10 +63,12 @@ function candidateWindows(input: PlannerInput): CandidateWindow[] {
   const occupied = occupiedIntervals(input);
   const result: CandidateWindow[] = [];
   for (const availability of input.availability) {
-    const boundedStart = maxDate(availability.startAt, input.horizonStart);
-    const boundedEnd = minDate(availability.endAt, input.horizonEnd);
-    if (boundedEnd <= boundedStart) continue;
-    const free = subtractIntervals({ startAt: boundedStart, endAt: boundedEnd }, occupied);
+    const bounded = intersectIntervals(availability, {
+      startAt: input.horizonStart,
+      endAt: input.horizonEnd,
+    });
+    if (!bounded) continue;
+    const free = subtractIntervals([bounded], occupied);
     for (const part of free) {
       result.push({ ...availability, startAt: part.startAt, endAt: part.endAt });
     }
@@ -97,7 +76,7 @@ function candidateWindows(input: PlannerInput): CandidateWindow[] {
   return sortByStart(result);
 }
 
-function eligibleTask(task: Task, input: PlannerInput): boolean {
+function eligibleTask(task: PlannableTask, input: PlannerInput): boolean {
   return (
     (task.status === "READY" || task.status === "IN_PROGRESS") &&
     task.planningMode === "AUTO" &&
@@ -106,7 +85,11 @@ function eligibleTask(task: Task, input: PlannerInput): boolean {
   );
 }
 
-function windowUsableMinutes(task: Task, window: CandidateWindow, input: PlannerInput): number {
+function windowUsableMinutes(
+  task: PlannableTask,
+  window: CandidateWindow,
+  input: PlannerInput,
+): number {
   if (!locationFits(task, window)) return 0;
   const start = maxDate(window.startAt, task.availableFrom, input.now);
   const deadline = task.dueAt ?? input.horizonEnd;
@@ -118,7 +101,7 @@ function windowUsableMinutes(task: Task, window: CandidateWindow, input: Planner
 }
 
 function calculatePressure(
-  task: Task,
+  task: PlannableTask,
   windows: CandidateWindow[],
   input: PlannerInput,
 ): TaskPressure {
@@ -148,7 +131,11 @@ function calculatePressure(
   };
 }
 
-function sessionTarget(task: Task, availableClockMinutes: number, remaining: number): number {
+function sessionTarget(
+  task: PlannableTask,
+  availableClockMinutes: number,
+  remaining: number,
+): number {
   const preferred = Math.min(task.preferredSessionMinutes, remaining, availableClockMinutes);
   const max = Math.min(task.maximumSessionMinutes, remaining, availableClockMinutes);
   let target = preferred >= task.minimumSessionMinutes ? preferred : max;
@@ -167,7 +154,11 @@ function stableSessionBonus(taskId: string, window: CandidateWindow, input: Plan
   return old ? 0.6 : 0;
 }
 
-function chooseWindow(task: Task, windows: CandidateWindow[], input: PlannerInput): number {
+function chooseWindow(
+  task: PlannableTask,
+  windows: CandidateWindow[],
+  input: PlannerInput,
+): number {
   let bestIndex = -1;
   let bestScore = -Infinity;
   for (let index = 0; index < windows.length; index += 1) {
@@ -182,7 +173,7 @@ function chooseWindow(task: Task, windows: CandidateWindow[], input: PlannerInpu
       (deadline.getTime() - window.startAt.getTime()) / 3_600_000,
     );
     const earlyUsefulness = 1 / Math.sqrt(hoursBeforeDeadline);
-    const lateHour = window.startAt.getHours();
+    const lateHour = Number(instantToLocal(window.startAt, input.timezone).time.slice(0, 2));
     const latePenalty =
       task.energyRequirement === "HIGH" &&
       input.preferences.avoidLateHighEnergyTasks &&
@@ -204,7 +195,7 @@ function chooseWindow(task: Task, windows: CandidateWindow[], input: PlannerInpu
 }
 
 function placeTask(
-  task: Task,
+  task: PlannableTask,
   windows: CandidateWindow[],
   input: PlannerInput,
   sessionCounter: { value: number },
@@ -226,6 +217,7 @@ function placeTask(
     const endAt = addMinutes(startAt, target);
     sessions.push({
       id: `generated-${sessionCounter.value++}`,
+      userId: input.userId,
       taskId: task.id,
       startAt,
       endAt,
@@ -354,6 +346,7 @@ export function simulateProtectedWindow(
   const before = generatePlan(input);
   const synthetic: CalendarEvent = {
     id: `scenario:${request.title}`,
+    userId: input.userId,
     title: request.title,
     startAt: request.startAt,
     endAt: request.endAt,

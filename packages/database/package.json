@@ -2,12 +2,34 @@
   "name": "@university-planner/database",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "prisma generate --config prisma.config.ts",
     "db:format": "prisma format --schema prisma/schema.prisma",
-    "db:validate": "prisma validate --config prisma.config.ts"
+    "db:validate": "prisma validate --config prisma.config.ts",
+    "db:migrate:create": "prisma migrate dev --create-only --config prisma.config.ts",
+    "db:migrate:deploy": "prisma migrate deploy --config prisma.config.ts",
+    "db:migrate:status": "prisma migrate status --config prisma.config.ts",
+    "db:seed": "prisma db seed --config prisma.config.ts",
+    "db:seed:assert": "node prisma/assert-seed.mjs",
+    "db:bootstrap:seed": "node ../../scripts/verify-seed-bootstrap.mjs",
+    "db:bootstrap:verify": "node ../../scripts/verify-database-bootstrap.mjs"
   },
   "dependencies": {
-    "@prisma/client": "7.10.0"
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "@university-planner/shared": "workspace:*",
+    "pg": "8.23.0"
   },
   "devDependencies": {
     "prisma": "7.10.0"

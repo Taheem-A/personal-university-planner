@@ -7,7 +7,7 @@ const allowedInternalImports = {
   analytics: new Set([]),
   assistant: new Set(["domain"]),
   database: new Set(["domain", "shared"]),
-  domain: new Set([]),
+  domain: new Set(["shared"]),
   integrations: new Set(["domain", "shared"]),
   "planner-core": new Set(["domain", "shared"]),
   shared: new Set([]),
@@ -64,6 +64,11 @@ for (const filePath of sourceFiles) {
     ) {
       violations.push(
         `${path.relative(repositoryRoot, filePath)}: planner-core cannot import ${specifier}`,
+      );
+    }
+    if (owner !== "database" && /^(?:@prisma|pg|@prisma\/adapter-pg)(?:\/|$)/.test(specifier)) {
+      violations.push(
+        `${path.relative(repositoryRoot, filePath)}: only database may import ${specifier}`,
       );
     }
   }

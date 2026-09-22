@@ -17,7 +17,13 @@ export type PlannerToolName =
   | "get_forecast";
 
 export type AssistantMutation =
-  | { type: "CREATE_TASK"; title: string; dueAt?: Date; estimatedMinutes?: number; courseId?: Id }
+  | {
+      type: "CREATE_TASK";
+      title: string;
+      dueAt?: Date;
+      currentEstimatedMinutes?: number;
+      courseId?: Id;
+    }
   | { type: "UPDATE_TASK_STATUS"; taskId: Id; status: TaskStatus }
   | { type: "RECORD_PARTIAL"; taskId: Id; remainingMinutes: number }
   | {
