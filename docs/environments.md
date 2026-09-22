@@ -12,6 +12,8 @@ The same codebase is promoted through three isolated deployment boundaries.
 
 Copy `.env.example` to `.env.local` for development. The example contains names and non-secret placeholders only.
 
+Auth.js uses `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, and the deployment's `NEXTAUTH_URL` for Google OAuth callbacks (`/api/auth/callback/google`). Google sign-in requests only the OIDC `openid` scope. Configure a distinct OAuth client and callback URL for each deployment. Login does not request Calendar permissions or store Google access/refresh tokens.
+
 Prisma CLI operations prefer `MIGRATION_DATABASE_URL` so schema changes use a direct Neon connection; `DATABASE_URL_UNPOOLED` is the Neon-standard fallback. Application runtime uses `DATABASE_URL`, normally pooled on serverless hosts. A final fallback to `DATABASE_URL` exists for non-Neon local development, but migration commands must never receive a Neon `-pooler` endpoint.
 
 The destructive bootstrap verifier uses a separate `MIGRATION_TEST_DATABASE_URL` and strong disposable-database guards. See [database migrations](./database-migrations.md) for commands and reset policy.
