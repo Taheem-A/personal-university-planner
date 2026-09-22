@@ -11,7 +11,15 @@ const allowedInternalImports = {
   integrations: new Set(["domain", "shared"]),
   "planner-core": new Set(["domain", "shared"]),
   shared: new Set([]),
-  web: new Set(["analytics", "assistant", "domain", "integrations", "planner-core", "shared"]),
+  web: new Set([
+    "analytics",
+    "assistant",
+    "domain",
+    "integrations",
+    "planner-core",
+    "shared",
+    "database",
+  ]),
 };
 
 const roots = [path.join(repositoryRoot, "packages"), path.join(repositoryRoot, "apps")];
@@ -53,6 +61,33 @@ for (const filePath of sourceFiles) {
   for (const match of source.matchAll(importPattern)) {
     const specifier = match[1];
     const target = targetOf(filePath, specifier);
+    const relativeFile = path.relative(repositoryRoot, filePath).replaceAll("\\", "/");
+    if (
+      owner === "web" &&
+      /^\s*["']use client["']/.test(source) &&
+      specifier.startsWith(".") &&
+      path
+        .resolve(path.dirname(filePath), specifier)
+        .replaceAll("\\", "/")
+        .includes("/apps/web/src/server/")
+    ) {
+      violations.push(`${relativeFile}: client components cannot import server application code`);
+    }
+    if (
+      owner === "web" &&
+      target === "database" &&
+      !relativeFile.startsWith("apps/web/src/server/")
+    ) {
+      violations.push(`${relativeFile}: only the web server application area may import database`);
+    }
+    if (
+      owner === "web" &&
+      /^(?:next-auth|@auth)(?:\/|$)/.test(specifier) &&
+      !relativeFile.startsWith("apps/web/src/server/") &&
+      !relativeFile.startsWith("apps/web/src/app/api/auth/")
+    ) {
+      violations.push(`${relativeFile}: Auth.js belongs in the web server application area`);
+    }
     if (target && target !== owner && !allowedInternalImports[owner].has(target)) {
       violations.push(
         `${path.relative(repositoryRoot, filePath)}: ${owner} cannot import ${target}`,

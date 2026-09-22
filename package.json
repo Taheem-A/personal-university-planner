@@ -14,7 +14,7 @@
     "preview": "pnpm --filter @university-planner/web start",
     "preview:approved": "node scripts/serve-static.mjs prototypes/approved-preview 4173",
     "build:core": "tsc -p tsconfig.core.json",
-    "typecheck": "tsc -p tsconfig.core.json --noEmit && pnpm --filter @university-planner/database typecheck && pnpm --filter @university-planner/web typecheck",
+    "typecheck": "tsc -p tsconfig.core.json --noEmit && pnpm --filter @university-planner/database build && pnpm --filter @university-planner/web typecheck",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

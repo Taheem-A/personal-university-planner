@@ -172,6 +172,20 @@ model User {
   integrationAccounts IntegrationAccount[]
   externalObjectMaps  ExternalObjectMap[]
   inboxItems          InboxItem[]
+  authIdentities      AuthIdentity[]
+}
+
+/// Stable sign-in identity only. OAuth credentials for integrations are separate.
+model AuthIdentity {
+  id                String   @id @default(cuid())
+  provider          String
+  providerAccountId String
+  userId            String
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model AcademicTerm {

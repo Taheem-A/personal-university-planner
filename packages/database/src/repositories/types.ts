@@ -35,6 +35,13 @@ export interface UserRepository {
   ): Promise<UserRecord>;
 }
 
+/** Authentication infrastructure, never a planner domain entity. */
+export interface AuthIdentityRepository {
+  findUser(provider: string, providerAccountId: string): Promise<UserRecord | null>;
+  /** Atomic identity and user creation; a simultaneous callback resolves the winner. */
+  provisionUser(provider: string, providerAccountId: string): Promise<UserRecord>;
+}
+
 export interface AcademicTermRepository {
   create(record: AcademicTermRecord): Promise<AcademicTermRecord>;
   getForUser(userId: string, id: string): Promise<AcademicTermRecord | null>;
@@ -199,6 +206,7 @@ export interface InboxItemRepository {
 
 export interface CanonicalRepositories {
   users: UserRepository;
+  authIdentities: AuthIdentityRepository;
   academicTerms: AcademicTermRepository;
   courses: CourseRepository;
   courseMeetings: CourseMeetingRepository;
