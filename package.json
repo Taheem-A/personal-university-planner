@@ -28,6 +28,9 @@
     "db:migrate:create": "pnpm --filter @university-planner/database db:migrate:create",
     "db:migrate:deploy": "pnpm --filter @university-planner/database db:migrate:deploy",
     "db:migrate:status": "pnpm --filter @university-planner/database db:migrate:status",
+    "db:seed": "pnpm --filter @university-planner/database db:seed",
+    "db:seed:assert": "pnpm --filter @university-planner/database db:seed:assert",
+    "db:bootstrap:seed": "pnpm --filter @university-planner/database db:bootstrap:seed",
     "db:bootstrap:verify": "pnpm --filter @university-planner/database db:bootstrap:verify",
     "db:validate": "pnpm --filter @university-planner/database db:validate",
     "verify": "pnpm format:check && pnpm lint && pnpm check:boundaries && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm db:validate && pnpm build && pnpm test:e2e"

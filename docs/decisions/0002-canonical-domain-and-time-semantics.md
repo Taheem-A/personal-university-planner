@@ -58,7 +58,6 @@ No migration or live database was created or contacted for this decision.
 
 ## Intentionally deferred
 
-- Migration 001, SQL check constraints, zero-to-current proof, and deterministic seed.
 - Repository/service code, authorization, cycle detection, optimistic concurrency, provider conflict resolution, and credential storage.
 - Auth.js models, integration engines, planner-core v1 changes, and production UI.
 
@@ -75,7 +74,7 @@ No migration or live database was created or contacted for this decision.
 
 ## Consequences
 
-The schema and time conversion contracts are now ready to be represented by the first source-controlled migration. Domain code names the current planning estimate explicitly and consumes shared local-date/local-time/timezone concepts without importing Prisma types.
+The schema and time conversion contracts are represented by the first source-controlled migration and exercised by a deterministic synthetic semester. Domain code names the current planning estimate explicitly and consumes shared local-date/local-time/timezone concepts without importing Prisma types.
 
 ## Migration 001 implementation note
 

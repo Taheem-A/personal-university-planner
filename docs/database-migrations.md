@@ -27,7 +27,7 @@ Migration creation and deployment require a direct connection. Production and pr
 
 ## Zero-to-current verification
 
-Provision or select an empty disposable Neon development branch and create a dedicated database whose name starts with `up_m1_migration_`. Then inject these values into one test process:
+Provision or select an empty disposable Neon development branch and create a dedicated database whose name starts with `up_m1_migration_` or `up_m1_seed_`. Then inject these values into one test process:
 
 ```text
 APP_ENV=test

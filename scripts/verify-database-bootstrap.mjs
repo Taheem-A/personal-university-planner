@@ -39,8 +39,8 @@ if (databaseUrl.hostname.includes("-pooler"))
   fail("the target must use a direct, non-pooled endpoint.");
 
 const databaseName = decodeURIComponent(databaseUrl.pathname.replace(/^\//, ""));
-if (!/^up_m1_migration_[a-z0-9_]+$/.test(databaseName)) {
-  fail("the database name must match /^up_m1_migration_[a-z0-9_]+$/.");
+if (!/^up_m1_(?:migration|seed)_[a-z0-9_]+$/.test(databaseName)) {
+  fail("the database name must match /^up_m1_(?:migration|seed)_[a-z0-9_]+$/.");
 }
 if (process.env.DATABASE_URL === rawUrl || process.env.MIGRATION_DATABASE_URL === rawUrl) {
   fail("the destructive test URL must differ from runtime and ordinary migration URLs.");

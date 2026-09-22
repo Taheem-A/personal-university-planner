@@ -89,6 +89,35 @@ None for this slice. Milestone 1 is not gate-passed because deterministic seed d
 
 Create the deterministic synthetic semester seed and verify it against the retained disposable Neon database.
 
+## 2026-09-21 — Milestone 1 deterministic seed slice: COMPLETE
+
+Milestone 1 remains **IN PROGRESS**; its gate has not passed because persistence/repository work remains.
+
+### What changed
+
+- Added an entirely synthetic Fall 2026 engineering semester with fixed IDs, dates, instants, local Toronto wall-clock recurrence, and no randomness or private data.
+- Represented every requested canonical entity except `PlannerRun`, intentionally omitted because no Planner Service exists yet; user-generated session history covers locks, completion, and supersession without inventing a planner execution.
+- Added idempotent fixed-ID upserts, an ergonomic `pnpm db:seed` command, relational integrity assertions, and a non-destructive `pnpm db:bootstrap:seed` migrate/deploy/seed verifier.
+- Guarded seed execution by environment, exact confirmation, direct connection, approved host, and unmistakable disposable database name.
+- Documented fixture policy, repeat behavior, and guarded clean recreation.
+- Created and retained empty disposable database `up_m1_seed_20260921` on Neon branch `milestone-1-migration-bootstrap-20260921` for the proof and next persistence slice.
+
+### Tests passed
+
+- Empty database → `prisma migrate deploy` → seed → integrity assertions passed.
+- A second seed and the full assertions passed with unchanged record counts, proving idempotent repeat behavior.
+- Assertions verify ownership, parent/subtask and dependency links, work-session history, completion linkage, null estimates/deadlines, date-only and local-time round trips, recurrence fields, credential-free disconnected integration metadata, and external identity uniqueness.
+- `pnpm verify` passes: formatting, ESLint, package boundaries, strict core/web TypeScript, 19 unit tests, 13 integration tests, Prisma validation, core/Next.js production builds, and 2 Chromium E2E tests.
+- `pnpm check:dependencies` reports no known vulnerabilities.
+
+### Blockers
+
+None for this slice. Milestone 1 is not gate-passed because the persistence/repository boundary and remaining database integration tests are not implemented.
+
+### Exact next work item
+
+Implement and test the persistence/repository boundary over the canonical Prisma model.
+
 ## 2026-09-21 — Milestone 1 time foundation: COMPLETE
 
 Milestone 1 remains **IN PROGRESS**; its gate has not passed.

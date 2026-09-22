@@ -4,7 +4,7 @@
 
 **Milestone 1 — Canonical Domain, Database, Time, and Migrations: IN PROGRESS**
 
-Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical schema/domain audit, time foundation, and first source-controlled migration are complete. Migration 001 was proven from zero on disposable Neon with clean migration status, no Prisma-representable drift, and successful introspection. Seed, repositories, and the Milestone-1 exit gate remain unfinished.
+Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical schema/domain audit, time foundation, first source-controlled migration, and deterministic synthetic semester seed are complete. Clean migration deployment, seed loading, relational assertions, and repeat-seed stability are proven on disposable Neon. Repositories and the Milestone-1 exit gate remain unfinished.
 
 ## Production bootstrap now implemented
 
@@ -32,7 +32,7 @@ Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical sc
 
 ## Deliberately not implemented
 
-- Synthetic semester seed data or the repository layer.
+- Persistence/repository layer and application services.
 - Auth.js runtime and user isolation.
 - Application services or canonical state writes.
 - Production UI migration from the approved preview.
@@ -48,11 +48,13 @@ Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical sc
 - Refactored planner-core to use shared intersection/subtraction rather than private interval logic.
 - Established `0001_canonical_foundation`, reviewed its PostgreSQL SQL, and added migration-owned check constraints plus guarded migration commands/tests.
 - Rebuilt the empty `up_m1_migration_20260921` database on the disposable Neon branch `milestone-1-migration-bootstrap-20260921` solely from migration history; status, drift, and introspection checks pass.
+- Added a fixed-ID, fixed-date, idempotent synthetic Fall 2026 engineering fixture covering the canonical relational model without private data or credentials.
+- Deployed migration history into empty `up_m1_seed_20260921`, seeded it twice, and verified counts, ownership, hierarchy, dependencies, temporal round trips, null semantics, history links, and external uniqueness after each run.
 
 ## Blockers
 
-None for this slice. Milestone 1 remains **IN PROGRESS** because deterministic seed data, repositories, and the full database gate remain outstanding.
+None for this slice. Milestone 1 remains **IN PROGRESS** because the persistence/repository boundary and the full database gate remain outstanding.
 
 ## Exact next work item
 
-Create the deterministic synthetic semester seed and verify it against the retained disposable Neon database.
+Implement and test the persistence/repository boundary over the canonical Prisma model.
