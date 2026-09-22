@@ -2,6 +2,14 @@
 
 ## 2026-09-22 — Milestone 2 trust-boundary slices: IN PROGRESS
 
+### Academic application service slice (Prompt 4): IN PROGRESS
+
+- Added authenticated term, course, recurring course meeting, assessment, task, and task-dependency services with scoped reads, create/update/archive operations, guarded parent relations and dependency cycles, and structured results. Academic term archive uses its canonical `ARCHIVED` status; other academic archives preserve their records and history.
+- Migration 0004 adds explicit optimistic versions to term, course, meeting, and assessment, and adds a meeting archive timestamp. Existing Task version is reused. A per-user transaction advisory lock serializes task-parent and dependency graph changes; dependent Task version changes with dependency mutations.
+- Academic input preserves unknown deadlines and estimates as null, calendar dates as dates, recurring wall-clock fields as local values with timezone, and submission state separate from Task completion. Manual edits cannot claim provider or system provenance.
+- Local service tests exercise two-user scoping, stale versions, invalid dates, null facts, task hierarchy, and dependency cycles. The service tests use a repository simulation; live service/database integration and transaction rollback still need a disposable database reachable from the test process. Milestone 2 remains **IN PROGRESS**.
+- Exact next work item: run live database integration and browser E2E when their runtimes are accessible, then add CalendarEvent, AvailabilityRule, ProtectedTimeRule, PlanningPreference, and InboxItem services with conditional versions and wall-clock validation (Prompt 5).
+
 - Added a stable, unique authentication identity to canonical User mapping with atomic first-login provisioning and Toronto initial timezone.
 - Added migration 0002, server-only web composition root, and package import enforcement. ADR 0003 records credential minimization and future integration separation.
 - Added stable NextAuth.js 4 Google-only OAuth route, JWT session, sign-out through Auth.js, server-side canonical actor resolution, and an authenticated account status endpoint. Only the `openid` login scope is requested; callbacks expose only canonical user ID and do not persist Google tokens.

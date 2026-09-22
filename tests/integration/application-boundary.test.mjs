@@ -6,6 +6,17 @@ import vm from "node:vm";
 import typescript from "typescript";
 
 const webRequire = createRequire(new URL("../../apps/web/package.json", import.meta.url));
+const sharedSource = readFileSync("packages/shared/src/time.ts", "utf8");
+const shared = {};
+vm.runInNewContext(
+  typescript.transpileModule(sharedSource, {
+    compilerOptions: {
+      module: typescript.ModuleKind.CommonJS,
+      target: typescript.ScriptTarget.ES2022,
+    },
+  }).outputText,
+  { exports: shared, Date, Intl, Map, Set, Number, Error, RangeError },
+);
 
 function load(file, stubs = {}) {
   const source = readFileSync(`apps/web/src/server/application/${file}.ts`, "utf8");
@@ -16,7 +27,8 @@ function load(file, stubs = {}) {
     },
   }).outputText;
   const exports = {};
-  const require = (name) => stubs[name] ?? webRequire(name);
+  const require = (name) =>
+    name === "@university-planner/shared" ? shared : (stubs[name] ?? webRequire(name));
   vm.runInNewContext(javascript, { exports, require, Intl, Date, Error, Map, Set, Number });
   return exports;
 }

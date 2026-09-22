@@ -93,6 +93,13 @@ export function createPlanningRepositories(db: DatabaseExecutor): {
         });
         return rows.map((row) => toPlainRecord<TaskDependencyRecord>(row));
       },
+      async listForUser(userId) {
+        const rows = await db.taskDependency.findMany({
+          where: { userId },
+          orderBy: [{ prerequisiteTaskId: "asc" }, { dependentTaskId: "asc" }],
+        });
+        return rows.map((row) => toPlainRecord<TaskDependencyRecord>(row));
+      },
       async remove(userId, prerequisiteTaskId, dependentTaskId) {
         await db.taskDependency.delete({
           where: {

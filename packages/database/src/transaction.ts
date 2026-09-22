@@ -6,7 +6,16 @@ export async function runInTransaction<T>(
   client: PrismaClient,
   operation: (context: TransactionContext) => Promise<T>,
 ): Promise<T> {
-  return client.$transaction(async (transactionClient) =>
-    operation({ repositories: createRepositories(transactionClient) }),
+  return client.$transaction(
+    async (transactionClient) =>
+      operation({
+        repositories: createRepositories(transactionClient),
+        locks: {
+          async userGraph(userId) {
+            await transactionClient.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`;
+          },
+        },
+      }),
+    { maxWait: 10_000, timeout: 30_000 },
   );
 }

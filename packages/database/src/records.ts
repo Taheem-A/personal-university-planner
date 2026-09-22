@@ -76,6 +76,7 @@ export interface UserRecord extends AuditFields {
 
 export interface AcademicTermRecord extends AuditFields {
   id: string;
+  version: number;
   userId: string;
   name: string;
   startDate: LocalDate;
@@ -85,6 +86,7 @@ export interface AcademicTermRecord extends AuditFields {
 
 export interface CourseRecord extends AuditFields, ProvenanceFields {
   id: string;
+  version: number;
   userId: string;
   academicTermId: string;
   code: string;
@@ -100,15 +102,18 @@ export interface CourseRecord extends AuditFields, ProvenanceFields {
 
 export interface CourseMeetingRecord extends AuditFields, LocalRecurrenceFields {
   id: string;
+  version: number;
   userId: string;
   courseId: string;
   meetingType: MeetingType;
   location: string | null;
   attendanceRequired: boolean;
+  archivedAt: Date | null;
 }
 
 export interface AssessmentRecord extends AuditFields, ProvenanceFields {
   id: string;
+  version: number;
   userId: string;
   courseId: string;
   title: string;

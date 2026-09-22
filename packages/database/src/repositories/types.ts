@@ -42,11 +42,20 @@ export interface AuthIdentityRepository {
   provisionUser(provider: string, providerAccountId: string): Promise<UserRecord>;
 }
 
+export type ConditionalMutation<T> =
+  { status: "UPDATED"; record: T } | { status: "STALE" } | { status: "NOT_FOUND" };
+
 export interface AcademicTermRepository {
   create(record: AcademicTermRecord): Promise<AcademicTermRecord>;
   getForUser(userId: string, id: string): Promise<AcademicTermRecord | null>;
   listForUser(userId: string): Promise<AcademicTermRecord[]>;
   updateStatus(userId: string, id: string, status: AcademicTermStatus): Promise<AcademicTermRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<Pick<AcademicTermRecord, "name" | "startDate" | "endDate" | "status">>,
+  ): Promise<ConditionalMutation<AcademicTermRecord>>;
 }
 
 export interface CourseRepository {
@@ -54,12 +63,52 @@ export interface CourseRepository {
   getForUser(userId: string, id: string): Promise<CourseRecord | null>;
   listForTerm(userId: string, academicTermId: string): Promise<CourseRecord[]>;
   archive(userId: string, id: string, archivedAt: Date): Promise<CourseRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<
+      Pick<
+        CourseRecord,
+        | "code"
+        | "name"
+        | "section"
+        | "instructorName"
+        | "colorReference"
+        | "creditValue"
+        | "defaultTaskEnergy"
+        | "defaultTaskLocation"
+        | "archivedAt"
+      >
+    >,
+  ): Promise<ConditionalMutation<CourseRecord>>;
 }
 
 export interface CourseMeetingRepository {
   create(record: CourseMeetingRecord): Promise<CourseMeetingRecord>;
   getForUser(userId: string, id: string): Promise<CourseMeetingRecord | null>;
   listForCourse(userId: string, courseId: string): Promise<CourseMeetingRecord[]>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<
+      Pick<
+        CourseMeetingRecord,
+        | "meetingType"
+        | "recurrenceRule"
+        | "startTimeLocal"
+        | "endTimeLocal"
+        | "spansNextDay"
+        | "timezone"
+        | "location"
+        | "effectiveFrom"
+        | "effectiveUntil"
+        | "attendanceRequired"
+        | "archivedAt"
+      >
+    >,
+  ): Promise<ConditionalMutation<CourseMeetingRecord>>;
 }
 
 export interface AssessmentRepository {
@@ -67,6 +116,29 @@ export interface AssessmentRepository {
   getForUser(userId: string, id: string): Promise<AssessmentRecord | null>;
   listForCourse(userId: string, courseId: string): Promise<AssessmentRecord[]>;
   archive(userId: string, id: string, archivedAt: Date): Promise<AssessmentRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<
+      Pick<
+        AssessmentRecord,
+        | "title"
+        | "assessmentType"
+        | "releaseAt"
+        | "dueAt"
+        | "preferredCompletionAt"
+        | "gradeWeight"
+        | "gradeReceived"
+        | "notes"
+        | "instructionsUrl"
+        | "submissionUrl"
+        | "submissionStatus"
+        | "submittedAt"
+        | "archivedAt"
+      >
+    >,
+  ): Promise<ConditionalMutation<AssessmentRecord>>;
 }
 
 export interface TaskRepository {
@@ -86,6 +158,16 @@ export interface TaskRepository {
         | "currentEstimatedMinutes"
         | "remainingMinutes"
         | "completedAt"
+        | "parentTaskId"
+        | "courseId"
+        | "assessmentId"
+        | "dueAt"
+        | "preferredCompletionAt"
+        | "availableFrom"
+        | "minimumSessionMinutes"
+        | "preferredSessionMinutes"
+        | "maximumSessionMinutes"
+        | "archivedAt"
       >
     >,
   ): Promise<TaskRecord>;
@@ -102,6 +184,17 @@ export interface TaskRepository {
         | "currentEstimatedMinutes"
         | "remainingMinutes"
         | "completedAt"
+        | "parentTaskId"
+        | "courseId"
+        | "assessmentId"
+        | "dueAt"
+        | "preferredCompletionAt"
+        | "availableFrom"
+        | "originalEstimatedMinutes"
+        | "minimumSessionMinutes"
+        | "preferredSessionMinutes"
+        | "maximumSessionMinutes"
+        | "archivedAt"
       >
     >,
   ): Promise<
@@ -113,6 +206,7 @@ export interface TaskRepository {
 export interface TaskDependencyRepository {
   add(record: TaskDependencyRecord): Promise<TaskDependencyRecord>;
   listForTask(userId: string, taskId: string): Promise<TaskDependencyRecord[]>;
+  listForUser(userId: string): Promise<TaskDependencyRecord[]>;
   remove(userId: string, prerequisiteTaskId: string, dependentTaskId: string): Promise<void>;
 }
 
@@ -247,4 +341,5 @@ export interface CanonicalRepositories {
 
 export interface TransactionContext {
   repositories: CanonicalRepositories;
+  locks: { userGraph(userId: string): Promise<void> };
 }

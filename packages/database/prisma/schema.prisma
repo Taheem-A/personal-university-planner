@@ -190,6 +190,7 @@ model AuthIdentity {
 
 model AcademicTerm {
   id        String             @id @default(cuid())
+  version   Int                @default(0)
   userId    String
   name      String
   startDate DateTime           @db.Date
@@ -207,6 +208,7 @@ model AcademicTerm {
 
 model Course {
   id                  String              @id @default(cuid())
+  version             Int                 @default(0)
   userId              String
   academicTermId      String
   code                String
@@ -239,6 +241,7 @@ model Course {
 
 model CourseMeeting {
   id                 String              @id @default(cuid())
+  version            Int                 @default(0)
   userId             String
   courseId           String
   meetingType        MeetingType
@@ -251,6 +254,7 @@ model CourseMeeting {
   effectiveFrom      DateTime            @db.Date
   effectiveUntil     DateTime?           @db.Date
   attendanceRequired Boolean             @default(true)
+  archivedAt         DateTime?           @db.Timestamptz(3)
   createdAt          DateTime            @default(now()) @db.Timestamptz(3)
   updatedAt          DateTime            @updatedAt @db.Timestamptz(3)
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -263,6 +267,7 @@ model CourseMeeting {
 
 model Assessment {
   id                    String                     @id @default(cuid())
+  version               Int                        @default(0)
   userId                String
   courseId              String
   title                 String
