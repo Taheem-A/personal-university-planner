@@ -143,3 +143,31 @@ None. Migration history remains intentionally absent.
 ### Exact next work item
 
 Establish the first source-controlled Prisma migration against disposable Neon.
+
+## 2026-09-22 — Milestone 1 persistence boundary slice: COMPLETE
+
+Milestone 1 remains **IN PROGRESS**; the final exit gate and PR are still outstanding.
+
+### What changed
+
+- Added the server-only production database client with development hot-reload reuse, production process reuse, explicit test construction, and an ambient production-connection guard during tests.
+- Added explicit user-scoped repositories for all 19 canonical entities, grouped by domain vocabulary rather than a generic base abstraction.
+- Added a transaction context that binds all repositories to one Prisma transaction and allows failures to propagate for full rollback.
+- Added plain record contracts and deliberate temporal/decimal/JSON mapping so Prisma-generated types remain database-package implementation details.
+- Added structured constraint-error inspection and strengthened package boundaries so domain, planner-core, web, and other packages cannot import Prisma or pg.
+- Documented the persistence boundary, connection lifecycle, ownership strategy, transaction behavior, and guarded live-test procedure.
+
+### Tests passed
+
+- Repository integration tests against disposable Neon cover the deterministic seed, all canonical repository families, create/read/update/archive behavior, cross-user scoping, task hierarchy/dependencies, work-session supersession, JSON, date-only and instant round trips, external-identity uniqueness, and forced transaction rollback.
+- Static integration checks confirm the public contracts do not expose Prisma types and downstream packages do not depend on the database package.
+- `pnpm verify` passes: formatting, ESLint, package boundaries, strict core/database/web TypeScript, 19 unit tests, 15 integration tests, Prisma validation, core/database/Next.js production builds, and 2 Chromium E2E tests.
+- The guarded live Neon repository suite passes 4 tests, and `pnpm check:dependencies` reports no known vulnerabilities.
+
+### Blockers
+
+None for this slice. Authentication, authorization, application services, API routes, planner persistence, integrations, and production UI data loading remain deliberately outside Milestone 1.
+
+### Exact next work item
+
+Run the full Milestone-1 exit-gate verification and open the Milestone-1 PR.

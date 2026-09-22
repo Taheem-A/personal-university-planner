@@ -66,6 +66,11 @@ for (const filePath of sourceFiles) {
         `${path.relative(repositoryRoot, filePath)}: planner-core cannot import ${specifier}`,
       );
     }
+    if (owner !== "database" && /^(?:@prisma|pg|@prisma\/adapter-pg)(?:\/|$)/.test(specifier)) {
+      violations.push(
+        `${path.relative(repositoryRoot, filePath)}: only database may import ${specifier}`,
+      );
+    }
   }
 }
 

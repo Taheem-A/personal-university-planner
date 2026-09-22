@@ -4,7 +4,7 @@
 
 **Milestone 1 — Canonical Domain, Database, Time, and Migrations: IN PROGRESS**
 
-Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical schema/domain audit, time foundation, first source-controlled migration, and deterministic synthetic semester seed are complete. Clean migration deployment, seed loading, relational assertions, and repeat-seed stability are proven on disposable Neon. Repositories and the Milestone-1 exit gate remain unfinished.
+Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical schema/domain audit, time foundation, first source-controlled migration, deterministic synthetic semester seed, and persistence/repository boundary are complete. Clean migration deployment, seed loading, relational assertions, repeat-seed stability, scoped repository round trips, and transaction rollback are proven on disposable Neon. The final Milestone-1 exit-gate verification and PR remain unfinished.
 
 ## Production bootstrap now implemented
 
@@ -32,7 +32,6 @@ Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical sc
 
 ## Deliberately not implemented
 
-- Persistence/repository layer and application services.
 - Auth.js runtime and user isolation.
 - Application services or canonical state writes.
 - Production UI migration from the approved preview.
@@ -50,11 +49,14 @@ Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical sc
 - Rebuilt the empty `up_m1_migration_20260921` database on the disposable Neon branch `milestone-1-migration-bootstrap-20260921` solely from migration history; status, drift, and introspection checks pass.
 - Added a fixed-ID, fixed-date, idempotent synthetic Fall 2026 engineering fixture covering the canonical relational model without private data or credentials.
 - Deployed migration history into empty `up_m1_seed_20260921`, seeded it twice, and verified counts, ownership, hierarchy, dependencies, temporal round trips, null semantics, history links, and external uniqueness after each run.
+- Added the server-only database client, plain record mappings, transaction-bound repository context, and explicit repositories for all 19 canonical entities.
+- Made user scope mandatory on ownership-sensitive reads and mutations, kept Prisma implementation types inside `packages/database`, and extended package-boundary enforcement to block Prisma/pg imports elsewhere.
+- Proved create/read/update/archive behavior, canonical relationships, user isolation, hierarchy, dependencies, work-session supersession, JSON and temporal round trips, structured external-identity uniqueness errors, and all-or-nothing rollback against disposable Neon.
 
 ## Blockers
 
-None for this slice. Milestone 1 remains **IN PROGRESS** because the persistence/repository boundary and the full database gate remain outstanding.
+None for this slice. Milestone 1 remains **IN PROGRESS** until the final full exit-gate verification is complete and reviewed in a PR.
 
 ## Exact next work item
 
-Implement and test the persistence/repository boundary over the canonical Prisma model.
+Run the full Milestone-1 exit-gate verification and open the Milestone-1 PR.

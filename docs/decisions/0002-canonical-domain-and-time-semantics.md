@@ -58,7 +58,7 @@ No migration or live database was created or contacted for this decision.
 
 ## Intentionally deferred
 
-- Repository/service code, authorization, cycle detection, optimistic concurrency, provider conflict resolution, and credential storage.
+- Application-service code, authorization, dependency-cycle detection, optimistic concurrency, provider conflict resolution, and credential storage.
 - Auth.js models, integration engines, planner-core v1 changes, and production UI.
 
 ## Time-foundation implementation policy

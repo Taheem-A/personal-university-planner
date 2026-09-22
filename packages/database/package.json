@@ -2,7 +2,18 @@
   "name": "@university-planner/database",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "prisma generate --config prisma.config.ts",
     "db:format": "prisma format --schema prisma/schema.prisma",
     "db:validate": "prisma validate --config prisma.config.ts",
@@ -17,6 +28,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
+    "@university-planner/shared": "workspace:*",
     "pg": "8.23.0"
   },
   "devDependencies": {
