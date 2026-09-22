@@ -7,7 +7,7 @@ const allowedInternalImports = {
   analytics: new Set([]),
   assistant: new Set(["domain"]),
   database: new Set(["domain", "shared"]),
-  domain: new Set([]),
+  domain: new Set(["shared"]),
   integrations: new Set(["domain", "shared"]),
   "planner-core": new Set(["domain", "shared"]),
   shared: new Set([]),

@@ -4,7 +4,7 @@
 
 **Milestone 1 — Canonical Domain, Database, Time, and Migrations: IN PROGRESS**
 
-Milestone 0 passed its repository/toolchain gate on 2026-09-21. The pre-migration canonical schema/domain audit is complete, but the time foundation, migration 001, seed, repositories, and Milestone-1 exit gate remain unfinished. The production application is intentionally still a bootstrap shell.
+Milestone 0 passed its repository/toolchain gate on 2026-09-21. The pre-migration canonical schema/domain audit and canonical time foundation are complete, but migration 001, seed, repositories, and the Milestone-1 exit gate remain unfinished. The production application is intentionally still a bootstrap shell.
 
 ## Production bootstrap now implemented
 
@@ -44,7 +44,9 @@ Milestone 0 passed its repository/toolchain gate on 2026-09-21. The pre-migratio
 - Corrected date-only, local wall-clock, and UTC-instant storage paths.
 - Added direct/composite user ownership, explicit history-preserving relations, typed preferences, account-scoped external identity, and the missing `RecurringWorkRule`.
 - Separated assessment submission from task completion and original/current/remaining/actual duration meanings.
-- Kept migration history absent intentionally until the time foundation is complete.
+- Centralized half-open interval algebra, date-only arithmetic, five-minute quantum helpers, IANA timezone conversion, DST disambiguation, and bounded daily/weekly wall-clock recurrence in `packages/shared`.
+- Refactored planner-core to use shared intersection/subtraction rather than private interval logic.
+- Kept migration history absent intentionally until this foundation was verified.
 
 ## Blockers
 
@@ -52,4 +54,4 @@ None. Managed service projects and credentials remain intentionally unprovisione
 
 ## Exact next work item
 
-Complete the time foundation before freezing migration 001.
+Establish the first source-controlled Prisma migration against disposable Neon.

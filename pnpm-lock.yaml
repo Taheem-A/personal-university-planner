@@ -232,7 +232,11 @@ importers:
         specifier: 7.10.0
         version: 7.10.0(@types/node@24.13.6)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
 
-  packages/domain: {}
+  packages/domain:
+    dependencies:
+      '@university-planner/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/integrations: {}
 

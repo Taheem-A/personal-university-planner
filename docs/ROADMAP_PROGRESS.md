@@ -60,4 +60,30 @@ None. Migration history remains absent by design for this slice.
 
 ### Exact next work item
 
-Complete the time foundation before freezing migration 001.
+Establish the first source-controlled Prisma migration against disposable Neon.
+
+## 2026-09-21 — Milestone 1 time foundation: COMPLETE
+
+Milestone 1 remains **IN PROGRESS**; its gate has not passed.
+
+### What changed
+
+- Centralized canonical half-open interval creation, overlap, containment, intersection, merge, normalization, subtraction, deterministic ordering, and window splitting in `packages/shared`.
+- Added strict elapsed-minute calculations, five-minute scheduling-quantum helpers, calendar-date arithmetic, explicit IANA timezone conversion, and local representations with offsets.
+- Added bounded daily/weekly recurrence expansion that reconstructs each occurrence from wall-clock time and timezone, preserving Toronto local time across DST.
+- Documented deterministic DST policy in ADR 0002: ambiguous times choose earlier by default with later/reject options; direct nonexistent times reject, while recurrence skips nonexistent occurrences unless strict rejection is requested.
+- Refactored planner-core to consume shared intersection/subtraction logic without changing scheduling policy.
+- Added no external dependency: native `Date` and `Intl.DateTimeFormat` are normalized behind the shared API. Domain now declares its internal workspace dependency on `shared` so the time vocabulary has one owner.
+
+### Tests passed
+
+- 13 focused shared-time unit tests, including Toronto's 2026 spring-forward and fall-back transitions.
+- `pnpm verify` passes: formatting, ESLint, package boundaries, strict core/web TypeScript, 19 total unit tests, 2 integration tests, Prisma validation, core/Next.js production builds, and 2 Chromium E2E tests.
+
+### Blockers
+
+None. Migration history remains intentionally absent.
+
+### Exact next work item
+
+Establish the first source-controlled Prisma migration against disposable Neon.

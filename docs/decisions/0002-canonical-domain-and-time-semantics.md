@@ -59,10 +59,20 @@ No migration or live database was created or contacted for this decision.
 ## Intentionally deferred
 
 - Migration 001, SQL check constraints, zero-to-current proof, and deterministic seed.
-- Recurrence parsing/expansion, DST gap/fold policy, branded parsing constructors, and half-open interval utilities: the next work item is the time foundation.
 - Repository/service code, authorization, cycle detection, optimistic concurrency, provider conflict resolution, and credential storage.
 - Auth.js models, integration engines, planner-core v1 changes, and production UI.
 
+## Time-foundation implementation policy
+
+- `packages/shared` owns local-date, local-time, timezone, instant-interval, recurrence, and scheduling-quantum primitives. Domain types re-export these definitions; callers do not create a competing representation.
+- Instant intervals are half-open `[start, end)` and require `start < end`. Touching intervals do not overlap, although normalization merges adjacent intervals by default when coverage policy allows it.
+- Instant duration uses elapsed epoch time, so a Toronto `01:30` to `03:30` interval over the 2026 spring transition is 60 minutes rather than two wall-clock hours.
+- Local-to-instant conversion always requires an IANA timezone. Ambiguous fall-back times select the earlier instant by default; callers may explicitly select the later instant or reject ambiguity. Nonexistent spring-forward local times are rejected.
+- Recurrence expansion supports the canonical Milestone-1 subset: `FREQ=DAILY` or `FREQ=WEEKLY`, optional positive `INTERVAL`, and weekly `BYDAY`, bounded by explicit effective dates. It reconstructs each occurrence from local date, local time, and timezone so the wall clock survives offset changes.
+- A nonexistent recurrence occurrence is skipped by default because no such local instant occurs; strict callers may request rejection. Ambiguous occurrences use the same explicit earlier/later/reject policy as direct conversion.
+- The implementation uses the platform `Date` and `Intl.DateTimeFormat` IANA database behind a shared API. No third-party dependency is admitted because the required recurrence subset and deterministic DST policy are small, tested, and do not justify another time system.
+- Planner scheduling precision defaults to five minutes. Shared helpers validate, round up/down, and test quantum alignment; persisted instants retain millisecond precision.
+
 ## Consequences
 
-The Prisma schema can now be frozen into migration history after the time foundation confirms its conversion contracts. Domain code names the current planning estimate explicitly and provides separate local-date/local-time/timezone concepts without importing Prisma types.
+The schema and time conversion contracts are now ready to be represented by the first source-controlled migration. Domain code names the current planning estimate explicitly and consumes shared local-date/local-time/timezone concepts without importing Prisma types.

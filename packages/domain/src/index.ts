@@ -1,11 +1,18 @@
-export type Id = string;
+import type {
+  IanaTimezone,
+  LocalDate,
+  LocalTime,
+  RecurrenceRule,
+} from "@university-planner/shared";
 
-/** ISO 8601 calendar date (YYYY-MM-DD), with no time or offset semantics. */
-export type LocalDate = string;
-/** Local wall-clock time (HH:mm[:ss]), interpreted only with an IANA timezone. */
-export type LocalTime = string;
-export type IanaTimezone = string;
-export type RecurrenceRule = string;
+export type {
+  IanaTimezone,
+  LocalDate,
+  LocalTime,
+  RecurrenceRule,
+} from "@university-planner/shared";
+
+export type Id = string;
 
 export type EnergyLevel = "LOW" | "MEDIUM" | "HIGH";
 export type ConstraintLevel = "HARD" | "SOFT" | "INFORMATIONAL";

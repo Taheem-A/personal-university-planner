@@ -13,17 +13,14 @@ import type {
 import {
   addMinutes,
   maxDate,
+  intersectIntervals,
   minDate,
   minutesBetween,
   overlaps,
   roundUpToQuantum,
   sortByStart,
+  subtractIntervals,
 } from "../../shared/src";
-
-interface Interval {
-  startAt: Date;
-  endAt: Date;
-}
 
 interface CandidateWindow extends AvailabilityWindow {
   startAt: Date;
@@ -51,28 +48,7 @@ function locationFits(task: Task, window: CandidateWindow): boolean {
   );
 }
 
-function subtractIntervals(window: Interval, occupied: Interval[]): Interval[] {
-  let parts: Interval[] = [window];
-  for (const block of occupied) {
-    const next: Interval[] = [];
-    for (const part of parts) {
-      if (!overlaps(part.startAt, part.endAt, block.startAt, block.endAt)) {
-        next.push(part);
-        continue;
-      }
-      if (block.startAt > part.startAt) {
-        next.push({ startAt: part.startAt, endAt: minDate(block.startAt, part.endAt) });
-      }
-      if (block.endAt < part.endAt) {
-        next.push({ startAt: maxDate(block.endAt, part.startAt), endAt: part.endAt });
-      }
-    }
-    parts = next.filter((part) => part.endAt > part.startAt);
-  }
-  return parts;
-}
-
-function occupiedIntervals(input: PlannerInput): Interval[] {
+function occupiedIntervals(input: PlannerInput): { startAt: Date; endAt: Date }[] {
   const hardEvents = input.events
     .filter((event) => event.constraintLevel === "HARD")
     .map((event) => ({ startAt: event.startAt, endAt: event.endAt }));
@@ -86,10 +62,12 @@ function candidateWindows(input: PlannerInput): CandidateWindow[] {
   const occupied = occupiedIntervals(input);
   const result: CandidateWindow[] = [];
   for (const availability of input.availability) {
-    const boundedStart = maxDate(availability.startAt, input.horizonStart);
-    const boundedEnd = minDate(availability.endAt, input.horizonEnd);
-    if (boundedEnd <= boundedStart) continue;
-    const free = subtractIntervals({ startAt: boundedStart, endAt: boundedEnd }, occupied);
+    const bounded = intersectIntervals(availability, {
+      startAt: input.horizonStart,
+      endAt: input.horizonEnd,
+    });
+    if (!bounded) continue;
+    const free = subtractIntervals([bounded], occupied);
     for (const part of free) {
       result.push({ ...availability, startAt: part.startAt, endAt: part.endAt });
     }
