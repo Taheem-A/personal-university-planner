@@ -2,6 +2,8 @@
 
 ## Current milestone status
 
+**Milestone 2 — IN PROGRESS.** Stable Google identity persistence, Auth.js sign-in/session boundary, and reusable trusted service primitives are implemented on `auth/milestone-2-trust-boundary`. Migration 0002 maps provider accounts to canonical Users; migration 0003 adds Task optimistic versions. Core entity services, a real Google OAuth round trip, live Prisma migration-history verification, and browser E2E remain before the milestone gate. See `docs/ROADMAP_PROGRESS.md` for current verification and the next service slice.
+
 **Milestone 1 — GATE PASSED**
 
 The canonical schema/domain audit, centralized time foundation, first source-controlled migration, deterministic synthetic semester seed, and persistence/repository boundary are complete. Final acceptance proved zero-to-current deployment and reproducibility on fresh disposable Neon databases, every canonical repository family, transaction rollback, Toronto DST behavior, architecture boundaries, full builds, and browser regressions. See [Milestone 1 exit gate](./milestone-1-exit-gate.md).

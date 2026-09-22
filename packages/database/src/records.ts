@@ -128,6 +128,7 @@ export interface AssessmentRecord extends AuditFields, ProvenanceFields {
 
 export interface TaskRecord extends AuditFields, ProvenanceFields {
   id: string;
+  version: number;
   userId: string;
   courseId: string | null;
   assessmentId: string | null;

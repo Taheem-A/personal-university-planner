@@ -1,5 +1,15 @@
 # Roadmap progress
 
+## 2026-09-22 — Milestone 2 trust-boundary slices: IN PROGRESS
+
+- Added a stable, unique authentication identity to canonical User mapping with atomic first-login provisioning and Toronto initial timezone.
+- Added migration 0002, server-only web composition root, and package import enforcement. ADR 0003 records credential minimization and future integration separation.
+- Added stable NextAuth.js 4 Google-only OAuth route, JWT session, sign-out through Auth.js, server-side canonical actor resolution, and an authenticated account status endpoint. Only the `openid` login scope is requested; callbacks expose only canonical user ID and do not persist Google tokens.
+- Added reusable Zod schemas, ownership checks, dependency-cycle detection, transaction orchestration, structured result/error mapping, and a conditional Task rename proof service. Migration 0003 adds a Task version because millisecond `updatedAt` cannot guarantee distinct consecutive versions. Conditional update atomically increments this value; a stale request receives `STALE_WRITE`.
+- Static migration 0001→0003 SQL was applied to a fresh isolated Neon branch `milestone-2-auth-bootstrap-20260922` (`br-blue-mud-b5uug6pk`); its unique identity key, two-user separation, FK cascade metadata, and conditional version update were checked with synthetic rows. This proves the SQL shape, although the local Prisma CLI could not reach Neon from this environment to validate Prisma migration-history bookkeeping.
+- Local formatting, lint, package boundaries, typecheck, unit/integration tests, Prisma validation/client generation, build, and dependency audit pass. HTTP smoke checks returned 401 for unauthenticated account status and 200 for the Google provider endpoint. Browser E2E remains unverified here: no Chromium binary is installed, and the Playwright download endpoint returned invalid/truncated archives.
+- Milestone 2 remains IN PROGRESS. Exact next work item: implement authenticated, validated create/read/update/archive services for terms, courses, assessments, tasks, availability, and the other core objects; extend optimistic versioning to their planning-relevant mutations; then run live disposable-database integration and browser E2E in an environment with direct Neon and Chromium access.
+
 This repository log updates the implementation status required by **University Planner — Implementation Roadmap** without modifying the read-only project-source copy.
 
 ## 2026-09-21 — Milestone 0: GATE PASSED

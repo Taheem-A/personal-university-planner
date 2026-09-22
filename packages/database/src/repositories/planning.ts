@@ -49,14 +49,29 @@ export function createPlanningRepositories(db: DatabaseExecutor): {
       async update(userId, id, patch) {
         const row = await db.task.update({
           where: { id_userId: { id, userId } },
-          data: toPersistenceData(patch) as Prisma.TaskUncheckedUpdateInput,
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.TaskUncheckedUpdateInput,
         });
         return toPlainRecord<TaskRecord>(row);
+      },
+      async updateIfCurrent(userId, id, expectedVersion, patch) {
+        const rows = await db.task.updateManyAndReturn({
+          where: { id, userId, version: expectedVersion },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.TaskUncheckedUpdateManyInput,
+        });
+        if (rows[0]) return { status: "UPDATED", record: toPlainRecord<TaskRecord>(rows[0]) };
+        const existing = await db.task.findFirst({ where: { id, userId } });
+        return { status: existing ? "STALE" : "NOT_FOUND" };
       },
       async archive(userId, id, archivedAt) {
         const row = await db.task.update({
           where: { id_userId: { id, userId } },
-          data: { archivedAt },
+          data: { archivedAt, version: { increment: 1 } },
         });
         return toPlainRecord<TaskRecord>(row);
       },

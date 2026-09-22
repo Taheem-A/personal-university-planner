@@ -89,6 +89,24 @@ export interface TaskRepository {
       >
     >,
   ): Promise<TaskRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<
+      Pick<
+        TaskRecord,
+        | "title"
+        | "description"
+        | "status"
+        | "currentEstimatedMinutes"
+        | "remainingMinutes"
+        | "completedAt"
+      >
+    >,
+  ): Promise<
+    { status: "UPDATED"; record: TaskRecord } | { status: "STALE" } | { status: "NOT_FOUND" }
+  >;
   archive(userId: string, id: string, archivedAt: Date): Promise<TaskRecord>;
 }
 
