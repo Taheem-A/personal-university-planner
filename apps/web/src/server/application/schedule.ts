@@ -267,7 +267,7 @@ export const protectedTimeRules = {
 };
 
 const preferenceFields = z.object({
-  preferredDailyStudyLimitMinutes: positiveMinutesSchema,
+  preferredDailyStudyLimitMinutes: nonnegativeMinutesSchema,
   minimumFreeTimeMinutes: nonnegativeMinutesSchema,
   preferredDeadlineBufferHours: z.number().int().nonnegative(),
   avoidLateHighEnergyTasks: z.boolean(),

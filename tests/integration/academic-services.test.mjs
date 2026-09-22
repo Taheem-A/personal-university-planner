@@ -55,6 +55,11 @@ const rows = {
   protection: [],
   preferences: [],
   inbox: [],
+  sessions: [],
+  completions: [],
+  runs: [],
+  integrations: [],
+  maps: [],
 };
 const owned = (collection, userId, id) =>
   rows[collection].find((r) => r.userId === userId && r.id === id) ?? null;
@@ -187,7 +192,76 @@ const repo = {
       rows.inbox.filter((r) => r.userId === u && r.status === status),
     updateIfCurrent: async (u, id, version, patch) => conditional("inbox", u, id, version, patch),
   },
+  workSessions: {
+    create: async (r) => {
+      rows.sessions.push(r);
+      return r;
+    },
+    getForUser: async (u, id) => owned("sessions", u, id),
+    listForRange: async (u, s, e) =>
+      rows.sessions.filter((r) => r.userId === u && r.startAt < e && r.endAt > s),
+    updateIfCurrent: async (u, id, version, patch) =>
+      conditional("sessions", u, id, version, patch),
+  },
+  completionRecords: {
+    create: async (r) => {
+      rows.completions.push(r);
+      return r;
+    },
+    getForUser: async (u, id) => owned("completions", u, id),
+    listForTask: async (u, id) => rows.completions.filter((r) => r.userId === u && r.taskId === id),
+  },
+  plannerRuns: {
+    getForUser: async (u, id) => owned("runs", u, id),
+    listRecent: async (u, limit) => rows.runs.filter((r) => r.userId === u).slice(0, limit),
+  },
+  integrationAccounts: {
+    create: async (r) => {
+      rows.integrations.push(r);
+      return r;
+    },
+    getForUser: async (u, id) => owned("integrations", u, id),
+    listForUser: async (u) => rows.integrations.filter((r) => r.userId === u),
+    updateIfCurrent: async (u, id, version, patch) =>
+      conditional("integrations", u, id, version, patch),
+    disconnect: async (u, id, version) =>
+      conditional("integrations", u, id, version, {
+        status: "DISCONNECTED",
+        credentialReference: null,
+        disconnectedAt: new Date(),
+      }),
+  },
+  externalObjectMaps: {
+    getForExternalIdentity: async (u, provider, id) =>
+      rows.maps.find((r) => r.userId === u && r.provider === provider && r.externalId === id) ??
+      null,
+    listForInternalObject: async (u, type, id) =>
+      rows.maps.filter((r) => r.userId === u && r.internalType === type && r.internalId === id),
+  },
+  accountLifecycle: {
+    snapshot: async (u) => ({
+      user: { id: u, timezone: "America/Toronto" },
+      ...Object.fromEntries(
+        Object.entries(rows).map(([key, records]) => [
+          key,
+          records.filter((record) => record.userId === u),
+        ]),
+      ),
+      integrationAccounts: rows.integrations.filter((r) => r.userId === u),
+      plannerRuns: rows.runs.filter((r) => r.userId === u),
+      tasks: rows.tasks.filter((r) => r.userId === u),
+    }),
+    deleteAccount: async (u) => {
+      for (const records of Object.values(rows)) {
+        const retained = records.filter((r) => r.userId !== u);
+        records.splice(0, records.length, ...retained);
+      }
+      if (forceDeleteFailure) throw new Error("Forced transaction failure");
+      return true;
+    },
+  },
 };
+let forceDeleteFailure = false;
 function conditional(collection, userId, id, version, patch) {
   const row = owned(collection, userId, id);
   if (!row) return { status: "NOT_FOUND" };
@@ -224,6 +298,34 @@ const schedule = load("schedule", {
 const inbox = load("inbox", {
   "./errors": errors,
   "./service": serviceUtils,
+  "./validation": validation,
+});
+const transactionalService = load("service", {
+  "./authorization": auth,
+  "./errors": errors,
+  "./validation": validation,
+  "../database": {
+    applicationDatabase: () => ({
+      transaction: async (fn) => {
+        const before = Object.fromEntries(
+          Object.entries(rows).map(([key, values]) => [key, [...values]]),
+        );
+        try {
+          return await fn(tx);
+        } catch (error) {
+          for (const [key, values] of Object.entries(before))
+            rows[key].splice(0, rows[key].length, ...values);
+          throw error;
+        }
+      },
+    }),
+  },
+  "node:crypto": { randomUUID: () => `record-${Math.random()}` },
+});
+const lifecycle = load("lifecycle", {
+  "./authorization": auth,
+  "./errors": errors,
+  "./service": transactionalService,
   "./validation": validation,
 });
 
@@ -455,4 +557,99 @@ test("migration 0005 retains canonical rows and adds conditional versions", () =
       new RegExp(`ALTER TABLE "${table}" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 0`),
     );
   assert.doesNotMatch(sql, /DROP TABLE|DROP COLUMN|CASCADE/);
+});
+
+test("history is scoped, export redacts credentials, disconnect preserves history, deletion rolls back", async () => {
+  const task = (await academic.tasks.create({ title: "Practice" })).value;
+  const session = (
+    await lifecycle.workSessions.create({
+      taskId: task.id,
+      startAt: "2026-10-01T11:00:00Z",
+      endAt: "2026-10-01T12:00:00Z",
+    })
+  ).value;
+  assert.equal(session.generatedBy, "USER");
+  const completion = (
+    await lifecycle.completionRecords.record({
+      taskId: task.id,
+      workSessionId: session.id,
+      outcome: "PARTIAL",
+      actualMinutes: 25,
+    })
+  ).value;
+  assert.equal(completion.actualMinutes, 25);
+  rows.sessions.push({ ...session, id: "other-session", userId: other.userId });
+  assert.equal((await lifecycle.workSessions.get({ id: "other-session" })).error.code, "NOT_FOUND");
+  assert.equal((await lifecycle.plannerRuns.get({ id: "guessed-run" })).error.code, "NOT_FOUND");
+  rows.runs.push({
+    id: "run",
+    userId: user.userId,
+    inputSnapshot: { accessToken: "private", taskId: task.id },
+  });
+  const integration = (
+    await lifecycle.integrationAccounts.create({
+      provider: "google-calendar",
+      externalAccountId: "calendar-identity",
+    })
+  ).value;
+  assert.equal(integration.credentialReference, undefined);
+  rows.integrations[0].credentialReference = "secret-reference";
+  const exported = (await lifecycle.accountData.export()).value;
+  assert.equal(exported.version, 1);
+  assert.equal(JSON.stringify(exported).includes("secret-reference"), false);
+  assert.equal(JSON.stringify(exported).includes("private"), false);
+  assert.equal(
+    exported.data.tasks.some((r) => r.id === task.id),
+    true,
+  );
+  assert.equal(
+    (await lifecycle.integrationAccounts.disconnect({ id: integration.id, expectedVersion: 0 }))
+      .value.status,
+    "DISCONNECTED",
+  );
+  assert.equal((await lifecycle.workSessions.get({ id: session.id })).value.id, session.id);
+  forceDeleteFailure = true;
+  assert.equal(
+    (await lifecycle.accountData.delete({ confirmation: "DELETE MY ACCOUNT" })).error.code,
+    "INTERNAL_ERROR",
+  );
+  forceDeleteFailure = false;
+  assert.equal(
+    rows.sessions.some((r) => r.id === session.id),
+    true,
+  );
+  assert.equal(
+    (await lifecycle.accountData.delete({ confirmation: "DELETE MY ACCOUNT" })).value.deleted,
+    true,
+  );
+  assert.equal(
+    rows.sessions.some((r) => r.id === session.id),
+    false,
+  );
+  assert.equal(
+    rows.sessions.some((r) => r.id === "other-session"),
+    true,
+  );
+});
+
+test("lifecycle migration is forward-only and account deletion orders restrictive relations", async () => {
+  const sql = readFileSync(
+    "packages/database/prisma/migrations/0006_lifecycle_versions/migration.sql",
+    "utf8",
+  );
+  assert.match(sql, /ALTER TABLE "WorkSession" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 0/);
+  assert.match(
+    sql,
+    /ALTER TABLE "IntegrationAccount" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 0/,
+  );
+  assert.doesNotMatch(sql, /DROP TABLE|DROP COLUMN|CASCADE/);
+  const dbSource = readFileSync("packages/database/src/repositories/lifecycle.ts", "utf8");
+  const before = (first, last) => assert.ok(dbSource.indexOf(first) < dbSource.indexOf(last));
+  before("db.completionRecord.deleteMany", "db.workSession.deleteMany");
+  before("db.workSession.deleteMany", "db.task.deleteMany");
+  before("db.task.deleteMany", "db.recurringWorkRule.deleteMany");
+  before("db.calendarEvent.deleteMany", "db.integrationAccount.deleteMany");
+  before("db.externalObjectMap.deleteMany", "db.integrationAccount.deleteMany");
+  before("db.course.deleteMany", "db.academicTerm.deleteMany");
+  before("db.authIdentity.deleteMany", "db.user.delete");
 });

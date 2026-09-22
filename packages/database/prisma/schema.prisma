@@ -489,6 +489,7 @@ model PlanningPreference {
 
 model WorkSession {
   id                String                 @id @default(cuid())
+  version           Int                    @default(0)
   userId            String
   taskId            String
   plannerRunId      String?
@@ -577,6 +578,7 @@ model PlannerRun {
 
 model IntegrationAccount {
   id                  String                   @id @default(cuid())
+  version             Int                      @default(0)
   userId              String
   provider            String
   externalAccountId   String

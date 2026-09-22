@@ -42,16 +42,32 @@ export function createHistoryRepositories(db: DatabaseExecutor): {
       async updateState(userId, id, state) {
         const row = await db.workSession.update({
           where: { id_userId: { id, userId } },
-          data: { state },
+          data: { state, version: { increment: 1 } },
         });
         return toPlainRecord<WorkSessionRecord>(row);
       },
       async supersede(userId, id, supersededById) {
         const row = await db.workSession.update({
           where: { id_userId: { id, userId } },
-          data: { state: "SUPERSEDED", supersededById },
+          data: { state: "SUPERSEDED", supersededById, version: { increment: 1 } },
         });
         return toPlainRecord<WorkSessionRecord>(row);
+      },
+      async updateIfCurrent(userId, id, version, patch) {
+        const rows = await db.workSession.updateManyAndReturn({
+          where: { id, userId, version },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.WorkSessionUncheckedUpdateManyInput,
+        });
+        if (rows[0])
+          return { status: "UPDATED", record: toPlainRecord<WorkSessionRecord>(rows[0]) };
+        return {
+          status: (await db.workSession.findFirst({ where: { id, userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
       },
     },
     completionRecords: {

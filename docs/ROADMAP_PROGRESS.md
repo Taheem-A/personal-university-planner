@@ -17,6 +17,13 @@
 - Local repository-simulation tests exercise guessed IDs, interval ordering, recurrence ordering, stale versions, preferences, protected overnight time, inbox text, and forward-only migration SQL. Direct disposable-database service tests and browser E2E remain to be run in a runtime with Neon and Chromium connectivity.
 - Exact next work item: complete WorkSession/CompletionRecord/PlannerRun/IntegrationAccount access and account export/deletion lifecycle (Prompt 6), then execute live database integration and browser E2E. Milestone 2 remains **IN PROGRESS**.
 
+### History and account lifecycle slice (Prompt 6): IN PROGRESS
+
+- Added scoped WorkSession manual creation/read/lock/cancel, append-only factual CompletionRecord access, existing PlannerRun history reads, disconnected integration metadata lifecycle, scoped external mapping reads, a versioned canonical account export, and an explicit atomic account-deletion repository. No planner run, provider sync or automatic replanning is fabricated.
+- Migration 0006 adds conditional versions to WorkSession and IntegrationAccount. Disconnect clears credential references and retains canonical rows and provenance. Export excludes identity secrets, credential references and nested token/secret keys. [Account data lifecycle](./account-data-lifecycle.md) records archival, disconnect, export and deletion policy.
+- Local service simulation tests exercise two-user history isolation, factual records, versioned export/redaction, disconnect preservation and a forced rollback. The disposal database is not reachable by local Prisma here, and the available hosted SQL tool disallows autonomous destructive SQL. Direct database-backed account deletion and rollback verification remain mandatory before exposing deletion to users. Browser E2E also remains blocked by the missing Playwright Chromium binary.
+- Exact next work item: run migrations 0004–0006, service integration including deletion rollback and browser E2E in a disposable environment with direct database connectivity and Chromium; repair any issues, then review the Milestone 2 gate. Milestone 2 remains **IN PROGRESS**.
+
 - Added a stable, unique authentication identity to canonical User mapping with atomic first-login provisioning and Toronto initial timezone.
 - Added migration 0002, server-only web composition root, and package import enforcement. ADR 0003 records credential minimization and future integration separation.
 - Added stable NextAuth.js 4 Google-only OAuth route, JWT session, sign-out through Auth.js, server-side canonical actor resolution, and an authenticated account status endpoint. Only the `openid` login scope is requested; callbacks expose only canonical user ID and do not persist Google tokens.

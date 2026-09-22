@@ -291,6 +291,14 @@ export interface WorkSessionRepository {
   listForRange(userId: string, startAt: Date, endAt: Date): Promise<WorkSessionRecord[]>;
   updateState(userId: string, id: string, state: WorkSessionState): Promise<WorkSessionRecord>;
   supersede(userId: string, id: string, supersededById: string): Promise<WorkSessionRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Partial<
+      Pick<WorkSessionRecord, "state" | "locked" | "startAt" | "endAt" | "plannedMinutes">
+    >,
+  ): Promise<ConditionalMutation<WorkSessionRecord>>;
 }
 
 export interface CompletionRecordRepository {
@@ -330,6 +338,17 @@ export interface IntegrationAccountRepository {
     status: IntegrationAccountStatus,
     disconnectedAt: Date | null,
   ): Promise<IntegrationAccountRecord>;
+  disconnect(
+    userId: string,
+    id: string,
+    version: number,
+  ): Promise<ConditionalMutation<IntegrationAccountRecord>>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Pick<IntegrationAccountRecord, "displayName">,
+  ): Promise<ConditionalMutation<IntegrationAccountRecord>>;
 }
 
 export interface ExternalObjectMapRepository {
@@ -344,6 +363,34 @@ export interface ExternalObjectMapRepository {
     internalType: ExternalObjectMapRecord["internalType"],
     internalId: string,
   ): Promise<ExternalObjectMapRecord[]>;
+  listForUser(userId: string): Promise<ExternalObjectMapRecord[]>;
+}
+
+export interface AccountSnapshot {
+  user: UserRecord;
+  academicTerms: AcademicTermRecord[];
+  courses: CourseRecord[];
+  courseMeetings: CourseMeetingRecord[];
+  assessments: AssessmentRecord[];
+  tasks: TaskRecord[];
+  taskDependencies: TaskDependencyRecord[];
+  recurringWorkRules: RecurringWorkRuleRecord[];
+  calendarEvents: CalendarEventRecord[];
+  availabilityRules: AvailabilityRuleRecord[];
+  protectedTimeRules: ProtectedTimeRuleRecord[];
+  planningPreferences: PlanningPreferenceRecord[];
+  inboxItems: InboxItemRecord[];
+  workSessions: WorkSessionRecord[];
+  completionRecords: CompletionRecordRecord[];
+  estimateProfiles: EstimateProfileRecord[];
+  plannerRuns: PlannerRunRecord[];
+  integrationAccounts: Omit<IntegrationAccountRecord, "credentialReference">[];
+  externalObjectMaps: ExternalObjectMapRecord[];
+}
+
+export interface AccountLifecycleRepository {
+  snapshot(userId: string): Promise<AccountSnapshot | null>;
+  deleteAccount(userId: string): Promise<boolean>;
 }
 
 export interface InboxItemRepository {
@@ -367,6 +414,7 @@ export interface InboxItemRepository {
 }
 
 export interface CanonicalRepositories {
+  accountLifecycle: AccountLifecycleRepository;
   users: UserRepository;
   authIdentities: AuthIdentityRepository;
   academicTerms: AcademicTermRepository;

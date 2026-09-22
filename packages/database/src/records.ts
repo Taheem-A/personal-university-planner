@@ -248,6 +248,7 @@ export interface PlanningPreferenceRecord extends AuditFields {
 
 export interface WorkSessionRecord extends AuditFields {
   id: string;
+  version: number;
   userId: string;
   taskId: string;
   plannerRunId: string | null;
@@ -304,6 +305,7 @@ export interface PlannerRunRecord {
 
 export interface IntegrationAccountRecord extends AuditFields {
   id: string;
+  version: number;
   userId: string;
   provider: string;
   externalAccountId: string;
