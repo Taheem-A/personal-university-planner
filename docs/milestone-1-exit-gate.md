@@ -58,6 +58,7 @@ Reproducibility database `up_m1_seed_final_repro_20260922`:
 
 - Prisma format: PASS
 - Prisma client generation: PASS
+- Clean-checkout verification generates the Prisma client before strict database typechecking, so CI does not rely on developer-machine generated artifacts.
 - `pnpm verify`: PASS
   - formatting: PASS
   - ESLint: PASS
