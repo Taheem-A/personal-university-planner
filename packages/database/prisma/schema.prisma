@@ -569,6 +569,7 @@ model IntegrationAccount {
   calendarEvents      CalendarEvent[]
 
   @@unique([id, userId])
+  @@unique([id, userId, provider])
   @@unique([userId, provider, externalAccountId])
   @@index([userId, provider, status])
 }
@@ -587,7 +588,7 @@ model ExternalObjectMap {
   createdAt            DateTime           @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime           @updatedAt @db.Timestamptz(3)
   user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  integrationAccount   IntegrationAccount @relation(fields: [integrationAccountId, userId], references: [id, userId], onDelete: Restrict)
+  integrationAccount   IntegrationAccount @relation(fields: [integrationAccountId, userId, provider], references: [id, userId, provider], onDelete: Restrict)
 
   @@unique([integrationAccountId, externalId])
   @@unique([userId, provider, externalId])

@@ -62,6 +62,33 @@ None. Migration history remains absent by design for this slice.
 
 Establish the first source-controlled Prisma migration against disposable Neon.
 
+## 2026-09-21 — Milestone 1 migration slice: COMPLETE
+
+Milestone 1 remains **IN PROGRESS**; its gate has not passed because seed and repository work remain.
+
+### What changed
+
+- Generated and inspected `0001_canonical_foundation` from the audited schema.
+- Added named PostgreSQL checks for invariants Prisma cannot model and tightened external-map provider ownership with a composite foreign key.
+- Added explicit generation/create/deploy/status/bootstrap commands, a guarded destructive verifier, migration SQL regression tests, and connection/reset documentation.
+- Confirmed the migration contains no connection string or credentials.
+- Created disposable Neon branch `milestone-1-migration-bootstrap-20260921` and empty database `up_m1_migration_20260921`; the database is retained for the next seed slice.
+
+### Tests passed
+
+- Prisma format, validation, and client generation pass.
+- `pnpm db:bootstrap:verify` resets the guarded empty target, applies only source-controlled migration history, reports the database current, detects no Prisma-representable drift, and successfully introspects the result.
+- `pnpm verify` passes: formatting, ESLint, package boundaries, strict core/web TypeScript, 19 unit tests, 6 integration tests (including migration SQL and destructive guards), Prisma validation, core/Next.js production builds, and 2 Chromium E2E tests.
+- `pnpm check:dependencies` reports no known vulnerabilities.
+
+### Blockers
+
+None for this slice. Milestone 1 is not gate-passed because deterministic seed data, repositories, and remaining database integration tests are not implemented.
+
+### Exact next work item
+
+Create the deterministic synthetic semester seed and verify it against the retained disposable Neon database.
+
 ## 2026-09-21 — Milestone 1 time foundation: COMPLETE
 
 Milestone 1 remains **IN PROGRESS**; its gate has not passed.

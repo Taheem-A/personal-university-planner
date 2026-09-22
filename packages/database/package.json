@@ -3,8 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
+    "db:generate": "prisma generate --config prisma.config.ts",
     "db:format": "prisma format --schema prisma/schema.prisma",
-    "db:validate": "prisma validate --config prisma.config.ts"
+    "db:validate": "prisma validate --config prisma.config.ts",
+    "db:migrate:create": "prisma migrate dev --create-only --config prisma.config.ts",
+    "db:migrate:deploy": "prisma migrate deploy --config prisma.config.ts",
+    "db:migrate:status": "prisma migrate status --config prisma.config.ts",
+    "db:bootstrap:verify": "node ../../scripts/verify-database-bootstrap.mjs"
   },
   "dependencies": {
     "@prisma/client": "7.10.0"

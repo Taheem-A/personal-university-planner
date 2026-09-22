@@ -4,7 +4,7 @@
 
 **Milestone 1 — Canonical Domain, Database, Time, and Migrations: IN PROGRESS**
 
-Milestone 0 passed its repository/toolchain gate on 2026-09-21. The pre-migration canonical schema/domain audit and canonical time foundation are complete, but migration 001, seed, repositories, and the Milestone-1 exit gate remain unfinished. The production application is intentionally still a bootstrap shell.
+Milestone 0 passed its repository/toolchain gate on 2026-09-21. The canonical schema/domain audit, time foundation, and first source-controlled migration are complete. Migration 001 was proven from zero on disposable Neon with clean migration status, no Prisma-representable drift, and successful introspection. Seed, repositories, and the Milestone-1 exit gate remain unfinished.
 
 ## Production bootstrap now implemented
 
@@ -32,7 +32,7 @@ Milestone 0 passed its repository/toolchain gate on 2026-09-21. The pre-migratio
 
 ## Deliberately not implemented
 
-- Live PostgreSQL provisioning, first migration, seed data, or repository layer.
+- Synthetic semester seed data or the repository layer.
 - Auth.js runtime and user isolation.
 - Application services or canonical state writes.
 - Production UI migration from the approved preview.
@@ -46,12 +46,13 @@ Milestone 0 passed its repository/toolchain gate on 2026-09-21. The pre-migratio
 - Separated assessment submission from task completion and original/current/remaining/actual duration meanings.
 - Centralized half-open interval algebra, date-only arithmetic, five-minute quantum helpers, IANA timezone conversion, DST disambiguation, and bounded daily/weekly wall-clock recurrence in `packages/shared`.
 - Refactored planner-core to use shared intersection/subtraction rather than private interval logic.
-- Kept migration history absent intentionally until this foundation was verified.
+- Established `0001_canonical_foundation`, reviewed its PostgreSQL SQL, and added migration-owned check constraints plus guarded migration commands/tests.
+- Rebuilt the empty `up_m1_migration_20260921` database on the disposable Neon branch `milestone-1-migration-bootstrap-20260921` solely from migration history; status, drift, and introspection checks pass.
 
 ## Blockers
 
-None. Managed service projects and credentials remain intentionally unprovisioned.
+None for this slice. Milestone 1 remains **IN PROGRESS** because deterministic seed data, repositories, and the full database gate remain outstanding.
 
 ## Exact next work item
 
-Establish the first source-controlled Prisma migration against disposable Neon.
+Create the deterministic synthetic semester seed and verify it against the retained disposable Neon database.
