@@ -2,7 +2,7 @@
 
 ## Current milestone status
 
-**Milestone 2 — IN PROGRESS; EXIT GATE NOT PASSED.** Google-only Auth.js, persistent canonical identity provisioning, authenticated and validated service families, explicit optimistic versions, account lifecycle, and representative protected Next.js routes are implemented on `auth/milestone-2-trust-boundary`. Migrations 0002–0006 are source controlled. On a fresh disposable Neon database, Prisma deployed migrations 0001–0006 from zero and the guarded live route/service/PostgreSQL test passed. Browser E2E and a green complete CI run remain outstanding. See [Milestone 2 exit-gate audit](./milestone-2-exit-gate.md).
+**Milestone 2 — IN PROGRESS; EXIT GATE NOT PASSED.** Google-only Auth.js, persistent canonical identity provisioning, authenticated and validated service families, explicit optimistic versions, account lifecycle, and representative protected Next.js routes are implemented on `auth/milestone-2-trust-boundary`. Migrations 0002–0006 are source controlled. On a fresh disposable Neon database, Prisma deployed migrations 0001–0006 from zero and the guarded live route/service/PostgreSQL test passed. Draft PR #2 supplied a clean GitHub Actions run with Chromium and the full `pnpm verify` passing. The final exit-gate re-audit remains outstanding. See [Milestone 2 exit-gate audit](./milestone-2-exit-gate.md).
 
 **Milestone 1 — GATE PASSED**
 
@@ -29,7 +29,7 @@ The canonical schema/domain audit, centralized time foundation, first source-con
 - Prisma 7 validates the existing PostgreSQL schema through `prisma.config.ts`.
 - Next.js production build completes and emits `/` plus `/api/health`.
 - Playwright boots the real Next.js app and exercises the preserved interactive preview.
-- The Milestone-1 full `pnpm verify` run passed. Milestone-2 formatting, lint, boundary, generation, typecheck, unit, integration, Prisma validation, build, and dependency checks passed locally on the pinned Node/pnpm toolchain. The guarded live service test also passed; Chromium E2E and full CI remain outstanding.
+- The Milestone-1 full `pnpm verify` run passed. Milestone-2 formatting, lint, boundary, generation, typecheck, unit, integration, Prisma validation, build, and dependency checks passed locally on the pinned Node/pnpm toolchain. The guarded live service test passed, and clean GitHub Actions `pnpm verify` passed with Chromium E2E (2/2).
 - `pnpm check:dependencies` reports no known vulnerabilities.
 
 ## Milestone-2 implementation
@@ -58,8 +58,8 @@ The canonical schema/domain audit, centralized time foundation, first source-con
 
 ## Blockers
 
-The fresh disposable database deployment and guarded live service/rollback proof passed. Milestone 2 still needs executable Chromium E2E and a green full verification/CI run. The earlier local Playwright download returned truncated archives. These remain gate blockers.
+The fresh disposable database deployment, guarded live service/rollback proof, clean CI `pnpm verify`, Chromium E2E and dependency review passed. The final literal exit-gate re-audit has not yet been completed; the draft PR remains unmerged.
 
 ## Exact next work item
 
-Obtain a working Chromium binary, run the remaining browser E2E and full `pnpm verify`/CI checks, resolve any failures, then repeat the Milestone-2 exit-gate audit. Do not start Milestone 3 while the gate remains open.
+Repeat the Milestone-2 exit-gate audit against the completed database and clean CI evidence. Keep the PR draft and do not start Milestone 3 while the gate remains open.
