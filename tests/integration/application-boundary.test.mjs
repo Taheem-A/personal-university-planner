@@ -34,7 +34,10 @@ function load(file, stubs = {}) {
 }
 
 const databaseErrors = { getDatabaseErrorDetails: (error) => error?.dbError ?? null };
-const errors = load("errors", { "@university-planner/database": databaseErrors });
+const errors = load("errors", {
+  "@university-planner/database": databaseErrors,
+  "../monitoring": { reportInternalFailure: async () => {} },
+});
 
 test("untrusted input and domain ordering reject malformed payloads", () => {
   const v = load("validation", { "./errors": errors });

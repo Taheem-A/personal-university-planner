@@ -14,8 +14,9 @@ function authConfiguration() {
 }
 
 /** Exported factory permits callback testing without live Google OAuth or ambient database. */
-export function createAuthOptions(database: Database): NextAuthOptions {
+export function createAuthOptions(database: Database | (() => Database)): NextAuthOptions {
   const credentials = authConfiguration();
+  const resolveDatabase = () => (typeof database === "function" ? database() : database);
   return {
     secret: credentials.secret,
     session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 },
@@ -29,7 +30,7 @@ export function createAuthOptions(database: Database): NextAuthOptions {
     callbacks: {
       async signIn({ account }) {
         if (account?.provider !== "google" || !account.providerAccountId) return false;
-        await database.repositories.authIdentities.provisionUser(
+        await resolveDatabase().repositories.authIdentities.provisionUser(
           "google",
           account.providerAccountId,
         );
@@ -37,7 +38,7 @@ export function createAuthOptions(database: Database): NextAuthOptions {
       },
       async jwt({ token, account }) {
         if (account?.provider === "google" && account.providerAccountId) {
-          const user = await database.repositories.authIdentities.provisionUser(
+          const user = await resolveDatabase().repositories.authIdentities.provisionUser(
             "google",
             account.providerAccountId,
           );
@@ -58,7 +59,7 @@ export function createAuthOptions(database: Database): NextAuthOptions {
 }
 
 export function authOptions(): NextAuthOptions {
-  return createAuthOptions(applicationDatabase());
+  return createAuthOptions(applicationDatabase);
 }
 
 /** Reject revoked/deleted users even while their signed JWT remains unexpired. */

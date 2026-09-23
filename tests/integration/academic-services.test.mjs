@@ -38,6 +38,7 @@ function load(file, stubs) {
 
 const errors = load("errors", {
   "@university-planner/database": { getDatabaseErrorDetails: () => null },
+  "../monitoring": { reportInternalFailure: async () => {} },
 });
 const validation = load("validation", { "./errors": errors });
 const dependencies = load("dependencies", { "./errors": errors });

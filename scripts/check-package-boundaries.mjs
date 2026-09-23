@@ -58,10 +58,33 @@ for (const filePath of sourceFiles) {
   const owner = ownerOf(filePath);
   if (!owner || !allowedInternalImports[owner]) continue;
   const source = readFileSync(filePath, "utf8");
+  const relativeFile = path.relative(repositoryRoot, filePath).replaceAll("\\", "/");
+  const isTransport =
+    owner === "web" &&
+    (relativeFile.startsWith("apps/web/src/app/") || /^\s*["']use server["']/.test(source));
+  if (
+    isTransport &&
+    /\b(?:applicationDatabase|createDatabase|getDatabase)\s*\(|\.(?:repositories|\$queryRaw|\$executeRaw)\b/.test(
+      source,
+    )
+  ) {
+    violations.push(`${relativeFile}: transport cannot query the database or repositories`);
+  }
   for (const match of source.matchAll(importPattern)) {
     const specifier = match[1];
     const target = targetOf(filePath, specifier);
-    const relativeFile = path.relative(repositoryRoot, filePath).replaceAll("\\", "/");
+    if (
+      isTransport &&
+      (target === "database" ||
+        (specifier.startsWith(".") &&
+          /\/apps\/web\/src\/server\/(?:database|application\/(?:authorization|transaction|service))(?:\.|\/|$)/.test(
+            path.resolve(path.dirname(filePath), specifier).replaceAll("\\", "/"),
+          )))
+    ) {
+      violations.push(
+        `${relativeFile}: transport may import services, auth or transport adapters only`,
+      );
+    }
     if (
       owner === "web" &&
       /^\s*["']use client["']/.test(source) &&

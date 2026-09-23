@@ -30,6 +30,7 @@ export function readEnvironment(source: NodeJS.ProcessEnv = process.env) {
   if (appEnvironment === "preview" || appEnvironment === "production") {
     deploymentSecretsSchema.parse(source);
   }
+  if (source.SENTRY_DSN) z.url().parse(source.SENTRY_DSN);
 
   return {
     appEnvironment,
@@ -38,6 +39,6 @@ export function readEnvironment(source: NodeJS.ProcessEnv = process.env) {
       .string()
       .url()
       .parse(source.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
-    sentryEnabled: Boolean(source.SENTRY_DSN || source.NEXT_PUBLIC_SENTRY_DSN),
+    sentryEnabled: Boolean(source.SENTRY_DSN),
   } as const;
 }

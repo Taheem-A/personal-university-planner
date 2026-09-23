@@ -1,4 +1,5 @@
 import { getDatabaseErrorDetails } from "@university-planner/database";
+import { reportInternalFailure } from "../monitoring";
 
 export type ApplicationErrorCode =
   | "VALIDATION_ERROR"
@@ -42,6 +43,8 @@ export async function resultOf<T>(operation: () => Promise<T>): Promise<Applicat
   try {
     return { ok: true, value: await operation() };
   } catch (error) {
-    return { ok: false, error: applicationFailure(error) };
+    const safe = applicationFailure(error);
+    if (safe.code === "INTERNAL_ERROR") await reportInternalFailure();
+    return { ok: false, error: safe };
   }
 }

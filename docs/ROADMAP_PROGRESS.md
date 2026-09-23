@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-23 — Milestone 2 transport proof and exit-gate audit: IN PROGRESS
+
+- Added representative authenticated Next.js handlers for terms, courses, tasks, availability and canonical account export. A shared transport adapter bounds JSON requests, checks same-origin mutations and maps typed application errors to safe, uncached HTTP responses. Static package checks now reject transport access to Prisma, database internals and repository operations.
+- Added optional server-only Sentry reporting of a fixed internal-failure signal. The monitoring boundary sends no user academic content, request data, OAuth tokens or database credentials; without `SENTRY_DSN` it remains disabled.
+- `pnpm verify` passed formatting, lint, boundaries (59 source files), Prisma generation/validation, TypeScript, 23/23 unit tests, 35/35 local integration tests and core/database/Next.js builds, then failed its two Playwright browser tests because Chromium is unavailable. The integration tests include actual handler/service module simulation with two users, guessed IDs, malformed/domain-invalid writes, stale and fresh updates, forced simulated rollback, credential-free export, service recreation and negative package-checker cases. `pnpm check:dependencies` reported no known vulnerabilities.
+- Added guarded `pnpm db:services:verify` for a synthetic, direct, disposable `up_m2_service_*` Neon database. It has **not run** because this workspace has no direct disposable database connection. Migration history 0001–0006 has likewise not been deployed from zero with Prisma in this audit. Chromium installation returned truncated archives; browser E2E and the complete `pnpm verify` gate cannot pass here. The detailed [Milestone 2 exit-gate audit](./milestone-2-exit-gate.md) records these blockers and the literal criteria.
+- **Verdict: Milestone 2 is IN PROGRESS; gate NOT PASSED.** Exact next work item: deploy all migrations from zero into a fresh disposable Neon database, run the guarded live service/auth/authorization/deletion-rollback suite, run full `pnpm verify` and dependency/CI checks with Chromium, fix any failures and re-audit before marking the gate passed or opening the PR. Milestone 3 has not started.
+
 ## 2026-09-22 — Milestone 2 trust-boundary slices: IN PROGRESS
 
 ### Academic application service slice (Prompt 4): IN PROGRESS
