@@ -163,6 +163,17 @@ test("transport through application services round-trips isolated PostgreSQL sta
     401,
   );
   actorId = ids.a;
+  const malformed = await read(
+    await terms.POST(
+      new Request("http://localhost:3000/api/v1/terms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
+        body: "{invalid-json",
+      }),
+    ),
+  );
+  assert.equal(malformed.status, 400);
+  assert.equal((await database.repositories.academicTerms.listForUser(ids.a)).length, 0);
   const invalid = await read(
     await terms.POST(
       req("terms", { name: "Invalid", startDate: "2026-12-20", endDate: "2026-09-01" }),
@@ -197,6 +208,14 @@ test("transport through application services round-trips isolated PostgreSQL sta
           req(`terms/${b.id}`, { expectedVersion: 0, name: "Foreign" }, "PATCH"),
           context(b.id),
         ),
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await read(
+        await term.DELETE(req(`terms/${b.id}`, { expectedVersion: 0 }, "DELETE"), context(b.id)),
       )
     ).status,
     404,
@@ -242,16 +261,46 @@ test("transport through application services round-trips isolated PostgreSQL sta
   forceRollback = false;
   assert.equal(failed.status, 500);
   assert.equal((await database.repositories.academicTerms.listForUser(ids.a)).length, 1);
+  const ownedCourse = await read(
+    await courses.POST(req("courses", { academicTermId: a.id, code: "MAT186", name: "Calculus" })),
+  );
+  assert.equal(ownedCourse.status, 200);
+  const fakeCredential = `synthetic-secret-${crypto.randomUUID()}`;
+  await database.repositories.integrationAccounts.create({
+    id: `m2-integration-${crypto.randomUUID()}`,
+    version: 0,
+    userId: ids.a,
+    provider: "synthetic",
+    externalAccountId: "m2-test-account",
+    displayName: null,
+    status: "ACTIVE",
+    credentialReference: fakeCredential,
+    lastSyncAt: null,
+    lastSuccessAt: null,
+    disconnectedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
   const exported = (await read(await exportRoute.GET())).body.data;
   assert.equal(exported.version, 1);
   assert.equal(exported.data.academicTerms.length, 1);
+  assert.equal(exported.data.courses.length, 1);
   assert.equal(JSON.stringify(exported).includes("credentialReference"), false);
+  assert.equal(JSON.stringify(exported).includes(fakeCredential), false);
   await database.disconnect();
   database = createDatabase({ connectionString: url });
   assert.equal(
     (await read(await term.GET(new Request("http://localhost:3000"), context(a.id)))).body.data
       .name,
     "Fall revised",
+  );
+  assert.equal(
+    (
+      await read(
+        await term.DELETE(req(`terms/${a.id}`, { expectedVersion: 1 }, "DELETE"), context(a.id)),
+      )
+    ).body.data.status,
+    "ARCHIVED",
   );
   assert.equal(
     (await lifecycle.accountData.delete({ confirmation: "DELETE MY ACCOUNT" })).value.deleted,
