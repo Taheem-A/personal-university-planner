@@ -2,7 +2,7 @@
 
 ## Current milestone status
 
-**Milestone 2 — IN PROGRESS.** Stable Google identity persistence, Auth.js sign-in/session boundary, and reusable trusted service primitives are implemented on `auth/milestone-2-trust-boundary`. Migration 0002 maps provider accounts to canonical Users; migration 0003 adds Task optimistic versions. Core entity services, a real Google OAuth round trip, live Prisma migration-history verification, and browser E2E remain before the milestone gate. See `docs/ROADMAP_PROGRESS.md` for current verification and the next service slice.
+**Milestone 2 — IN PROGRESS; EXIT GATE NOT PASSED.** Google-only Auth.js, persistent canonical identity provisioning, authenticated and validated service families, explicit optimistic versions, account lifecycle, and representative protected Next.js routes are implemented on `auth/milestone-2-trust-boundary`. Migrations 0002–0006 are source controlled. The guarded live service suite and zero-to-current Prisma migration-history deployment have not run against a fresh disposable database in this workspace; browser E2E is blocked by the unavailable Chromium executable. The final gate requires that evidence and a green complete verification/CI run. See [Milestone 2 exit-gate audit](./milestone-2-exit-gate.md).
 
 **Milestone 1 — GATE PASSED**
 
@@ -29,15 +29,16 @@ The canonical schema/domain audit, centralized time foundation, first source-con
 - Prisma 7 validates the existing PostgreSQL schema through `prisma.config.ts`.
 - Next.js production build completes and emits `/` plus `/api/health`.
 - Playwright boots the real Next.js app and exercises the preserved interactive preview.
-- The full `pnpm verify` command passes.
+- The Milestone-1 full `pnpm verify` run passed. Milestone-2 focused unit/integration/type/build checks pass locally; its full `pnpm verify` currently stops at Playwright's missing Chromium executable.
 - `pnpm check:dependencies` reports no known vulnerabilities.
 
-## Deliberately not implemented
+## Milestone-2 implementation
 
-- Auth.js runtime and user isolation.
-- Application services or canonical state writes.
-- Production UI migration from the approved preview.
-- Google Calendar, Quercus/LMS, assistant execution, advanced optimization, background jobs, or microservices.
+- Auth.js Google-only OIDC login uses a unique provider-account mapping and atomic first-login canonical User provisioning. Application services derive user scope from the authenticated server session; login does not request Calendar access or retain Google OAuth tokens.
+- Academic, scheduling, inbox, history, integration metadata and account lifecycle services validate input, authorize ownership, transact through the database package and return structured results. Planning-relevant updates compare explicit versions.
+- Representative Next.js account export, term, course, task and availability routes call services through a shared safe transport adapter. Package checks prevent transport imports of Prisma, repositories and internal service infrastructure.
+- Server-only Sentry capture is optional and emits a fixed internal-failure signal without request or user content.
+- Production UI migration, Google Calendar, Quercus/LMS, assistant execution, scheduling engine completion, background jobs and microservices remain deferred.
 
 ## Milestone 1 work completed so far
 
@@ -57,8 +58,8 @@ The canonical schema/domain audit, centralized time foundation, first source-con
 
 ## Blockers
 
-None. The remaining risks recorded in the exit-gate audit are intentionally assigned to later milestones and do not require a Milestone-1 schema redesign.
+Milestone 2 needs a clean disposable database deployment and live service/auth/rollback proof, plus executable Chromium E2E and a green full verification/CI run. The local Playwright download returned truncated archives, and no direct disposable database connection is configured in this workspace. These are gate blockers, not a reason to weaken the gate.
 
 ## Exact next work item
 
-Begin **Milestone 2 — Authentication, Authorization, Validation, and Application Services** after the Milestone-1 PR is reviewed and merged.
+Run migrations 0001–0006 from zero on a fresh disposable Neon database, run `pnpm db:services:verify` and the guarded auth/authorization tests there, obtain a working Chromium binary, run `pnpm verify` and CI, fix any failures, then repeat the Milestone-2 exit-gate audit. Open the PR and begin Milestone 3 only after the gate passes.
