@@ -2,7 +2,7 @@
 
 ## Current milestone status
 
-**Milestone 2 — IN PROGRESS; EXIT GATE NOT PASSED.** Google-only Auth.js, persistent canonical identity provisioning, authenticated and validated service families, explicit optimistic versions, account lifecycle, and representative protected Next.js routes are implemented on `auth/milestone-2-trust-boundary`. Migrations 0002–0006 are source controlled. On a fresh disposable Neon database, Prisma deployed migrations 0001–0006 from zero and the guarded live route/service/PostgreSQL test passed. Draft PR #2 supplied a clean GitHub Actions run with Chromium and the full `pnpm verify` passing. The final exit-gate re-audit remains outstanding. See [Milestone 2 exit-gate audit](./milestone-2-exit-gate.md).
+**Milestone 2 — GATE PASSED.** Google-only Auth.js, persistent canonical identity provisioning, authenticated and validated service families, explicit optimistic versions, account lifecycle, and representative protected Next.js routes are implemented on `auth/milestone-2-trust-boundary`. Migrations 0001–0006 deployed from zero on a fresh disposable Neon database; guarded live route/service/PostgreSQL, concurrent identity provisioning, rollback and schema-drift checks passed. Draft PR #2 supplied clean GitHub Actions `pnpm verify` with Chromium and a green dependency review. The final literal exit-gate audit is recorded in [Milestone 2 exit gate](./milestone-2-exit-gate.md). The PR remains unmerged.
 
 **Milestone 1 — GATE PASSED**
 
@@ -29,7 +29,7 @@ The canonical schema/domain audit, centralized time foundation, first source-con
 - Prisma 7 validates the existing PostgreSQL schema through `prisma.config.ts`.
 - Next.js production build completes and emits `/` plus `/api/health`.
 - Playwright boots the real Next.js app and exercises the preserved interactive preview.
-- The Milestone-1 full `pnpm verify` run passed. Milestone-2 formatting, lint, boundary, generation, typecheck, unit, integration, Prisma validation, build, and dependency checks passed locally on the pinned Node/pnpm toolchain. The guarded live service test passed, and clean GitHub Actions `pnpm verify` passed with Chromium E2E (2/2).
+- The Milestone-1 full `pnpm verify` run passed. Milestone-2 clean GitHub Actions `pnpm verify` passed on Node 24.21.0/pnpm 12.5.1: formatting, lint, boundaries, Prisma generation/validation, typecheck, 23 unit tests, 35 integration tests, builds and Chromium E2E (2/2). Guarded live PostgreSQL service and additional identity/deletion-rollback checks passed; dependency review and audit passed.
 - `pnpm check:dependencies` reports no known vulnerabilities.
 
 ## Milestone-2 implementation
@@ -56,10 +56,10 @@ The canonical schema/domain audit, centralized time foundation, first source-con
 - Made user scope mandatory on ownership-sensitive reads and mutations, kept Prisma implementation types inside `packages/database`, and extended package-boundary enforcement to block Prisma/pg imports elsewhere.
 - Proved create/read/update/archive behavior, canonical relationships, user isolation, hierarchy, dependencies, work-session supersession, JSON and temporal round trips, structured external-identity uniqueness errors, and all-or-nothing rollback against disposable Neon.
 
-## Blockers
+## Gate outcome and later risks
 
-The fresh disposable database deployment, guarded live service/rollback proof, clean CI `pnpm verify`, Chromium E2E and dependency review passed. The final literal exit-gate re-audit has not yet been completed; the draft PR remains unmerged.
+No Milestone-2 exit blocker remains after the literal re-audit. External Google OAuth redirect/callback availability has not been exercised with deployment credentials; the Auth.js callback boundary is tested locally and canonical identity concurrency was verified against PostgreSQL. Provider integration, snapshot-consistent export and credential revocation remain later-roadmap work. PR #2 stays unmerged for separate review and merge.
 
 ## Exact next work item
 
-Repeat the Milestone-2 exit-gate audit against the completed database and clean CI evidence. Keep the PR draft and do not start Milestone 3 while the gate remains open.
+**Milestone 3 — Planner-Core v1: Complete Deterministic Scheduling Engine**

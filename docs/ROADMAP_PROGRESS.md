@@ -1,5 +1,14 @@
 # Roadmap progress
 
+## 2026-09-23 — Milestone 2: GATE PASSED
+
+- The final literal audit verified Google-only Auth.js, atomic/idempotent canonical identity mapping, session-derived actor scope, service-side Zod/domain checks, transaction-bound repositories, structured safe errors, explicit optimistic versions, account export/deletion and all intended Milestone-2 service families. No production route imports Prisma or repositories directly; no client-supplied owner ID is authoritative.
+- On disposable Neon branch `milestone-2-service-proof-20260922`, the empty `up_m2_service_final_20260922` database received source-controlled migrations 0001–0006 from zero. Migration status is current with no incomplete or rolled-back record. A read-only Prisma database-to-schema diff found no representable drift.
+- Guarded `pnpm db:services:verify` passed **1/1** against live PostgreSQL, including cross-user isolation, invalid-input non-persistence, stale-write rejection, rollback, reconnect persistence, scoped/redacted export and isolated account deletion. Independent live checks also passed concurrent/repeat identity provisioning and forced account-deletion rollback.
+- Clean GitHub Actions [CI run 35814576841](https://github.com/Taheem-A/personal-university-planner/actions/runs/35814576841) passed full `pnpm verify` on Node 24.21.0/pnpm 12.5.1: **23/23** unit, **35/35** integration and **2/2** Chromium E2E tests, plus formatting, lint, boundaries, Prisma checks, typecheck and builds. [Dependency review](https://github.com/Taheem-A/personal-university-planner/actions/runs/35814576829) passed; `pnpm check:dependencies` reported no known vulnerabilities.
+- [Milestone 2 exit gate](./milestone-2-exit-gate.md) records the requirement matrix, evidence limits, non-blocking risks and later-roadmap deferrals. Draft PR #2 remains unmerged. Earlier Milestone-2 entries below are historical progress notes.
+- **Exact next work item:** **Milestone 3 — Planner-Core v1: Complete Deterministic Scheduling Engine**. No Milestone-3 work was started in this audit.
+
 ## 2026-09-23 — Milestone 2 transport proof and exit-gate audit: IN PROGRESS
 
 - Added representative authenticated Next.js handlers for terms, courses, tasks, availability and canonical account export. A shared transport adapter bounds JSON requests, checks same-origin mutations and maps typed application errors to safe, uncached HTTP responses. Static package checks now reject transport access to Prisma, database internals and repository operations.
