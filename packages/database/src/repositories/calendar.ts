@@ -39,9 +39,25 @@ export function createCalendarRepositories(db: DatabaseExecutor): {
       async archive(userId, id, archivedAt) {
         const row = await db.calendarEvent.update({
           where: { id, userId },
-          data: { archivedAt },
+          data: { archivedAt, version: { increment: 1 } },
         });
         return toPlainRecord<CalendarEventRecord>(row);
+      },
+      async updateIfCurrent(userId, id, version, patch) {
+        const rows = await db.calendarEvent.updateManyAndReturn({
+          where: { id, userId, version },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.CalendarEventUncheckedUpdateManyInput,
+        });
+        if (rows[0])
+          return { status: "UPDATED", record: toPlainRecord<CalendarEventRecord>(rows[0]) };
+        return {
+          status: (await db.calendarEvent.findFirst({ where: { id, userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
       },
     },
     availabilityRules: {
@@ -65,9 +81,25 @@ export function createCalendarRepositories(db: DatabaseExecutor): {
       async setActive(userId, id, active) {
         const row = await db.availabilityRule.update({
           where: { id, userId },
-          data: { active },
+          data: { active, version: { increment: 1 } },
         });
         return toPlainRecord<AvailabilityRuleRecord>(row);
+      },
+      async updateIfCurrent(userId, id, version, patch) {
+        const rows = await db.availabilityRule.updateManyAndReturn({
+          where: { id, userId, version },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.AvailabilityRuleUncheckedUpdateManyInput,
+        });
+        if (rows[0])
+          return { status: "UPDATED", record: toPlainRecord<AvailabilityRuleRecord>(rows[0]) };
+        return {
+          status: (await db.availabilityRule.findFirst({ where: { id, userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
       },
     },
     protectedTimeRules: {
@@ -93,9 +125,25 @@ export function createCalendarRepositories(db: DatabaseExecutor): {
       async setActive(userId, id, active) {
         const row = await db.protectedTimeRule.update({
           where: { id, userId },
-          data: { active },
+          data: { active, version: { increment: 1 } },
         });
         return toPlainRecord<ProtectedTimeRuleRecord>(row);
+      },
+      async updateIfCurrent(userId, id, version, patch) {
+        const rows = await db.protectedTimeRule.updateManyAndReturn({
+          where: { id, userId, version },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.ProtectedTimeRuleUncheckedUpdateManyInput,
+        });
+        if (rows[0])
+          return { status: "UPDATED", record: toPlainRecord<ProtectedTimeRuleRecord>(rows[0]) };
+        return {
+          status: (await db.protectedTimeRule.findFirst({ where: { id, userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
       },
     },
   };

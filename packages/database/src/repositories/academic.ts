@@ -64,9 +64,25 @@ export function createAcademicRepositories(db: DatabaseExecutor): {
       async updateStatus(userId, id, status) {
         const row = await db.academicTerm.update({
           where: { id_userId: { id, userId } },
-          data: { status },
+          data: { status, version: { increment: 1 } },
         });
         return toPlainRecord<AcademicTermRecord>(row);
+      },
+      async updateIfCurrent(userId, id, expectedVersion, patch) {
+        const rows = await db.academicTerm.updateManyAndReturn({
+          where: { id, userId, version: expectedVersion },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.AcademicTermUncheckedUpdateManyInput,
+        });
+        if (rows[0])
+          return { status: "UPDATED", record: toPlainRecord<AcademicTermRecord>(rows[0]) };
+        return {
+          status: (await db.academicTerm.findFirst({ where: { id, userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
       },
     },
     courses: {
@@ -90,9 +106,22 @@ export function createAcademicRepositories(db: DatabaseExecutor): {
       async archive(userId, id, archivedAt) {
         const row = await db.course.update({
           where: { id_userId: { id, userId } },
-          data: { archivedAt },
+          data: { archivedAt, version: { increment: 1 } },
         });
         return toPlainRecord<CourseRecord>(row);
+      },
+      async updateIfCurrent(userId, id, expectedVersion, patch) {
+        const rows = await db.course.updateManyAndReturn({
+          where: { id, userId, version: expectedVersion },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.CourseUncheckedUpdateManyInput,
+        });
+        if (rows[0]) return { status: "UPDATED", record: toPlainRecord<CourseRecord>(rows[0]) };
+        return {
+          status: (await db.course.findFirst({ where: { id, userId } })) ? "STALE" : "NOT_FOUND",
+        };
       },
     },
     courseMeetings: {
@@ -112,6 +141,22 @@ export function createAcademicRepositories(db: DatabaseExecutor): {
           orderBy: [{ startTimeLocal: "asc" }, { id: "asc" }],
         });
         return rows.map((row) => toPlainRecord<CourseMeetingRecord>(row));
+      },
+      async updateIfCurrent(userId, id, expectedVersion, patch) {
+        const rows = await db.courseMeeting.updateManyAndReturn({
+          where: { id, userId, version: expectedVersion },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.CourseMeetingUncheckedUpdateManyInput,
+        });
+        if (rows[0])
+          return { status: "UPDATED", record: toPlainRecord<CourseMeetingRecord>(rows[0]) };
+        return {
+          status: (await db.courseMeeting.findFirst({ where: { id, userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
       },
     },
     assessments: {
@@ -135,9 +180,24 @@ export function createAcademicRepositories(db: DatabaseExecutor): {
       async archive(userId, id, archivedAt) {
         const row = await db.assessment.update({
           where: { id_userId: { id, userId } },
-          data: { archivedAt },
+          data: { archivedAt, version: { increment: 1 } },
         });
         return toPlainRecord<AssessmentRecord>(row);
+      },
+      async updateIfCurrent(userId, id, expectedVersion, patch) {
+        const rows = await db.assessment.updateManyAndReturn({
+          where: { id, userId, version: expectedVersion },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.AssessmentUncheckedUpdateManyInput,
+        });
+        if (rows[0]) return { status: "UPDATED", record: toPlainRecord<AssessmentRecord>(rows[0]) };
+        return {
+          status: (await db.assessment.findFirst({ where: { id, userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
       },
     },
   };

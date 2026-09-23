@@ -14,7 +14,7 @@
     "preview": "pnpm --filter @university-planner/web start",
     "preview:approved": "node scripts/serve-static.mjs prototypes/approved-preview 4173",
     "build:core": "tsc -p tsconfig.core.json",
-    "typecheck": "tsc -p tsconfig.core.json --noEmit && pnpm --filter @university-planner/database typecheck && pnpm --filter @university-planner/web typecheck",
+    "typecheck": "tsc -p tsconfig.core.json --noEmit && pnpm --filter @university-planner/database build && pnpm --filter @university-planner/web typecheck",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -33,6 +33,7 @@
     "db:bootstrap:seed": "pnpm --filter @university-planner/database db:bootstrap:seed",
     "db:bootstrap:verify": "pnpm --filter @university-planner/database db:bootstrap:verify",
     "db:repositories:verify": "pnpm --filter @university-planner/database build && node --test tests/database/repositories.integration.mjs",
+    "db:services:verify": "pnpm --filter @university-planner/database build && node --test tests/database/services.integration.mjs",
     "db:validate": "pnpm --filter @university-planner/database db:validate",
     "verify": "pnpm format:check && pnpm lint && pnpm check:boundaries && pnpm db:generate && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm db:validate && pnpm build && pnpm test:e2e"
   },

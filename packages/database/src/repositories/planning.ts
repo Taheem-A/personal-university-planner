@@ -49,14 +49,29 @@ export function createPlanningRepositories(db: DatabaseExecutor): {
       async update(userId, id, patch) {
         const row = await db.task.update({
           where: { id_userId: { id, userId } },
-          data: toPersistenceData(patch) as Prisma.TaskUncheckedUpdateInput,
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.TaskUncheckedUpdateInput,
         });
         return toPlainRecord<TaskRecord>(row);
+      },
+      async updateIfCurrent(userId, id, expectedVersion, patch) {
+        const rows = await db.task.updateManyAndReturn({
+          where: { id, userId, version: expectedVersion },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.TaskUncheckedUpdateManyInput,
+        });
+        if (rows[0]) return { status: "UPDATED", record: toPlainRecord<TaskRecord>(rows[0]) };
+        const existing = await db.task.findFirst({ where: { id, userId } });
+        return { status: existing ? "STALE" : "NOT_FOUND" };
       },
       async archive(userId, id, archivedAt) {
         const row = await db.task.update({
           where: { id_userId: { id, userId } },
-          data: { archivedAt },
+          data: { archivedAt, version: { increment: 1 } },
         });
         return toPlainRecord<TaskRecord>(row);
       },
@@ -74,6 +89,13 @@ export function createPlanningRepositories(db: DatabaseExecutor): {
             userId,
             OR: [{ prerequisiteTaskId: taskId }, { dependentTaskId: taskId }],
           },
+          orderBy: [{ prerequisiteTaskId: "asc" }, { dependentTaskId: "asc" }],
+        });
+        return rows.map((row) => toPlainRecord<TaskDependencyRecord>(row));
+      },
+      async listForUser(userId) {
+        const rows = await db.taskDependency.findMany({
+          where: { userId },
           orderBy: [{ prerequisiteTaskId: "asc" }, { dependentTaskId: "asc" }],
         });
         return rows.map((row) => toPlainRecord<TaskDependencyRecord>(row));
@@ -119,6 +141,14 @@ export function createPlanningRepositories(db: DatabaseExecutor): {
       },
     },
     planningPreferences: {
+      async create(record) {
+        const row = await db.planningPreference.create({
+          data: toPersistenceData(
+            record,
+          ) as unknown as Prisma.PlanningPreferenceUncheckedCreateInput,
+        });
+        return toPlainRecord<PlanningPreferenceRecord>(row);
+      },
       async getForUser(userId) {
         const row = await db.planningPreference.findUnique({ where: { userId } });
         return row ? toPlainRecord<PlanningPreferenceRecord>(row) : null;
@@ -131,6 +161,22 @@ export function createPlanningRepositories(db: DatabaseExecutor): {
           update: data as Prisma.PlanningPreferenceUncheckedUpdateInput,
         });
         return toPlainRecord<PlanningPreferenceRecord>(row);
+      },
+      async updateIfCurrent(userId, version, patch) {
+        const rows = await db.planningPreference.updateManyAndReturn({
+          where: { userId, version },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.PlanningPreferenceUncheckedUpdateManyInput,
+        });
+        if (rows[0])
+          return { status: "UPDATED", record: toPlainRecord<PlanningPreferenceRecord>(rows[0]) };
+        return {
+          status: (await db.planningPreference.findUnique({ where: { userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
       },
     },
   };

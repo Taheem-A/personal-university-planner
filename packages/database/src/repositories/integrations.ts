@@ -41,9 +41,40 @@ export function createIntegrationRepositories(db: DatabaseExecutor): {
       async updateStatus(userId, id, status, disconnectedAt) {
         const row = await db.integrationAccount.update({
           where: { id_userId: { id, userId } },
-          data: { status, disconnectedAt },
+          data: { status, disconnectedAt, version: { increment: 1 } },
         });
         return toPlainRecord<IntegrationAccountRecord>(row);
+      },
+      async disconnect(userId, id, version) {
+        const rows = await db.integrationAccount.updateManyAndReturn({
+          where: { id, userId, version },
+          data: {
+            status: "DISCONNECTED",
+            disconnectedAt: new Date(),
+            credentialReference: null,
+            version: { increment: 1 },
+          },
+        });
+        if (rows[0])
+          return { status: "UPDATED", record: toPlainRecord<IntegrationAccountRecord>(rows[0]) };
+        return {
+          status: (await db.integrationAccount.findFirst({ where: { id, userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
+      },
+      async updateIfCurrent(userId, id, version, patch) {
+        const rows = await db.integrationAccount.updateManyAndReturn({
+          where: { id, userId, version },
+          data: { ...patch, version: { increment: 1 } },
+        });
+        if (rows[0])
+          return { status: "UPDATED", record: toPlainRecord<IntegrationAccountRecord>(rows[0]) };
+        return {
+          status: (await db.integrationAccount.findFirst({ where: { id, userId } }))
+            ? "STALE"
+            : "NOT_FOUND",
+        };
       },
     },
     externalObjectMaps: {
@@ -64,6 +95,13 @@ export function createIntegrationRepositories(db: DatabaseExecutor): {
       async listForInternalObject(userId, internalType, internalId) {
         const rows = await db.externalObjectMap.findMany({
           where: { userId, internalType, internalId },
+          orderBy: [{ provider: "asc" }, { externalId: "asc" }],
+        });
+        return rows.map((row) => toPlainRecord<ExternalObjectMapRecord>(row));
+      },
+      async listForUser(userId) {
+        const rows = await db.externalObjectMap.findMany({
+          where: { userId },
           orderBy: [{ provider: "asc" }, { externalId: "asc" }],
         });
         return rows.map((row) => toPlainRecord<ExternalObjectMapRecord>(row));
@@ -90,9 +128,22 @@ export function createIntegrationRepositories(db: DatabaseExecutor): {
       async updateStatus(userId, id, status, processedAt) {
         const row = await db.inboxItem.update({
           where: { id, userId },
-          data: { status, processedAt },
+          data: { status, processedAt, version: { increment: 1 } },
         });
         return toPlainRecord<InboxItemRecord>(row);
+      },
+      async updateIfCurrent(userId, id, version, patch) {
+        const rows = await db.inboxItem.updateManyAndReturn({
+          where: { id, userId, version },
+          data: {
+            ...toPersistenceData(patch),
+            version: { increment: 1 },
+          } as Prisma.InboxItemUncheckedUpdateManyInput,
+        });
+        if (rows[0]) return { status: "UPDATED", record: toPlainRecord<InboxItemRecord>(rows[0]) };
+        return {
+          status: (await db.inboxItem.findFirst({ where: { id, userId } })) ? "STALE" : "NOT_FOUND",
+        };
       },
     },
   };

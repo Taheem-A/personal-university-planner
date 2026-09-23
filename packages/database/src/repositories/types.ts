@@ -35,11 +35,27 @@ export interface UserRepository {
   ): Promise<UserRecord>;
 }
 
+/** Authentication infrastructure, never a planner domain entity. */
+export interface AuthIdentityRepository {
+  findUser(provider: string, providerAccountId: string): Promise<UserRecord | null>;
+  /** Atomic identity and user creation; a simultaneous callback resolves the winner. */
+  provisionUser(provider: string, providerAccountId: string): Promise<UserRecord>;
+}
+
+export type ConditionalMutation<T> =
+  { status: "UPDATED"; record: T } | { status: "STALE" } | { status: "NOT_FOUND" };
+
 export interface AcademicTermRepository {
   create(record: AcademicTermRecord): Promise<AcademicTermRecord>;
   getForUser(userId: string, id: string): Promise<AcademicTermRecord | null>;
   listForUser(userId: string): Promise<AcademicTermRecord[]>;
   updateStatus(userId: string, id: string, status: AcademicTermStatus): Promise<AcademicTermRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<Pick<AcademicTermRecord, "name" | "startDate" | "endDate" | "status">>,
+  ): Promise<ConditionalMutation<AcademicTermRecord>>;
 }
 
 export interface CourseRepository {
@@ -47,12 +63,52 @@ export interface CourseRepository {
   getForUser(userId: string, id: string): Promise<CourseRecord | null>;
   listForTerm(userId: string, academicTermId: string): Promise<CourseRecord[]>;
   archive(userId: string, id: string, archivedAt: Date): Promise<CourseRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<
+      Pick<
+        CourseRecord,
+        | "code"
+        | "name"
+        | "section"
+        | "instructorName"
+        | "colorReference"
+        | "creditValue"
+        | "defaultTaskEnergy"
+        | "defaultTaskLocation"
+        | "archivedAt"
+      >
+    >,
+  ): Promise<ConditionalMutation<CourseRecord>>;
 }
 
 export interface CourseMeetingRepository {
   create(record: CourseMeetingRecord): Promise<CourseMeetingRecord>;
   getForUser(userId: string, id: string): Promise<CourseMeetingRecord | null>;
   listForCourse(userId: string, courseId: string): Promise<CourseMeetingRecord[]>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<
+      Pick<
+        CourseMeetingRecord,
+        | "meetingType"
+        | "recurrenceRule"
+        | "startTimeLocal"
+        | "endTimeLocal"
+        | "spansNextDay"
+        | "timezone"
+        | "location"
+        | "effectiveFrom"
+        | "effectiveUntil"
+        | "attendanceRequired"
+        | "archivedAt"
+      >
+    >,
+  ): Promise<ConditionalMutation<CourseMeetingRecord>>;
 }
 
 export interface AssessmentRepository {
@@ -60,6 +116,29 @@ export interface AssessmentRepository {
   getForUser(userId: string, id: string): Promise<AssessmentRecord | null>;
   listForCourse(userId: string, courseId: string): Promise<AssessmentRecord[]>;
   archive(userId: string, id: string, archivedAt: Date): Promise<AssessmentRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<
+      Pick<
+        AssessmentRecord,
+        | "title"
+        | "assessmentType"
+        | "releaseAt"
+        | "dueAt"
+        | "preferredCompletionAt"
+        | "gradeWeight"
+        | "gradeReceived"
+        | "notes"
+        | "instructionsUrl"
+        | "submissionUrl"
+        | "submissionStatus"
+        | "submittedAt"
+        | "archivedAt"
+      >
+    >,
+  ): Promise<ConditionalMutation<AssessmentRecord>>;
 }
 
 export interface TaskRepository {
@@ -79,15 +158,55 @@ export interface TaskRepository {
         | "currentEstimatedMinutes"
         | "remainingMinutes"
         | "completedAt"
+        | "parentTaskId"
+        | "courseId"
+        | "assessmentId"
+        | "dueAt"
+        | "preferredCompletionAt"
+        | "availableFrom"
+        | "minimumSessionMinutes"
+        | "preferredSessionMinutes"
+        | "maximumSessionMinutes"
+        | "archivedAt"
       >
     >,
   ): Promise<TaskRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<
+      Pick<
+        TaskRecord,
+        | "title"
+        | "description"
+        | "status"
+        | "currentEstimatedMinutes"
+        | "remainingMinutes"
+        | "completedAt"
+        | "parentTaskId"
+        | "courseId"
+        | "assessmentId"
+        | "dueAt"
+        | "preferredCompletionAt"
+        | "availableFrom"
+        | "originalEstimatedMinutes"
+        | "minimumSessionMinutes"
+        | "preferredSessionMinutes"
+        | "maximumSessionMinutes"
+        | "archivedAt"
+      >
+    >,
+  ): Promise<
+    { status: "UPDATED"; record: TaskRecord } | { status: "STALE" } | { status: "NOT_FOUND" }
+  >;
   archive(userId: string, id: string, archivedAt: Date): Promise<TaskRecord>;
 }
 
 export interface TaskDependencyRepository {
   add(record: TaskDependencyRecord): Promise<TaskDependencyRecord>;
   listForTask(userId: string, taskId: string): Promise<TaskDependencyRecord[]>;
+  listForUser(userId: string): Promise<TaskDependencyRecord[]>;
   remove(userId: string, prerequisiteTaskId: string, dependentTaskId: string): Promise<void>;
 }
 
@@ -103,6 +222,24 @@ export interface CalendarEventRepository {
   getForUser(userId: string, id: string): Promise<CalendarEventRecord | null>;
   listForRange(userId: string, startAt: Date, endAt: Date): Promise<CalendarEventRecord[]>;
   archive(userId: string, id: string, archivedAt: Date): Promise<CalendarEventRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Partial<
+      Pick<
+        CalendarEventRecord,
+        | "title"
+        | "eventType"
+        | "startAt"
+        | "endAt"
+        | "location"
+        | "constraintLevel"
+        | "courseId"
+        | "archivedAt"
+      >
+    >,
+  ): Promise<ConditionalMutation<CalendarEventRecord>>;
 }
 
 export interface AvailabilityRuleRepository {
@@ -110,6 +247,14 @@ export interface AvailabilityRuleRepository {
   getForUser(userId: string, id: string): Promise<AvailabilityRuleRecord | null>;
   listActive(userId: string): Promise<AvailabilityRuleRecord[]>;
   setActive(userId: string, id: string, active: boolean): Promise<AvailabilityRuleRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Partial<
+      Omit<AvailabilityRuleRecord, "id" | "userId" | "version" | "createdAt" | "updatedAt">
+    >,
+  ): Promise<ConditionalMutation<AvailabilityRuleRecord>>;
 }
 
 export interface ProtectedTimeRuleRepository {
@@ -117,11 +262,27 @@ export interface ProtectedTimeRuleRepository {
   getForUser(userId: string, id: string): Promise<ProtectedTimeRuleRecord | null>;
   listActive(userId: string): Promise<ProtectedTimeRuleRecord[]>;
   setActive(userId: string, id: string, active: boolean): Promise<ProtectedTimeRuleRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Partial<
+      Omit<ProtectedTimeRuleRecord, "id" | "userId" | "version" | "createdAt" | "updatedAt">
+    >,
+  ): Promise<ConditionalMutation<ProtectedTimeRuleRecord>>;
 }
 
 export interface PlanningPreferenceRepository {
   getForUser(userId: string): Promise<PlanningPreferenceRecord | null>;
+  create(record: PlanningPreferenceRecord): Promise<PlanningPreferenceRecord>;
   upsert(record: PlanningPreferenceRecord): Promise<PlanningPreferenceRecord>;
+  updateIfCurrent(
+    userId: string,
+    version: number,
+    patch: Partial<
+      Omit<PlanningPreferenceRecord, "id" | "userId" | "version" | "createdAt" | "updatedAt">
+    >,
+  ): Promise<ConditionalMutation<PlanningPreferenceRecord>>;
 }
 
 export interface WorkSessionRepository {
@@ -130,6 +291,14 @@ export interface WorkSessionRepository {
   listForRange(userId: string, startAt: Date, endAt: Date): Promise<WorkSessionRecord[]>;
   updateState(userId: string, id: string, state: WorkSessionState): Promise<WorkSessionRecord>;
   supersede(userId: string, id: string, supersededById: string): Promise<WorkSessionRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Partial<
+      Pick<WorkSessionRecord, "state" | "locked" | "startAt" | "endAt" | "plannedMinutes">
+    >,
+  ): Promise<ConditionalMutation<WorkSessionRecord>>;
 }
 
 export interface CompletionRecordRepository {
@@ -169,6 +338,17 @@ export interface IntegrationAccountRepository {
     status: IntegrationAccountStatus,
     disconnectedAt: Date | null,
   ): Promise<IntegrationAccountRecord>;
+  disconnect(
+    userId: string,
+    id: string,
+    version: number,
+  ): Promise<ConditionalMutation<IntegrationAccountRecord>>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Pick<IntegrationAccountRecord, "displayName">,
+  ): Promise<ConditionalMutation<IntegrationAccountRecord>>;
 }
 
 export interface ExternalObjectMapRepository {
@@ -183,6 +363,34 @@ export interface ExternalObjectMapRepository {
     internalType: ExternalObjectMapRecord["internalType"],
     internalId: string,
   ): Promise<ExternalObjectMapRecord[]>;
+  listForUser(userId: string): Promise<ExternalObjectMapRecord[]>;
+}
+
+export interface AccountSnapshot {
+  user: UserRecord;
+  academicTerms: AcademicTermRecord[];
+  courses: CourseRecord[];
+  courseMeetings: CourseMeetingRecord[];
+  assessments: AssessmentRecord[];
+  tasks: TaskRecord[];
+  taskDependencies: TaskDependencyRecord[];
+  recurringWorkRules: RecurringWorkRuleRecord[];
+  calendarEvents: CalendarEventRecord[];
+  availabilityRules: AvailabilityRuleRecord[];
+  protectedTimeRules: ProtectedTimeRuleRecord[];
+  planningPreferences: PlanningPreferenceRecord[];
+  inboxItems: InboxItemRecord[];
+  workSessions: WorkSessionRecord[];
+  completionRecords: CompletionRecordRecord[];
+  estimateProfiles: EstimateProfileRecord[];
+  plannerRuns: PlannerRunRecord[];
+  integrationAccounts: Omit<IntegrationAccountRecord, "credentialReference">[];
+  externalObjectMaps: ExternalObjectMapRecord[];
+}
+
+export interface AccountLifecycleRepository {
+  snapshot(userId: string): Promise<AccountSnapshot | null>;
+  deleteAccount(userId: string): Promise<boolean>;
 }
 
 export interface InboxItemRepository {
@@ -195,10 +403,20 @@ export interface InboxItemRepository {
     status: InboxStatus,
     processedAt: Date | null,
   ): Promise<InboxItemRecord>;
+  updateIfCurrent(
+    userId: string,
+    id: string,
+    version: number,
+    patch: Partial<
+      Pick<InboxItemRecord, "status" | "proposedEntityType" | "proposedPayload" | "processedAt">
+    >,
+  ): Promise<ConditionalMutation<InboxItemRecord>>;
 }
 
 export interface CanonicalRepositories {
+  accountLifecycle: AccountLifecycleRepository;
   users: UserRepository;
+  authIdentities: AuthIdentityRepository;
   academicTerms: AcademicTermRepository;
   courses: CourseRepository;
   courseMeetings: CourseMeetingRepository;
@@ -221,4 +439,5 @@ export interface CanonicalRepositories {
 
 export interface TransactionContext {
   repositories: CanonicalRepositories;
+  locks: { userGraph(userId: string): Promise<void> };
 }

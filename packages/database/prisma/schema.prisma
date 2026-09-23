@@ -172,10 +172,25 @@ model User {
   integrationAccounts IntegrationAccount[]
   externalObjectMaps  ExternalObjectMap[]
   inboxItems          InboxItem[]
+  authIdentities      AuthIdentity[]
+}
+
+/// Stable sign-in identity only. OAuth credentials for integrations are separate.
+model AuthIdentity {
+  id                String   @id @default(cuid())
+  provider          String
+  providerAccountId String
+  userId            String
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model AcademicTerm {
   id        String             @id @default(cuid())
+  version   Int                @default(0)
   userId    String
   name      String
   startDate DateTime           @db.Date
@@ -193,6 +208,7 @@ model AcademicTerm {
 
 model Course {
   id                  String              @id @default(cuid())
+  version             Int                 @default(0)
   userId              String
   academicTermId      String
   code                String
@@ -225,6 +241,7 @@ model Course {
 
 model CourseMeeting {
   id                 String              @id @default(cuid())
+  version            Int                 @default(0)
   userId             String
   courseId           String
   meetingType        MeetingType
@@ -237,6 +254,7 @@ model CourseMeeting {
   effectiveFrom      DateTime            @db.Date
   effectiveUntil     DateTime?           @db.Date
   attendanceRequired Boolean             @default(true)
+  archivedAt         DateTime?           @db.Timestamptz(3)
   createdAt          DateTime            @default(now()) @db.Timestamptz(3)
   updatedAt          DateTime            @updatedAt @db.Timestamptz(3)
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -249,6 +267,7 @@ model CourseMeeting {
 
 model Assessment {
   id                    String                     @id @default(cuid())
+  version               Int                        @default(0)
   userId                String
   courseId              String
   title                 String
@@ -280,6 +299,7 @@ model Assessment {
 
 model Task {
   id                       String             @id @default(cuid())
+  version                  Int                @default(0)
   userId                   String
   courseId                 String?
   assessmentId             String?
@@ -379,6 +399,7 @@ model RecurringWorkRule {
 
 model CalendarEvent {
   id                   String              @id @default(cuid())
+  version              Int                 @default(0)
   userId               String
   courseId             String?
   integrationAccountId String?
@@ -407,6 +428,7 @@ model CalendarEvent {
 
 model AvailabilityRule {
   id                  String      @id @default(cuid())
+  version             Int         @default(0)
   userId              String
   recurrenceRule      String
   startTimeLocal      DateTime    @db.Time(0)
@@ -428,6 +450,7 @@ model AvailabilityRule {
 
 model ProtectedTimeRule {
   id              String          @id @default(cuid())
+  version         Int             @default(0)
   userId          String
   recurrenceRule  String
   startTimeLocal  DateTime        @db.Time(0)
@@ -448,6 +471,7 @@ model ProtectedTimeRule {
 
 model PlanningPreference {
   id                              String   @id @default(cuid())
+  version                         Int      @default(0)
   userId                          String   @unique
   preferredDailyStudyLimitMinutes Int
   minimumFreeTimeMinutes          Int
@@ -465,6 +489,7 @@ model PlanningPreference {
 
 model WorkSession {
   id                String                 @id @default(cuid())
+  version           Int                    @default(0)
   userId            String
   taskId            String
   plannerRunId      String?
@@ -553,6 +578,7 @@ model PlannerRun {
 
 model IntegrationAccount {
   id                  String                   @id @default(cuid())
+  version             Int                      @default(0)
   userId              String
   provider            String
   externalAccountId   String
@@ -598,6 +624,7 @@ model ExternalObjectMap {
 
 model InboxItem {
   id                 String            @id @default(cuid())
+  version            Int               @default(0)
   userId             String
   rawText            String
   source             RecordSource      @default(MANUAL)
