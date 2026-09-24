@@ -1,5 +1,14 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 4 persistence/concurrency substrate: IN PROGRESS
+
+- Added `User.planningRevision` with database triggers for planning-relevant canonical writes. The Planner Service now carries the snapshot revision, and the repository exposes an atomic expected-revision claim for the next authoritative transaction.
+- Added scoped durable PlannerRun idempotency, guarded RUNNING-to-terminal completion, safe structured summary/warning projection, and latest-successful lookup. Unkeyed manual runs remain possible.
+- Added generated-session batch creation, active generated/retained-intent reads, and guarded supersession with or without a replacement. Manual and locked sessions are protected, and history is never deleted.
+- Migration `0008_planner_authority_substrate` was replayed from zero and after the Milestone-3 migration set in embedded PostgreSQL tests. Focused tests cover revision guards, isolation, idempotency, lifecycle, rollback and session history.
+- Full local `pnpm verify` passed, including 39 integration tests, schema validation, production build and Chromium E2E. Dedicated planner scenarios (13/13), planner properties (2/2) and dependency audit passed.
+- **Exact next slice: authoritative planner execution and transactional plan persistence.** Milestone 4 remains **IN PROGRESS**.
+
 ## 2026-09-24 — Milestone 4 Planner Service/input assembly: IN PROGRESS
 
 - Added typed authoritative-generation, incremental-replan and full-replan request/result vocabulary, the complete roadmap trigger vocabulary, explicit planner version and released-time policy, and structured input/precondition failures.

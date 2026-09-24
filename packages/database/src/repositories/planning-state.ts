@@ -5,6 +5,18 @@ import type { PlanningStateRepository, PlanningStateSnapshot } from "./types.js"
 /** Scoped bulk reads; the caller uses Database.readSnapshot for one MVCC snapshot. */
 export function createPlanningStateRepository(db: DatabaseExecutor): PlanningStateRepository {
   return {
+    async claimRevision(userId, expectedRevision) {
+      if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+        throw new RangeError("expectedRevision must be a non-negative safe integer");
+      const rows = await db.user.updateManyAndReturn({
+        where: { id: userId, planningRevision: expectedRevision },
+        data: { planningRevision: { increment: 1 } },
+      });
+      if (rows[0]) return { status: "CLAIMED", revision: rows[0].planningRevision };
+      return {
+        status: (await db.user.findUnique({ where: { id: userId } })) ? "STALE" : "NOT_FOUND",
+      };
+    },
     async snapshot(userId, startAt, endAt): Promise<PlanningStateSnapshot | null> {
       const user = await db.user.findUnique({ where: { id: userId } });
       if (!user) return null;

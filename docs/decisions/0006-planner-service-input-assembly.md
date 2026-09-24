@@ -26,4 +26,18 @@ Minimum sleep is a user-owned hard boundary. Migration `0007_planner_sleep_polic
 
 ## Next slice
 
-**Planner persistence/concurrency substrate.** Add PlannerRun and generated-session persistence, stale-write protection, supersession history, and reloadable plan deltas. Do not infer that this ADR completes Milestone 4 or starts Milestone 5.
+## Milestone 4 persistence and concurrency substrate
+
+Migration `0008_planner_authority_substrate` adds a per-user `User.planningRevision` integer. The snapshot loader returns this value alongside `PlannerInput`. PostgreSQL triggers increment it for inserts, deletes and planning-field updates to academic terms, courses, meetings, assessments, tasks, dependencies, fixed calendar events, availability, protected/sleep rules, preferences, active session history and completion records. User timezone/day-bound changes increment it too. Profile name/locale, task title/description, course display text, inbox, integration connection metadata, estimate profiles and PlannerRun metadata do not invalidate it. An integration that changes canonical events or tasks invalidates through those records. Recurring-work rule edits do not enter `PlannerInput` until they materialize task instances.
+
+The next authoritative write transaction must call `planningState.claimRevision(userId, snapshotRevision)` before changing plan state. It performs a conditional update of that user's row and returns `CLAIMED`, `STALE` or `NOT_FOUND`. PostgreSQL row locking serializes competing claims for one user; another user's row is independent. A canonical mutation racing with the claim also updates the same row through a trigger, so one side wins and the other sees a changed revision or commits afterward. The claim, PlannerRun completion, session creation and supersession must share one database transaction. A failed transaction rolls back the claim and all writes. This mechanism is durable across horizontally deployed app instances and does not depend on an in-memory mutex. Read-only scenario simulation does not claim a revision.
+
+`PlannerRun` gains nullable `idempotencyScope` and `idempotencyKey` with a paired-value check and a unique identity over user, trigger, scope and key. A stable provider/event key can therefore deduplicate delivery. Unkeyed manual runs remain unrestricted. Repository `start` returns `CREATED` or the existing run, including a completed one; the authoritative executor must proceed only for `CREATED`. `complete` guards `RUNNING` and stores a completed timestamp plus a bounded summary and warning projection without free-form provider or task text. Recent and latest successful reads remain user scoped. The existing PlannerRun status enum and history table are reused.
+
+Generated WorkSession batches must be planner-owned, unlocked, planned, and linked to a PlannerRun. Active generated and retained-intent queries are user scoped and horizon bounded. Guarded supersession changes only active unlocked planner sessions; manual and locked sessions are preserved. `supersededById` is optional when work disappears, and its former one-to-one uniqueness is removed so multiple old sessions may point to one meaningful replacement. All old rows remain as history. Batch writes and supersession run inside the caller's authoritative transaction.
+
+The migration chain is exercised from empty to current and from the Milestone-3 schema through migrations 0007–0008 using an embedded PostgreSQL runtime. Repository fakes test guarded claims, idempotent starts, lifecycle, queries, batches, supersession and rollback. The full live PostgreSQL acceptance run remains part of the later authoritative execution slice.
+
+## Next slice
+
+**authoritative planner execution and transactional plan persistence.** Milestone 4 remains in progress; this substrate does not execute or persist an authoritative plan.

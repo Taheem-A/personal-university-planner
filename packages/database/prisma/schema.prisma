@@ -151,6 +151,7 @@ model User {
   defaultDayStart DateTime? @db.Time(0)
   defaultDayEnd   DateTime? @db.Time(0)
   locale          String?
+  planningRevision Int @default(0)
   createdAt       DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
 
@@ -508,12 +509,13 @@ model WorkSession {
   task              Task                   @relation(fields: [taskId, userId], references: [id, userId], onDelete: Restrict)
   plannerRun        PlannerRun?            @relation(fields: [plannerRunId, userId], references: [id, userId], onDelete: Restrict)
   supersededBy      WorkSession?           @relation("SessionSupersession", fields: [supersededById, userId], references: [id, userId], onDelete: Restrict)
-  supersedes        WorkSession?           @relation("SessionSupersession")
+  supersedes        WorkSession[]          @relation("SessionSupersession")
   completionRecords CompletionRecord[]
 
   @@unique([id, userId])
-  @@unique([supersededById, userId])
+  @@index([userId, supersededById])
   @@index([userId, startAt, endAt])
+  @@index([userId, generatedBy, state, startAt, endAt])
   @@index([userId, taskId, state])
   @@index([userId, plannerRunId])
 }
@@ -563,6 +565,8 @@ model PlannerRun {
   triggerType          PlannerRunTrigger
   triggerEntityType    String?
   triggerEntityId      String?
+  idempotencyScope     String?
+  idempotencyKey       String?
   planningHorizonStart DateTime          @db.Timestamptz(3)
   planningHorizonEnd   DateTime          @db.Timestamptz(3)
   plannerVersion       String
@@ -574,7 +578,9 @@ model PlannerRun {
   workSessions         WorkSession[]
 
   @@unique([id, userId])
+  @@unique([userId, triggerType, idempotencyScope, idempotencyKey])
   @@index([userId, startedAt])
+  @@index([userId, status, completedAt])
   @@index([userId, triggerType, startedAt])
 }
 

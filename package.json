@@ -40,6 +40,7 @@
     "verify": "pnpm format:check && pnpm lint && pnpm check:boundaries && pnpm db:generate && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm db:validate && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@playwright/test": "1.63.0",
     "@types/node": "24.13.6",
     "eslint": "9.39.5",

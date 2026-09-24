@@ -72,6 +72,7 @@ export interface UserRecord extends AuditFields {
   defaultDayStart: LocalTime | null;
   defaultDayEnd: LocalTime | null;
   locale: string | null;
+  planningRevision: number;
 }
 
 export interface AcademicTermRecord extends AuditFields {
@@ -297,6 +298,8 @@ export interface PlannerRunRecord {
   triggerType: PlannerRunTrigger;
   triggerEntityType: string | null;
   triggerEntityId: string | null;
+  idempotencyScope: string | null;
+  idempotencyKey: string | null;
   planningHorizonStart: Date;
   planningHorizonEnd: Date;
   plannerVersion: string;
@@ -304,6 +307,21 @@ export interface PlannerRunRecord {
   summary: JsonValue | null;
   warnings: JsonValue | null;
   status: PlannerRunStatus;
+}
+
+/** Bounded diagnostic payloads; raw task titles or provider data stay out of summaries. */
+export interface PlannerRunCompletionSummary {
+  planStatus: "VALID" | "INFEASIBLE";
+  generatedSessionCount: number;
+  retainedSessionCount: number;
+  unscheduledMinutes: number;
+}
+
+export interface PlannerRunStoredWarning {
+  code: string;
+  taskId?: string;
+  deficitMinutes?: number;
+  reasonCodes: string[];
 }
 
 export interface IntegrationAccountRecord extends AuditFields {

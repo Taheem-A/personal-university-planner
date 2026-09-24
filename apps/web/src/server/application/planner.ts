@@ -60,6 +60,7 @@ export type PlannerAssemblyResult =
       input: PlannerInput;
       horizon: PlannerHorizon;
       plannerVersion: PlannerVersion;
+      snapshotRevision: number;
     }
   | { status: "INPUT_FAILURE"; issues: PlannerInputIssue[] };
 export type PlannerServiceResult =
@@ -69,6 +70,7 @@ export type PlannerServiceResult =
       output: PlannerOutput;
       horizon: PlannerHorizon;
       plannerVersion: PlannerVersion;
+      snapshotRevision: number;
     }
   | { status: "INPUT_FAILURE"; issues: PlannerInputIssue[] };
 
@@ -147,6 +149,7 @@ export async function assembleCanonicalPlannerSnapshot(
         input: mapped.input,
         horizon,
         plannerVersion: PLANNER_VERSION,
+        snapshotRevision: state.user.planningRevision,
       };
     });
   });
@@ -159,7 +162,7 @@ export async function generateAuthoritativePlan(
   const assembled = await assembleCanonicalPlannerSnapshot(request);
   if (!assembled.ok) return { ok: false, error: assembled.error };
   if (assembled.value.status === "INPUT_FAILURE") return { ok: true, value: assembled.value };
-  const { input, horizon } = assembled.value;
+  const { input, horizon, snapshotRevision } = assembled.value;
   return resultOf(async () => {
     try {
       const output = generatePlan(input);
@@ -169,6 +172,7 @@ export async function generateAuthoritativePlan(
         output,
         horizon,
         plannerVersion: PLANNER_VERSION,
+        snapshotRevision,
       };
     } catch {
       return {
