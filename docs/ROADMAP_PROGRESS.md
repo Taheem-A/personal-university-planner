@@ -1,5 +1,71 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 3: GATE PASSED
+
+- The [literal exit-gate audit](./milestone-3-exit-gate.md) maps all 14 pipeline steps, required behavior, 13 canonical scenarios, major invariants and five exit criteria to source and test evidence. The roadmap gate passes on local and GitHub CI evidence. [CI run 36025989398](https://github.com/Taheem-A/personal-university-planner/actions/runs/36025989398) and [dependency review run 36025989365](https://github.com/Taheem-A/personal-university-planner/actions/runs/36025989365) both succeeded for implementation head `47f2bd87421b1d85453beb7d9df68990f40641b6`. Final-head checks follow this documentation update. Milestone 4 has **not started**.
+- A dependency-free seeded property generator exercises 1,000 valid explicit planner snapshots, including feasible and infeasible outcomes, variable workload/deadlines, hard/soft/protected/sleep time, capability and commute, dependency chains, locks/manual/previous sessions and preferences. It checks output validation, hard placement invariants, accounting, user intent, input purity and structured reasons. Failures carry a replay seed. A further 64 generated normalized snapshots each produced six deeply equal complete `heuristic-v1` outputs.
+- The sweep found a generated tiny-remainder validation defect and an empty reason on ordinary placements. Session construction now declines splits that would strand an unusable remainder; valid available capacity receives a structured reason. Retained hard conflicts now have a `RETAINED_CONFLICT` limiting factor even when all task minutes are nominally allocated.
+- Core isolation automation now rejects computed imports, ambient network/browser access, environment reads, implicit clock reads and randomness. Negative integration cases verify those rejection paths. The package manifest and source allowlist still permit only framework-independent domain/shared primitives.
+- Full local `pnpm verify` passed: format, lint, 73-file package boundaries, Prisma generation/validation, typecheck, **98/98** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests. Dedicated canonical and property suites passed **13/13** and **2/2**; `pnpm check:dependencies` reported no known vulnerabilities.
+- **Exact next roadmap item:** Milestone 4 — Planner Service, PlannerRuns, Persistence, and Incremental Replanning, after PR #3 review and merge.
+
+## 2026-09-24 — Milestone 3 canonical scenario and regression suite: IN PROGRESS
+
+- Added permanent synthetic Toronto engineering-semester fixtures and a dedicated `pnpm test:planner-scenarios` command. The [scenario matrix](./milestone-3-scenario-matrix.md) records all 13 required roadmap cases and their exact local pass state; the targeted suite passed **13/13**.
+- Shared assertions check version attribution, repeated-run determinism, input purity, ordered sessions, workload conservation, reasons/warnings and the hard validator for successful plans. The Saturday-off preview checks minimal movement plus a separately infeasible variant; commute, released-time, hard-lock and DST cases use explicit policies and instants.
+- The deadline-move fixture found a real soft-policy defect: a preferred free-time reserve could shorten a feasible full session and strand required work. Allocation now retries without that daily soft preference only if the first attempt leaves work unplaced, and selects the retry only when it fits more work. The normal unit suite passed **96/96** locally after this fix. Milestone 3 remains **IN PROGRESS**.
+- Full local `pnpm verify` passed: format, lint, 73-file package boundaries, Prisma generation/validation, typecheck, **96/96** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests. The dedicated canonical suite passed **13/13**.
+- **Exact next work item:** randomized property/invariant testing, determinism/version proof and literal Milestone-3 exit-gate audit.
+
+## 2026-09-24 — Milestone 3 validation, repair and scenarios: IN PROGRESS
+
+- The complete output audit reports structured issues for session validity, hard occupancy, availability/capability/commute, task state, dependency order, break and length rules, workload, ownership, deadlines and exact manual/lock preservation. `generatePlan` marks any remaining work or hard issue `INFEASIBLE`; a retained hard conflict is visible without moving user intent.
+- A bounded deterministic repair retries invalid generated placements with their conflicting intervals excluded, then validates the result again. Task-level evidence includes required/scheduled/unscheduled/suitable minutes, deficit, deadline and supported limiting factors. Concise placement reason codes are distinct from numeric ranking diagnostics.
+- Protected-window scenarios derive an in-memory alternative without changing input or persisting anything. Results include feasibility, moved/added/removed sessions, affected task IDs, capacity change and deficit change. Focused tests cover hard-validator families, repairable and non-repairable conflicts, deficits and causes, truthful reasons, and feasible/infeasible scenario deltas. Milestone 3 remains **IN PROGRESS**.
+- Full local `pnpm verify` passed: format, lint, 73-file package boundaries, Prisma generation/validation, typecheck, **83/83** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests.
+- **Exact next work item:** canonical scenario/regression suite, including semester fixtures, randomized invariants, DST/horizon edges and stability/replanning regressions.
+
+## 2026-09-24 — Milestone 3 planner policy: IN PROGRESS
+
+- Dependency readiness now governs placement across chains; unknown references and cycles fail explicitly. Retained dependent sessions require completed or fully reserved prerequisites, so a previous schedule cannot bypass ordering.
+- Capability/location and commute policy are enforced when selecting windows. Coarse energy affects productivity and choice. The planner avoids SOFT events and protected time first, then uses them only when needed for required work and reports the compromise. Local-time weekend costs discourage avoidable Sunday concentration.
+- Manual and locked sessions remain user intent. Valid prior planner sessions are retained preferentially, with a firm near-term stability tier and a weaker general churn preference. New hard conflicts or infeasible work may relax ordinary prior sessions; retained user/locked conflicts are reported rather than silently moved. Explicit released windows support `KEEP_FREE`, `REPLAN_IF_USEFUL` and `ALWAYS_REPLAN` without persistence or triggers.
+- Focused tests cover dependencies, hard/soft hierarchy, capability and commute, weekend bias, manual/lock preservation, stability and churn, conflict relaxation, released-time policies and deterministic retention. Milestone 3 remains **IN PROGRESS**.
+- Full local `pnpm verify` passed: format, lint, 71-file package boundaries, Prisma generation/validation, typecheck, **74/74** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests.
+- **Exact next work item:** validation, repair, explicit infeasibility, reason codes and non-mutating scenarios.
+
+## 2026-09-24 — Milestone 3 sustainable session construction and allocation: IN PROGRESS
+
+- Rebuilt pure session sizing around remaining productive work, preferred/minimum/maximum session lengths, splittability, capacity factor and five-minute clock precision. Tiny complete tasks can form one short session; non-splittable work either fits once or remains explicitly unscheduled. The output conserves required minutes.
+- Reserved unscheduled minimum-break gaps across generated and retained sessions. Maximum consecutive planned work applies to session clock length, with a quantum gap even when the configured break is zero. Window choice now weighs energy, productive rate, preferred completion, useful session size and nearby task switches.
+- Added a local-day sustainability policy. The planner first fits work beneath preferred daily-study and minimum-free-time budgets, then may exceed these soft limits when required work has no compliant placement. Quantified warnings report daily overages, free-time buffer use and preferred deadline-buffer consumption; true deadlines stay unchanged.
+- Focused tests cover splitting, non-splittable work, tiny remainders, breaks, consecutive work, daily and free-time soft limits, context grouping, exact workload conservation, five-minute precision and better-fit windows. Milestone 3 remains **IN PROGRESS**.
+- Full local `pnpm verify` passed: formatting, lint, 70-file package-boundary check, Prisma generation/validation, typecheck, **61/61** unit tests, **36/36** integration tests, core/database/Next.js production builds and **2/2** Chromium E2E tests.
+- **Exact next work item:** planner policy for dependencies, context, commute, weekend bias, manual intent, locks and stability.
+
+## 2026-09-23 — Milestone 3 capacity, risk and deterministic ranking: IN PROGRESS
+
+- Added task-specific suitable capacity, quantitative slack/pressure/deficit and explicit feasibility categories. The calculation respects true deadlines, availability, occupied time, energy, location, commute policy, capacity factors and optimistic prerequisite completion. Zero suitable capacity is represented by a null ratio rather than a fabricated denominator.
+- Added nonlinear deadline pressure, separate soft preferred-completion pressure, optional normalized importance, explicit prerequisite value, context fit, fragmentation and undesirable-time costs. Named typed `heuristic-v1` configuration holds weights and thresholds; stable score/deadline/preferred-target/task-ID tie-breakers determine ranking. Ready tasks are rescored after each placement.
+- Added focused ranking and numerical tests. Milestone 3 remains **IN PROGRESS**; placement sustainability, stability, repair, explanations and broader scenario/property verification remain.
+- Full local `pnpm verify` passed: format, lint, 69-file package-boundary check, Prisma generation/validation, typecheck, **45/45** unit tests, **36/36** integration tests, core/database/Next.js production builds and **2/2** Chromium E2E tests.
+- **Exact next work item:** sustainable session construction and allocation.
+
+## 2026-09-23 — Milestone 3 normalization and candidate capacity: IN PROGRESS
+
+- Added a pure normalization stage that clones and validates the planner snapshot, expands local recurrence with shared timezone utilities, retains unknown deadlines, and requires resolved estimates. Completed prerequisites can be supplied without fabricated estimates.
+- Eligibility excludes inactive, non-AUTO, zero-work and out-of-horizon tasks; dependency cycles are rejected, and dependents wait for fully allocated or completed prerequisites. The occupied timeline merges hard events, hard protected time, sleep and retained sessions. Disjoint candidate windows preserve energy, capability, location, commute and local-time metadata without counting overlapping availability twice.
+- Focused tests cover hard/soft subtraction, sleep, five-minute bounds, eligibility, dependencies, manual/locked sessions, overlapping availability, commute policy, timezone and DST recurrence, determinism and input purity. Milestone 3 remains **IN PROGRESS**.
+- Full local `pnpm verify` passed: formatting, lint, package boundaries, Prisma generation/validation, typecheck, **36/36** unit tests, **36/36** integration tests, core/database/Next.js production builds and **2/2** Chromium E2E tests.
+- **Exact next work item:** capacity/slack/risk/scoring/deterministic-ranking slice.
+
+## 2026-09-23 — Milestone 3 planner contract and architecture: IN PROGRESS
+
+- PR #2 is merged into default branch `master` at `d98dfd6`; Milestone 2 remains gate passed. The unmerged wording in the prior audit entry below is historical evidence from before the merge.
+- Established the explicit planner snapshot, typed `heuristic-v1` output version and pure module responsibilities recorded in [ADR 0005](./decisions/0005-planner-core-v1-contract.md). Existing baseline behavior was preserved. New constraint fields reject unsupported nonempty inputs until implemented; no planner persistence, production UI wiring or migration was added.
+- Local full `pnpm verify` passed: formatting, lint, boundaries, Prisma generation/validation, typecheck, **25/25** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests.
+- Milestone 3 remains **IN PROGRESS**. Exact next work item: normalization/eligibility/timeline/candidate-capacity slice.
+
 ## 2026-09-23 — Milestone 2: GATE PASSED
 
 - The final literal audit verified Google-only Auth.js, atomic/idempotent canonical identity mapping, session-derived actor scope, service-side Zod/domain checks, transaction-bound repositories, structured safe errors, explicit optimistic versions, account export/deletion and all intended Milestone-2 service families. No production route imports Prisma or repositories directly; no client-supplied owner ID is authoritative.

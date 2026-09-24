@@ -1,0 +1,100 @@
+# ADR 0005: Milestone-3 planner-core contract and architecture
+
+- Status: Accepted for the Milestone-3 contract slice
+- Date: 2026-09-23
+- Scope: Deterministic planner-core v1; no persistence or production UI wiring
+
+## Authority and sequencing
+
+The master _Personal University Planning System_ specification governs planner behavior and invariants. The _University Planner — Implementation Roadmap_ governs the Milestone-3 pipeline, test families and exit gate. This slice establishes the contract and module boundaries; it does not claim the complete heuristic or the milestone gate.
+
+## Planner-facing snapshot
+
+`PlannerInput` is a fully supplied, plain typed snapshot. The application layer must resolve canonical records, recurrence, timezone-local rules and unknown estimates before calling core. `PlannableTask` is now a narrow planner representation instead of inheriting the richer canonical `Task`; unknown canonical estimates must remain unknown until the caller has a justified value. Explicit inputs cover dependency edges, fixed events, expanded protected/sleep intervals, availability including commute classification, manual and locked sessions, previous sessions, policy preferences, replan intent and released-time policy. The task snapshot includes normalized importance and deadline confidence. `minimumSleepMinutes` is a planner policy value supplied by the caller. It is not silently derived from a database row.
+
+The canonical schema has protected-time rules and user day bounds, but no dedicated minimum-sleep preference. This is a policy-source gap for the later normalization slice, not grounds for a migration in this contract slice. That slice must document its source/default and expand hard sleep windows before enforcing minimum sleep. No planner input is fetched from PostgreSQL by core.
+
+`PlannerOutput.plannerVersion` identifies the centrally defined `heuristic-v1` contract. Warnings can carry machine-readable reason codes and quantified deficits. The placement-reason map is present but empty until explanation generation is implemented. No PlannerRun is written here.
+
+## Pure module boundaries
+
+- `index.ts`: public orchestration, baseline ranking, workload accounting, output assembly.
+- `input.ts`: baseline capability gate so explicit but deferred constraints cannot be silently ignored.
+- `windows.ts`: occupied intervals, candidate subtraction, eligibility and suitability helpers.
+- `pressure.ts`: suitable capacity, slack and pressure calculation.
+- `allocation.ts`: window selection, session sizing and placement, including the existing stability bonus.
+- `validation.ts`: current hard-event, task, overlap and lock checks.
+- `scenario.ts`: side-effect-free protected-window simulation.
+- `version.ts`: one named planner version.
+
+The current heuristic was moved with its established behavior. The next slices may split these modules further as normalization, dependency eligibility, sustainability, repair and explanation become real stages. The planner package depends only on domain and shared; the boundary checker rejects any other package dependency or external import, including database, UI, network and AI libraries.
+
+## Deliberate deferrals
+
+The baseline rejects nonempty dependencies, protected/sleep windows, manual sessions and commute windows, positive minimum sleep, non-incremental modes and a nondefault released-time policy. This is intentional fail-fast behavior while those semantics are being implemented. The existing daily limit, free-time buffer, deadline buffer, weekend bias, maximum consecutive work and complete stability policy remain unimplemented; callers must not treat this slice as production scheduling. Full placement reasons, hard/soft hierarchy, workload-conserving repair and randomized invariant tests remain Milestone-3 work.
+
+**Exact next slice:** normalization, eligibility, occupied timeline and candidate capacity, including dependency and sleep/protected-time handling. Subsequent slices complete risk/ranking, sustainable allocation, stability/repair, explanations and the canonical scenario/property suite before the Milestone-3 exit gate.
+
+## Normalization and candidate-capacity slice
+
+The next slice is now implemented. `normalizePlannerInput` clones the explicit snapshot, validates horizon/now/timezone and supplied effective estimates, expands local recurrence with shared time utilities, and produces an occupied timeline, eligibility graph, and disjoint candidate windows. Recurrence rules use their own explicit IANA timezone; local wall time survives DST. The normalized snapshot clears recurring rules after expansion so a second normalization does not duplicate occurrences. A completed prerequisite may be supplied through `completedTaskIds` without an invented estimate-bearing task snapshot. Unknown deadlines stay absent.
+
+`timeline.ts` merges half-open hard events, hard protected windows, sleep, active locks and manual sessions. Soft windows remain advisory. For every complete local day inside the horizon, a positive `minimumSleepMinutes` requires a supplied sleep block beginning on that day of at least that elapsed duration. The caller supplies bedtime/sleep recurrence; core does not invent it. Partial edge days are exempt because their sleep may lie outside the requested horizon.
+
+`windows.ts` subtracts merged hard occupancy, rounds candidate boundaries inward to the shared five-minute quantum, and represents overlapping availability as simultaneous alternatives over one clock interval. It preserves energy, tags, capacity factor, commute kind and local start metadata without double-counting overlap. Commute suitability requires the preference, a transit-capable task, and a transit-capable window. `eligibility.ts` excludes non-ready/non-AUTO/zero-work/out-of-horizon tasks, detects dependency cycles, and holds dependents until prerequisites are completed or fully allocated. Unsupported replan and released-time policy semantics still await later Milestone-3 slices; no persistence or UI wiring was added.
+
+Active future manual and locked sessions reserve both clock time and planned task minutes. Normalization exposes unallocated minutes separately from the canonical remaining-work fact, rejects retained allocations that exceed it, and lets a dependent start only after a fully reserved prerequisite ends. This avoids allocating the same work twice without mutating the caller's task snapshot.
+
+**Exact next slice:** suitable capacity, slack, deadline/preferred-completion risk, documented scoring and deterministic ranking. Allocation sustainability, stability, repair and full explanations follow after that.
+
+## Capacity, risk and ranking slice
+
+`windowSuitability` is the shared capability and rate calculation for both pressure and placement. It bounds each candidate by task availability, now, true deadline, horizon and an optional preferred target, then applies location, energy, commute policy, capacity factor, five-minute precision and minimum useful session size. Simultaneous availability alternatives supply one best effective rate, never additive time. Unsplittable work needs one suitable window. An optimistic dependency finish bound excludes time before prerequisite work could complete; actual allocation still enforces completed prerequisite sessions. This bound is a prioritization estimate, not a promise that the later allocation can meet every deadline.
+
+`TaskPressure` exposes suitable minutes, slack (suitable minutes minus remaining work), pressure ratio, capacity deficit, feasibility class, true deadline, preferred target and scored components. Positive work with zero capacity has a null ratio and an explicit infeasible or horizon-limited classification. Unknown deadline stays absent. An optional normalized importance value contributes only when supplied; no grade weight is invented. Preferred completion comes from an explicit target or a policy buffer, and never changes the true deadline. A bounded downstream-work factor raises prerequisite priority. Named `HEURISTIC_V1_CONFIG` coefficients give capacity pressure more influence than urgency, importance or preferences; deadline pressure follows an inverse-power curve. Context penalties include late high-energy time and fragmentation.
+
+`rankTaskPressures` sorts by score, actual deadline, preferred target and codepoint task ID. Initial diagnostic ranking accounts for optimistic dependency readiness. Orchestration recomputes pressure for ready tasks after each placement and exposes both initial ranking and allocation order. Placement still has the baseline session construction policy; sustainable daily limits, breaks, consecutive-work limits, plan stability, repair and complete explanations are the next Milestone-3 slices.
+
+**Exact next slice:** sustainable session construction and allocation.
+
+## Sustainable session construction and allocation slice
+
+`allocation.ts` now sizes productive work against a window's effective rate, while the session clock remains on the shared five-minute quantum. Preferred length can stretch modestly to avoid tiny last fragments. Maximum useful session and maximum consecutive-work lengths cap each placement; a non-splittable task must fit in one session. Unscheduled minutes remain explicit. Every generated session reserves an unscheduled minimum-break gap in the remaining candidate timeline, including gaps from retained manual/locked sessions. A five-minute gap remains when the configured minimum is zero so separate maximum-length sessions never form one unbroken work run.
+
+`sustainability.ts` divides elapsed intervals by explicit local calendar day, including DST boundaries. Initial candidate capacity plus retained work defines a daily envelope. Placement first honors the preferred daily study ceiling and minimum free-time buffer, then may consume either soft budget to place otherwise stranded required work. Output warns with quantified local-day overages; retained/manual sessions are counted without moving them. Preferred completion remains a soft target and buffer consumption is reported without changing the actual deadline. Window selection adds useful session fit and nearby context-switch costs to the earlier energy, productive-rate and urgency factors. Validation checks workload conservation, clock precision, break gaps and session maxima.
+
+**Exact next slice:** planner policy for dependencies, context, commute, weekend bias, manual intent, locks and stability. Repair, explanations and the broader scenario/property suite remain later Milestone-3 work.
+
+## Planner policy slice
+
+Dependency readiness remains an allocation gate, and the explicit graph rejects unknown task references and cycles. Previously generated dependent sessions are retained only when prerequisite work is fully reserved before their start. Candidate capability/location and commute-policy checks are requirements; LOW/MEDIUM/HIGH energy remains a coarse productivity preference. The allocation stages first avoid SOFT events and protected windows, then use them only if needed to place required work, recording a warning. Weekend bias and a Sunday-concentration cost are preferences measured in the planner timezone, never hard exclusions.
+
+Manual/locked sessions and active previous sessions are strong user intent and are retained as supplied. An ordinary prior generated session is retained only while valid against task state, availability, true deadline, capability, hard occupancy, breaks, workload and dependencies. Incremental planning first attempts to retain all valid prior work; if that strands more required work, it relaxes sessions outside the configured near-term stability window, then near-term sessions, reporting a stability warning. Ties keep the more stable attempt. Explicit hard conflicts involving retained user/locked work are reported and are not silently moved. A retained allocation above a task's remaining work remains an invalid input; comprehensive conflicting-input diagnosis is a later slice.
+
+Released capacity is supplied explicitly as windows; core does not infer completion or run triggers. `KEEP_FREE` reserves it, `REPLAN_IF_USEFUL` tries ordinary capacity before consuming it, and `ALWAYS_REPLAN` treats it as ordinary capacity. The prior `LEAVE_FREE` spelling remains a compatible alias. A use of released time is reported. No plan persistence or UI connection is introduced.
+
+**Exact next slice:** validation, repair, explicit infeasibility, reason codes and non-mutating scenarios. Full explanations and broad property testing remain open before the Milestone-3 gate.
+
+## Validation, repair and scenario slice
+
+`validatePlanDetailed` audits the complete returned session set against the normalized explicit snapshot. It reports machine-readable issues for hard occupancy, availability, capability, commute, task state, ownership, dependency order, deadline, workload, precision, session/break lengths and exact fixed-session preservation. Retained user/locked conflicts remain in the plan with explicit issues and `INFEASIBLE` status; core does not silently override the user. An already active retained session that began before `now` cannot have its elapsed portion remeasured from future candidate capacity without a supplied actual-work split.
+
+If a generated session fails validation, core makes one deterministic repair attempt by excluding the invalid placement interval and reallocating. The repaired attempt is validated again and accepted only if it improves the issue count or ties while reducing unplaced work. Hard impossibility is returned as `INFEASIBLE`, never labelled valid. Input facts that cannot be normalized, such as invalid instants, dependency cycles or retained allocations exceeding remaining work, still fail fast as invalid input.
+
+`PlannerOutput` now includes a binary validity state, validation issues and per-task quantitative infeasibility evidence. Limiting factors describe observed capacity restrictions; they are not automatic lifestyle decisions. Concise session reason codes describe actual placement conditions and remain separate from numerical pressure components. Scenario simulation clones through normalization, generates a full alternative, compares sessions and reports capacity/deficit deltas and feasibility. It does not persist or apply constraints.
+
+**Exact next slice:** canonical scenario/regression suite with representative fixtures and randomized invariants, followed by a Milestone-3 exit audit.
+
+## Canonical scenario suite
+
+`tests/fixtures/planner/semester.js` and `tests/unit/planner-scenarios.test.js` are the permanent, synthetic regression contract. The [scenario matrix](../milestone-3-scenario-matrix.md) enumerates all 13 roadmap cases and outcomes. Real-world failures must be reduced to synthetic fixtures, tested, fixed and retained permanently; private user data must not be copied into tests.
+
+The deadline-move case demonstrated that a soft daily free-time reserve could cause false infeasibility: the first session was shortened even though no later pre-deadline capacity remained. `placeTask` now runs a second deterministic allocation for that task without the daily soft preference if the first leaves work unplaced. It chooses the retry only if more required work fits, then reports the soft-policy compromise through existing sustainability warnings. This changes no hard constraint or true deadline.
+
+**Exact next slice:** randomized property/invariant testing, determinism and version proof, and a literal Milestone-3 exit-gate audit.
+
+## Final acceptance decision
+
+The permanent property suite uses a small fixed-seed generator rather than a new dependency. The repository policy favors owning clear test code, and the generator supplies 1,000 reproducible varied explicit snapshots with a single-seed replay path. Independent assertions check placements and accounting in addition to calling the public validator. The complete output is deeply compared six times for each of 64 additional normalized inputs. Both suites run under the ordinary `pnpm verify` unit stage; dedicated commands support targeted replay.
+
+The sweep exposed two missing diagnostic/placement semantics. `AVAILABLE_CAPACITY` identifies an actual compatible candidate for ordinary generated placements, without claiming urgency or constraint pressure that is not present. `RETAINED_CONFLICT` identifies a user-intent session whose hard validation issue makes the plan infeasible despite zero unallocated work. Session construction refuses a split that would strand a remainder smaller than the task minimum. The central `heuristic-v1` version remains unchanged because this is the first completed acceptance of that version; the fixed contract and its gate evidence are recorded in the Milestone-3 exit audit.

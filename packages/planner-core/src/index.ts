@@ -1,387 +1,410 @@
 import type {
-  AvailabilityWindow,
-  CalendarEvent,
   PlannerInput,
   PlannerOutput,
+  PlannerReasonCode,
   PlannerWarning,
-  PlannableTask,
-  ScenarioRequest,
-  ScenarioResult,
-  TaskPressure,
   WorkSession,
 } from "../../domain/src";
-import {
-  addMinutes,
-  instantToLocal,
-  maxDate,
-  intersectIntervals,
-  minDate,
-  minutesBetween,
-  overlaps,
-  roundUpToQuantum,
-  sortByStart,
-  subtractIntervals,
-} from "../../shared/src";
+import { intersectIntervals, overlaps, sortByStart, subtractIntervals } from "../../shared/src";
+import { placeTask, reserveSessionBreaks } from "./allocation";
+import { dependencyReadyAt } from "./eligibility";
+import { normalizePlannerInput } from "./input";
+import { calculatePressure, dependencyImportance, rankTaskPressures, rankTasks } from "./pressure";
+import { validatePlanDetailed } from "./validation";
+import { placementReasons, quantifyInfeasibility } from "./diagnostics";
+import { PLANNER_VERSION } from "./version";
+import { dailyPolicy, sustainablePolicyWarnings } from "./sustainability";
+import { retainedPreviousSessions, type RetentionTier } from "./policy";
+import { repairPlan } from "./repair";
 
-interface CandidateWindow extends AvailabilityWindow {
-  startAt: Date;
-  endAt: Date;
-}
+export { validatePlan, validatePlanDetailed } from "./validation";
+export { simulateProtectedWindow } from "./scenario";
+export { PLANNER_VERSION } from "./version";
+export { normalizePlannerInput } from "./input";
+export { calculatePressure, rankTaskPressures, rankTasks } from "./pressure";
+export { HEURISTIC_V1_CONFIG } from "./config";
+export { repairPlan } from "./repair";
 
-const FIVE_MINUTES = 5;
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
-function energyFit(task: PlannableTask, window: CandidateWindow): number {
-  const rank = { LOW: 0, MEDIUM: 1, HIGH: 2 } as const;
-  const delta = rank[window.energyLevel] - rank[task.energyRequirement];
-  if (delta >= 0) return 1;
-  return delta === -1 ? 0.72 : 0.42;
-}
-
-function locationFits(task: PlannableTask, window: CandidateWindow): boolean {
-  if (task.locationRequirements.length === 0 || task.locationRequirements.includes("ANYWHERE"))
-    return true;
-  return task.locationRequirements.every((requirement) =>
-    window.allowedLocationTags.includes(requirement),
-  );
-}
-
-function occupiedIntervals(input: PlannerInput): { startAt: Date; endAt: Date }[] {
-  const hardEvents = input.events
-    .filter((event) => event.constraintLevel === "HARD")
-    .map((event) => ({ startAt: event.startAt, endAt: event.endAt }));
-  const locked = input.lockedSessions
-    .filter((session) => session.state === "PLANNED" || session.state === "ACTIVE")
-    .map((session) => ({ startAt: session.startAt, endAt: session.endAt }));
-  return sortByStart([...hardEvents, ...locked]);
-}
-
-function candidateWindows(input: PlannerInput): CandidateWindow[] {
-  const occupied = occupiedIntervals(input);
-  const result: CandidateWindow[] = [];
-  for (const availability of input.availability) {
-    const bounded = intersectIntervals(availability, {
-      startAt: input.horizonStart,
-      endAt: input.horizonEnd,
-    });
-    if (!bounded) continue;
-    const free = subtractIntervals([bounded], occupied);
-    for (const part of free) {
-      result.push({ ...availability, startAt: part.startAt, endAt: part.endAt });
-    }
-  }
-  return sortByStart(result);
-}
-
-function eligibleTask(task: PlannableTask, input: PlannerInput): boolean {
-  return (
-    (task.status === "READY" || task.status === "IN_PROGRESS") &&
-    task.planningMode === "AUTO" &&
-    task.remainingMinutes > 0 &&
-    task.availableFrom <= input.horizonEnd
-  );
-}
-
-function windowUsableMinutes(
-  task: PlannableTask,
-  window: CandidateWindow,
-  input: PlannerInput,
-): number {
-  if (!locationFits(task, window)) return 0;
-  const start = maxDate(window.startAt, task.availableFrom, input.now);
-  const deadline = task.dueAt ?? input.horizonEnd;
-  const end = minDate(window.endAt, deadline, input.horizonEnd);
-  if (end <= start) return 0;
-  const clock = minutesBetween(start, end);
-  const energy = energyFit(task, window);
-  return Math.floor(clock * clamp01(window.capacityFactor) * energy);
-}
-
-function calculatePressure(
-  task: PlannableTask,
-  windows: CandidateWindow[],
-  input: PlannerInput,
-): TaskPressure {
-  const suitableCapacityMinutes = windows.reduce(
-    (sum, window) => sum + windowUsableMinutes(task, window, input),
-    0,
-  );
-  const slackMinutes = suitableCapacityMinutes - task.remainingMinutes;
-  const pressureRatio = task.remainingMinutes / Math.max(1, suitableCapacityMinutes);
-  const dueHours = task.dueAt
-    ? Math.max(0.25, (task.dueAt.getTime() - input.now.getTime()) / 3_600_000)
-    : 24 * 30;
-  const deadlinePressure = 1 / Math.sqrt(dueHours);
-  const lowSlackPressure = slackMinutes <= 0 ? 4 : 1 / Math.max(1, slackMinutes / 60);
-  const preferredPressure =
-    task.preferredCompletionAt && task.preferredCompletionAt <= input.horizonEnd ? 0.5 : 0;
-  const override = task.priorityOverride ?? 0;
-  const score =
-    pressureRatio * 3 + deadlinePressure * 4 + lowSlackPressure + preferredPressure + override;
-  return {
-    taskId: task.id,
-    suitableCapacityMinutes,
-    remainingMinutes: task.remainingMinutes,
-    slackMinutes,
-    pressureRatio,
-    score,
-  };
-}
-
-function sessionTarget(
-  task: PlannableTask,
-  availableClockMinutes: number,
-  remaining: number,
-): number {
-  const preferred = Math.min(task.preferredSessionMinutes, remaining, availableClockMinutes);
-  const max = Math.min(task.maximumSessionMinutes, remaining, availableClockMinutes);
-  let target = preferred >= task.minimumSessionMinutes ? preferred : max;
-  if (remaining < task.minimumSessionMinutes) target = Math.min(remaining, availableClockMinutes);
-  if (!task.splittable && remaining > availableClockMinutes) return 0;
-  if (target <= 0) return 0;
-  return Math.min(availableClockMinutes, roundUpToQuantum(target, FIVE_MINUTES));
-}
-
-function stableSessionBonus(taskId: string, window: CandidateWindow, input: PlannerInput): number {
-  const old = input.previousSessions?.find(
-    (session) =>
-      session.taskId === taskId &&
-      overlaps(session.startAt, session.endAt, window.startAt, window.endAt),
-  );
-  return old ? 0.6 : 0;
-}
-
-function chooseWindow(
-  task: PlannableTask,
-  windows: CandidateWindow[],
-  input: PlannerInput,
-): number {
-  let bestIndex = -1;
-  let bestScore = -Infinity;
-  for (let index = 0; index < windows.length; index += 1) {
-    const window = windows[index];
-    const usable = windowUsableMinutes(task, window, input);
-    if (usable < Math.min(task.minimumSessionMinutes, task.remainingMinutes)) continue;
-    if (!locationFits(task, window)) continue;
-    const energy = energyFit(task, window);
-    const deadline = task.dueAt ?? input.horizonEnd;
-    const hoursBeforeDeadline = Math.max(
-      0.25,
-      (deadline.getTime() - window.startAt.getTime()) / 3_600_000,
-    );
-    const earlyUsefulness = 1 / Math.sqrt(hoursBeforeDeadline);
-    const lateHour = Number(instantToLocal(window.startAt, input.timezone).time.slice(0, 2));
-    const latePenalty =
-      task.energyRequirement === "HIGH" &&
-      input.preferences.avoidLateHighEnergyTasks &&
-      lateHour >= 21
-        ? 1.5
-        : 0;
-    const score =
-      energy * 2 +
-      window.capacityFactor +
-      earlyUsefulness +
-      stableSessionBonus(task.id, window, input) -
-      latePenalty;
-    if (score > bestScore) {
-      bestScore = score;
-      bestIndex = index;
-    }
-  }
-  return bestIndex;
-}
-
-function placeTask(
-  task: PlannableTask,
-  windows: CandidateWindow[],
-  input: PlannerInput,
-  sessionCounter: { value: number },
-): { sessions: WorkSession[]; remaining: number; windows: CandidateWindow[] } {
-  const sessions: WorkSession[] = [];
-  let remaining = task.remainingMinutes;
-  const mutable = [...windows];
-
-  while (remaining > 0) {
-    const windowIndex = chooseWindow({ ...task, remainingMinutes: remaining }, mutable, input);
-    if (windowIndex < 0) break;
-    const window = mutable[windowIndex];
-    const startAt = maxDate(window.startAt, task.availableFrom, input.now);
-    const deadline = task.dueAt ?? input.horizonEnd;
-    const endBound = minDate(window.endAt, deadline, input.horizonEnd);
-    const availableClock = minutesBetween(startAt, endBound);
-    const target = sessionTarget(task, availableClock, remaining);
-    if (target <= 0) break;
-    const endAt = addMinutes(startAt, target);
-    sessions.push({
-      id: `generated-${sessionCounter.value++}`,
-      userId: input.userId,
-      taskId: task.id,
-      startAt,
-      endAt,
-      plannedMinutes: target,
-      state: "PLANNED",
-      generatedBy: "PLANNER",
-      locked: false,
-    });
-    remaining = Math.max(0, remaining - target);
-    if (endAt >= window.endAt) {
-      mutable.splice(windowIndex, 1);
-    } else {
-      mutable[windowIndex] = {
+function planAttempt(
+  rawInput: PlannerInput,
+  retainedPrevious: WorkSession[],
+  repairBlocks: { startAt: Date; endAt: Date }[] = [],
+): PlannerOutput {
+  const normalized = normalizePlannerInput(rawInput);
+  const input = normalized.input;
+  const softIntervals = [
+    ...input.events.filter((event) => event.constraintLevel === "SOFT"),
+    ...input.protectedWindows.filter((window) => window.level === "SOFT"),
+  ];
+  let windows = normalized.candidates;
+  if (repairBlocks.length > 0)
+    windows = windows.flatMap((window) =>
+      subtractIntervals([window], repairBlocks).map((part) => ({
         ...window,
-        startAt: addMinutes(endAt, input.preferences.minimumBreakMinutes),
-      };
-    }
-    if (!task.splittable) break;
-  }
-
-  return { sessions, remaining, windows: mutable };
-}
-
-export function validatePlan(sessions: WorkSession[], input: PlannerInput): string[] {
-  const errors: string[] = [];
-  const active = sortByStart(
-    sessions.filter((session) => session.state === "PLANNED" || session.state === "ACTIVE"),
-  );
-  for (let i = 0; i < active.length; i += 1) {
-    const session = active[i];
-    if (session.endAt <= session.startAt)
-      errors.push(`Session ${session.id} has non-positive duration.`);
-    const task = input.tasks.find((candidate) => candidate.id === session.taskId);
-    if (!task) errors.push(`Session ${session.id} references missing task ${session.taskId}.`);
-    if (task && session.startAt < task.availableFrom)
-      errors.push(`Session ${session.id} starts before task availability.`);
-    if (task?.dueAt && session.endAt > task.dueAt)
-      errors.push(`Session ${session.id} ends after hard deadline.`);
-    for (const event of input.events.filter((candidate) => candidate.constraintLevel === "HARD")) {
-      if (overlaps(session.startAt, session.endAt, event.startAt, event.endAt)) {
-        errors.push(`Session ${session.id} overlaps hard event ${event.id}.`);
-      }
-    }
-    if (
-      i > 0 &&
-      overlaps(active[i - 1].startAt, active[i - 1].endAt, session.startAt, session.endAt)
-    ) {
-      errors.push(`Sessions ${active[i - 1].id} and ${session.id} overlap.`);
-    }
-  }
-  for (const locked of input.lockedSessions) {
-    if (
-      !sessions.some(
-        (session) =>
-          session.id === locked.id && session.startAt.getTime() === locked.startAt.getTime(),
-      )
-    ) {
-      errors.push(`Locked session ${locked.id} was not preserved.`);
-    }
-  }
-  return errors;
-}
-
-export function generatePlan(input: PlannerInput): PlannerOutput {
-  let windows = candidateWindows(input);
-  const tasks = input.tasks.filter((task) => eligibleTask(task, input));
-  const pressures = tasks.map((task) => calculatePressure(task, windows, input));
-  const pressureByTask = new Map(pressures.map((pressure) => [pressure.taskId, pressure]));
-  const ranked = [...tasks].sort((a, b) => {
-    const pressureDelta =
-      (pressureByTask.get(b.id)?.score ?? 0) - (pressureByTask.get(a.id)?.score ?? 0);
-    if (Math.abs(pressureDelta) > 0.0001) return pressureDelta;
-    const aDue = a.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    const bDue = b.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    return aDue - bDue;
+        startAt: part.startAt,
+        endAt: part.endAt,
+      })),
+    );
+  if (input.releasedTimePolicy === "KEEP_FREE" || input.releasedTimePolicy === "LEAVE_FREE")
+    windows = windows.flatMap((window) =>
+      subtractIntervals([window], input.releasedWindows).map((part) => ({
+        ...window,
+        startAt: part.startAt,
+        endAt: part.endAt,
+      })),
+    );
+  const tasks = input.tasks
+    .filter((task) => normalized.eligibility.eligibleTaskIds.has(task.id))
+    .map((task) => ({
+      ...task,
+      remainingMinutes: normalized.unallocatedMinutesByTask.get(task.id)!,
+    }));
+  const priorIds = [...input.manualSessions, ...input.lockedSessions].flatMap((session) => {
+    const match = /^generated-(\d+)$/.exec(session.id);
+    return match ? [Number(match[1])] : [];
   });
-
-  const sessionCounter = { value: 1 };
-  const sessions: WorkSession[] = [...input.lockedSessions];
+  const sessionCounter = { value: Math.max(0, ...priorIds) + 1 };
+  const sessions: WorkSession[] = [
+    ...new Map(
+      [...input.manualSessions, ...input.lockedSessions].map((session) => [session.id, session]),
+    ).values(),
+  ];
+  const policy = dailyPolicy(input, normalized.candidates, sessions);
+  for (const retained of sessions) windows = reserveSessionBreaks(windows, retained, input);
+  const pressures = rankTasks(normalized, windows);
+  const rankedTaskIds = pressures.map((pressure) => pressure.taskId);
   const warnings: PlannerWarning[] = [];
+  const reasonsBySession: Record<string, PlannerReasonCode[]> = {};
+  for (const session of retainedPrevious) reasonsBySession[session.id] = ["STABILITY_PRESERVED"];
+  for (const session of sessions) {
+    if (session.generatedBy === "USER") reasonsBySession[session.id] = ["MANUAL_INTENT_PRESERVED"];
+    if (session.locked) reasonsBySession[session.id] = ["LOCK_PRESERVED"];
+  }
+  const hard = [
+    ...input.events.filter((event) => event.constraintLevel === "HARD"),
+    ...input.protectedWindows.filter((window) => window.level === "HARD"),
+    ...input.sleepWindows,
+  ];
+  for (const session of sessions) {
+    const task = input.tasks.find((candidate) => candidate.id === session.taskId);
+    if (
+      !task ||
+      session.startAt < task.availableFrom ||
+      (task.dueAt && session.endAt > task.dueAt)
+    ) {
+      warnings.push({
+        code: "HARD_CONFLICT",
+        taskId: session.taskId,
+        message: `Retained session ${session.id} conflicts with task availability or its true deadline.`,
+        reasonCodes: ["HARD_CONFLICT"],
+      });
+    }
+    const conflicts = hard.filter((window) =>
+      overlaps(session.startAt, session.endAt, window.startAt, window.endAt),
+    );
+    if (conflicts.length > 0) {
+      warnings.push({
+        code: "HARD_CONFLICT",
+        taskId: session.taskId,
+        message: `Retained session ${session.id} conflicts with a hard commitment.`,
+        deficitMinutes: conflicts.reduce((total, window) => {
+          const overlap = intersectIntervals(session, window);
+          return (
+            total + (overlap ? (overlap.endAt.getTime() - overlap.startAt.getTime()) / 60_000 : 0)
+          );
+        }, 0),
+        reasonCodes: ["HARD_CONFLICT"],
+      });
+    }
+  }
+  for (let index = 0; index < sessions.length; index += 1) {
+    for (let other = index + 1; other < sessions.length; other += 1) {
+      if (
+        !overlaps(
+          sessions[index].startAt,
+          sessions[index].endAt,
+          sessions[other].startAt,
+          sessions[other].endAt,
+        )
+      )
+        continue;
+      warnings.push({
+        code: "HARD_CONFLICT",
+        taskId: sessions[other].taskId,
+        message: `Retained sessions ${sessions[index].id} and ${sessions[other].id} overlap.`,
+        reasonCodes: ["HARD_CONFLICT"],
+      });
+    }
+  }
   const unscheduledMinutesByTask: Record<string, number> = {};
 
-  for (const task of ranked) {
-    const placed = placeTask(task, windows, input, sessionCounter);
+  const pending = [...tasks];
+  const allocationOrderTaskIds: string[] = [];
+  const allocatedCompletion = new Map<string, Date>(
+    [...normalized.reservedEndByTask].filter(([id]) => normalized.fullyReservedTaskIds.has(id)),
+  );
+  while (pending.length > 0) {
+    const readyPressures = rankTaskPressures(
+      pending.flatMap((task) => {
+        const readyAt = dependencyReadyAt(
+          task.id,
+          input,
+          normalized.eligibility,
+          allocatedCompletion,
+        );
+        return readyAt
+          ? [
+              calculatePressure(
+                task,
+                windows,
+                input,
+                readyAt,
+                dependencyImportance(task.id, normalized),
+              ),
+            ]
+          : [];
+      }),
+    );
+    if (readyPressures.length === 0) break;
+    const pressure = readyPressures[0];
+    const index = pending.findIndex((task) => task.id === pressure.taskId);
+    const task = pending.splice(index, 1)[0];
+    allocationOrderTaskIds.push(task.id);
+    const readyAt = dependencyReadyAt(task.id, input, normalized.eligibility, allocatedCompletion)!;
+    const schedulable = {
+      ...task,
+      availableFrom: task.availableFrom > readyAt ? task.availableFrom : readyAt,
+    };
+    const placed = placeTask(
+      schedulable,
+      windows,
+      input,
+      sessionCounter,
+      policy,
+      sessions,
+      softIntervals,
+    );
     sessions.push(...placed.sessions);
+    for (const session of placed.sessions) {
+      const reasons: PlannerReasonCode[] = [];
+      if (
+        softIntervals.some((window) =>
+          overlaps(session.startAt, session.endAt, window.startAt, window.endAt),
+        )
+      ) {
+        reasons.push("SOFT_TIME_USED");
+        warnings.push({
+          code: "SOFT_TIME_USED",
+          taskId: session.taskId,
+          message: `${task.title} uses soft-protected time.`,
+          reasonCodes: ["SOFT_TIME_USED"],
+        });
+      }
+      if (
+        input.releasedWindows.some((window) =>
+          overlaps(session.startAt, session.endAt, window.startAt, window.endAt),
+        )
+      )
+        reasons.push("RELEASED_TIME_USED");
+      if (reasons.length > 0) reasonsBySession[session.id] = reasons;
+    }
     windows = placed.windows;
     if (placed.remaining > 0) {
       unscheduledMinutesByTask[task.id] = placed.remaining;
-      const pressure = pressureByTask.get(task.id);
       warnings.push({
-        code:
-          pressure && pressure.suitableCapacityMinutes <= 0 ? "NO_SUITABLE_WINDOW" : "INFEASIBLE",
+        code: pressure.suitableCapacityMinutes <= 0 ? "NO_SUITABLE_WINDOW" : "INFEASIBLE",
         taskId: task.id,
         message: `Task ${task.title} has ${placed.remaining} minute(s) that do not currently fit.`,
         deficitMinutes: placed.remaining,
+        reasonCodes: [
+          pressure.suitableCapacityMinutes <= 0 ? "NO_SUITABLE_WINDOW" : "INSUFFICIENT_CAPACITY",
+        ],
       });
     } else {
-      const pressure = pressureByTask.get(task.id);
-      if (pressure && pressure.slackMinutes >= 0 && pressure.slackMinutes <= 60) {
+      const last = placed.sessions.reduce<Date | undefined>(
+        (latest, session) => (!latest || session.endAt > latest ? session.endAt : latest),
+        undefined,
+      );
+      const reservedEnd = normalized.reservedEndByTask.get(task.id);
+      const completion =
+        last && reservedEnd ? (last > reservedEnd ? last : reservedEnd) : (last ?? reservedEnd);
+      if (completion) allocatedCompletion.set(task.id, completion);
+      if (pressure.slackMinutes >= 0 && pressure.slackMinutes <= 60) {
         warnings.push({
           code: "LOW_SLACK",
           taskId: task.id,
           message: `${task.title} has only ${pressure.slackMinutes} minute(s) of suitable slack.`,
+          reasonCodes: ["LOW_SLACK"],
+        });
+      }
+      if (
+        completion &&
+        pressure.preferredCompletionTargetAt &&
+        completion > pressure.preferredCompletionTargetAt
+      ) {
+        warnings.push({
+          code: "DEADLINE_BUFFER_USED",
+          taskId: task.id,
+          message: `${task.title} uses part of its preferred completion buffer.`,
+          deficitMinutes: Math.ceil(
+            (completion.getTime() - pressure.preferredCompletionTargetAt.getTime()) / 60_000,
+          ),
+          reasonCodes: ["DEADLINE_BUFFER_USED"],
         });
       }
     }
   }
 
-  const errors = validatePlan(sessions, input);
-  if (errors.length > 0) {
-    throw new Error(`Planner produced invalid output:\n${errors.join("\n")}`);
+  for (const task of [
+    ...pending,
+    ...input.tasks.filter((candidate) => normalized.eligibility.blockedTaskIds.has(candidate.id)),
+  ]) {
+    const unallocated = normalized.unallocatedMinutesByTask.get(task.id) ?? task.remainingMinutes;
+    unscheduledMinutesByTask[task.id] = unallocated;
+    warnings.push({
+      code: "DEPENDENCY_BLOCKED",
+      taskId: task.id,
+      message: `Task ${task.title} is blocked by a prerequisite.`,
+      deficitMinutes: unallocated,
+      reasonCodes: ["DEPENDENCY_BLOCKED"],
+    });
+  }
+  for (const task of input.tasks) {
+    if (
+      (task.status !== "READY" && task.status !== "IN_PROGRESS") ||
+      task.planningMode !== "AUTO" ||
+      normalized.eligibility.eligibleTaskIds.has(task.id) ||
+      normalized.eligibility.blockedTaskIds.has(task.id)
+    )
+      continue;
+    const unallocated = normalized.unallocatedMinutesByTask.get(task.id) ?? task.remainingMinutes;
+    if (unallocated <= 0) continue;
+    unscheduledMinutesByTask[task.id] = unallocated;
+    warnings.push({
+      code: "NO_SUITABLE_WINDOW",
+      taskId: task.id,
+      message: `Task ${task.title} has no schedulable capacity in this horizon.`,
+      deficitMinutes: unallocated,
+      reasonCodes: ["NO_SUITABLE_WINDOW"],
+    });
+  }
+
+  for (const retained of [...input.manualSessions, ...input.lockedSessions]) {
+    for (const prerequisiteId of normalized.eligibility.dependenciesByTask.get(retained.taskId) ??
+      []) {
+      const prerequisite = input.tasks.find((task) => task.id === prerequisiteId);
+      if (input.completedTaskIds.includes(prerequisiteId) || prerequisite?.status === "COMPLETED")
+        continue;
+      const completed = sessions.filter(
+        (session) =>
+          session.taskId === prerequisiteId &&
+          (session.state === "PLANNED" || session.state === "ACTIVE"),
+      );
+      const planned = completed.reduce((total, session) => total + session.plannedMinutes, 0);
+      if (
+        prerequisite &&
+        planned >= prerequisite.remainingMinutes &&
+        completed.every((session) => session.endAt <= retained.startAt)
+      )
+        continue;
+      warnings.push({
+        code: "HARD_CONFLICT",
+        taskId: retained.taskId,
+        message: `Retained session ${retained.id} starts before prerequisite ${prerequisiteId} is satisfied.`,
+        reasonCodes: ["DEPENDENCY_BLOCKED", "HARD_CONFLICT"],
+      });
+    }
+  }
+
+  warnings.push(...sustainablePolicyWarnings(input, policy, sessions));
+  const validationIssues = validatePlanDetailed(sessions, input);
+  const infeasibilities = quantifyInfeasibility(input, sessions, pressures, validationIssues);
+  for (const session of sessions) {
+    if (
+      session.generatedBy !== "PLANNER" ||
+      session.locked ||
+      input.manualSessions.some((fixed) => fixed.id === session.id)
+    )
+      continue;
+    const task = input.tasks.find((candidate) => candidate.id === session.taskId);
+    if (task)
+      reasonsBySession[session.id] = placementReasons(
+        session,
+        task,
+        pressures.find((pressure) => pressure.taskId === task.id),
+        input,
+        normalized.candidates,
+        reasonsBySession[session.id] ?? [],
+      );
   }
 
   return {
+    plannerVersion: PLANNER_VERSION,
+    status: validationIssues.length > 0 || infeasibilities.length > 0 ? "INFEASIBLE" : "VALID",
     sessions: sortByStart(sessions),
+    validationIssues,
+    infeasibilities,
     warnings,
     pressures,
+    rankedTaskIds,
+    allocationOrderTaskIds,
     unscheduledMinutesByTask,
+    reasonsBySession,
   };
 }
 
-export function simulateProtectedWindow(
-  input: PlannerInput,
-  request: ScenarioRequest,
-): ScenarioResult {
-  const before = generatePlan(input);
-  const synthetic: CalendarEvent = {
-    id: `scenario:${request.title}`,
-    userId: input.userId,
-    title: request.title,
-    startAt: request.startAt,
-    endAt: request.endAt,
-    constraintLevel: request.protectionLevel,
-    source: "SCENARIO",
-  };
-  const afterInput: PlannerInput = {
-    ...input,
-    events: [...input.events, synthetic],
-    previousSessions: before.sessions,
-  };
-  const after = generatePlan(afterInput);
-  const beforeByTask = new Map<string, WorkSession[]>();
-  const afterByTask = new Map<string, WorkSession[]>();
-  for (const session of before.sessions)
-    beforeByTask.set(session.taskId, [...(beforeByTask.get(session.taskId) ?? []), session]);
-  for (const session of after.sessions)
-    afterByTask.set(session.taskId, [...(afterByTask.get(session.taskId) ?? []), session]);
-  const movedTaskIds = [...new Set([...beforeByTask.keys(), ...afterByTask.keys()])].filter(
-    (taskId) => {
-      const a = beforeByTask.get(taskId) ?? [];
-      const b = afterByTask.get(taskId) ?? [];
-      if (a.length !== b.length) return true;
-      return a.some((session, index) => session.startAt.getTime() !== b[index]?.startAt.getTime());
-    },
+function unscheduledTotal(output: PlannerOutput): number {
+  return Object.values(output.unscheduledMinutesByTask).reduce(
+    (total, minutes) => total + minutes,
+    0,
   );
-  const deadlineSafe = after.warnings.every(
-    (warning) => warning.code !== "INFEASIBLE" && warning.code !== "NO_SUITABLE_WINDOW",
-  );
-  return {
-    request,
-    before,
-    after,
-    movedTaskIds,
-    canApply: deadlineSafe,
-    deadlineSafe,
-  };
+}
+
+export function generatePlan(rawInput: PlannerInput): PlannerOutput {
+  const base = normalizePlannerInput(rawInput);
+  const tiers: RetentionTier[] =
+    base.input.replanMode === "INCREMENTAL" ? ["ALL", "STABLE", "NONE"] : ["NONE"];
+  let best: { output: PlannerOutput; tier: RetentionTier } | undefined;
+  for (const tier of tiers) {
+    const retained = retainedPreviousSessions(base, tier);
+    const attemptInput: PlannerInput = {
+      ...base.input,
+      manualSessions: [...base.input.manualSessions, ...retained],
+    };
+    const output = repairPlan(planAttempt(attemptInput, retained), (blocks) =>
+      planAttempt(attemptInput, retained, blocks),
+    );
+    if (!best || unscheduledTotal(output) < unscheduledTotal(best.output)) best = { output, tier };
+    if (unscheduledTotal(best.output) === 0) break;
+  }
+  const result = best!.output;
+  if (base.input.replanMode === "INCREMENTAL") {
+    const retainedIds = new Set(result.sessions.map((session) => session.id));
+    for (const previous of base.input.previousSessions) {
+      if (
+        previous.generatedBy !== "PLANNER" ||
+        previous.locked ||
+        previous.state !== "PLANNED" ||
+        previous.endAt <= base.input.now ||
+        retainedIds.has(previous.id)
+      )
+        continue;
+      const withinStability =
+        previous.startAt.getTime() <
+        base.input.now.getTime() + base.input.preferences.planStabilityWindowMinutes * 60_000;
+      if (withinStability || best!.tier !== "ALL")
+        result.warnings.push({
+          code: "STABILITY_RELAXED",
+          taskId: previous.taskId,
+          message: `Previous session ${previous.id} could not remain fixed.`,
+          reasonCodes: ["STABILITY_RELAXED"],
+        });
+    }
+  }
+  // A result with remaining work or retained hard conflicts is explicitly infeasible.
+  result.status =
+    result.validationIssues.length > 0 || result.infeasibilities.length > 0
+      ? "INFEASIBLE"
+      : "VALID";
+  return result;
 }
