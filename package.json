@@ -23,6 +23,7 @@
     "test": "pnpm test:unit",
     "test:unit": "pnpm build:core && node --test tests/unit/*.test.js",
     "test:planner-scenarios": "pnpm build:core && node --test tests/unit/planner-scenarios.test.js",
+    "test:planner-properties": "pnpm build:core && node --test tests/unit/planner-properties.test.js",
     "test:integration": "node --test tests/integration/*.test.mjs",
     "test:e2e": "playwright test",
     "db:generate": "pnpm --filter @university-planner/database db:generate",

@@ -77,6 +77,7 @@ export function quantifyInfeasibility(
       .reduce((sum, session) => sum + session.plannedMinutes, 0);
     const suitableCapacityMinutes = pressure.suitableCapacityMinutes + reservedMinutes;
     const factors = new Set<PlannerLimitingFactor>();
+    if (taskIssues.some((issue) => issue.retained)) factors.add("RETAINED_CONFLICT");
     if (
       state.eligibility.blockedTaskIds.has(task.id) ||
       taskIssues.some((issue) => issue.code === "DEPENDENCY")
@@ -169,6 +170,7 @@ export function placementReasons(
     );
     return suitability ? [suitability] : [];
   })[0];
+  if (actual) reasons.add("AVAILABLE_CAPACITY");
   if (
     actual &&
     task.locationRequirements.length > 0 &&

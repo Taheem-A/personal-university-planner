@@ -43,6 +43,22 @@ test("planner boundary rejects external imports and manifest dependencies", () =
     result = spawnSync(process.execPath, [checker], { cwd: root, encoding: "utf8" });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /planner-core cannot depend on @prisma\/client/);
+
+    writeFileSync(manifest, JSON.stringify({ dependencies: {} }));
+    for (const forbidden of [
+      "const value = await import(`@university-planner/database`);\n",
+      "export const current = Date.now();\n",
+      "export const remote = fetch('/api/plan');\n",
+      "export const settings = process.env.PLANNER_MODE;\n",
+    ]) {
+      writeFileSync(source, forbidden);
+      result = spawnSync(process.execPath, [checker], { cwd: root, encoding: "utf8" });
+      assert.equal(result.status, 1, forbidden);
+      assert.match(
+        result.stderr,
+        /planner-core (?:imports must use literal specifiers|cannot use ambient IO)/,
+      );
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -1,5 +1,14 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 3: GATE PASSED locally
+
+- The [literal exit-gate audit](./milestone-3-exit-gate.md) maps all 14 pipeline steps, required behavior, 13 canonical scenarios, major invariants and five exit criteria to source and test evidence. The roadmap gate passes on local evidence; draft PR CI is tracked separately. Milestone 4 has **not started**.
+- A dependency-free seeded property generator exercises 1,000 valid explicit planner snapshots, including feasible and infeasible outcomes, variable workload/deadlines, hard/soft/protected/sleep time, capability and commute, dependency chains, locks/manual/previous sessions and preferences. It checks output validation, hard placement invariants, accounting, user intent, input purity and structured reasons. Failures carry a replay seed. A further 64 generated normalized snapshots each produced six deeply equal complete `heuristic-v1` outputs.
+- The sweep found a generated tiny-remainder validation defect and an empty reason on ordinary placements. Session construction now declines splits that would strand an unusable remainder; valid available capacity receives a structured reason. Retained hard conflicts now have a `RETAINED_CONFLICT` limiting factor even when all task minutes are nominally allocated.
+- Core isolation automation now rejects computed imports, ambient network/browser access, environment reads, implicit clock reads and randomness. Negative integration cases verify those rejection paths. The package manifest and source allowlist still permit only framework-independent domain/shared primitives.
+- Full local `pnpm verify` passed: format, lint, 73-file package boundaries, Prisma generation/validation, typecheck, **98/98** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests. Dedicated canonical and property suites passed **13/13** and **2/2**; `pnpm check:dependencies` reported no known vulnerabilities.
+- **Exact next roadmap item:** Milestone 4 — Planner Service, PlannerRuns, Persistence, and Incremental Replanning. Do not begin it in this branch; review the draft Milestone-3 PR first.
+
 ## 2026-09-24 — Milestone 3 canonical scenario and regression suite: IN PROGRESS
 
 - Added permanent synthetic Toronto engineering-semester fixtures and a dedicated `pnpm test:planner-scenarios` command. The [scenario matrix](./milestone-3-scenario-matrix.md) records all 13 required roadmap cases and their exact local pass state; the targeted suite passed **13/13**.

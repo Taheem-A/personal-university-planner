@@ -79,6 +79,18 @@ for (const filePath of sourceFiles) {
   if (!owner || !allowedInternalImports[owner]) continue;
   const source = readFileSync(filePath, "utf8");
   const relativeFile = path.relative(repositoryRoot, filePath).replaceAll("\\", "/");
+  if (owner === "planner-core") {
+    // Bare imports and the manifest allowlist are insufficient if runtime code can
+    // reach ambient state or hide a dependency behind a computed import.
+    const forbiddenAmbient =
+      /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|globalThis|document|localStorage|sessionStorage|navigator)\b|\bprocess\s*\.\s*env\b|\b(?:Date\.now|Math\.random)\s*\(|\bnew\s+Date\s*\(\s*\)/;
+    if (forbiddenAmbient.test(source))
+      violations.push(
+        `${relativeFile}: planner-core cannot use ambient IO, mutable state or implicit time`,
+      );
+    if (/\b(?:import|require)\s*\(\s*(?!["'])/.test(source))
+      violations.push(`${relativeFile}: planner-core imports must use literal specifiers`);
+  }
   const isTransport =
     owner === "web" &&
     (relativeFile.startsWith("apps/web/src/app/") || /^\s*["']use server["']/.test(source));

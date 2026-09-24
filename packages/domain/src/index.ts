@@ -296,6 +296,7 @@ export interface PlannerInput {
 
 export type PlannerVersion = "heuristic-v1";
 export type PlannerReasonCode =
+  | "AVAILABLE_CAPACITY"
   | "DEADLINE_PRESSURE"
   | "PREFERRED_COMPLETION_PRESSURE"
   | "LOW_SLACK"
@@ -330,7 +331,8 @@ export type PlannerLimitingFactor =
   | "CAPABILITY_MISMATCH"
   | "COMMUTE_DISABLED"
   | "DEPENDENCY_BLOCKED"
-  | "HORIZON_LIMIT";
+  | "HORIZON_LIMIT"
+  | "RETAINED_CONFLICT";
 
 export interface PlannerValidationIssue {
   code: string;

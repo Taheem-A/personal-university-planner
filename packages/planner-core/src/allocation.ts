@@ -79,6 +79,8 @@ export function sessionSize(
       }
     }
   }
+  // Do not strand a remainder that the validator could never accept as a useful session.
+  if (remaining - work > 0 && remaining - work < task.minimumSessionMinutes) return undefined;
   if (!task.splittable && work !== remaining) return undefined;
   return { clockMinutes: clock, workMinutes: work };
 }
@@ -220,6 +222,7 @@ function chooseWindow(
           size =
             shorter >= QUANTUM &&
             work >= Math.min(task.minimumSessionMinutes, remaining) &&
+            (remaining === work || remaining - work >= task.minimumSessionMinutes) &&
             (task.splittable || work === remaining)
               ? { clockMinutes: shorter, workMinutes: work }
               : undefined;
