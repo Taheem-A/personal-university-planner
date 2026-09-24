@@ -10,6 +10,7 @@ const {
   rankTasks,
 } = require("../../dist/packages/planner-core/src/index.js");
 const { windowUsableMinutes } = require("../../dist/packages/planner-core/src/windows.js");
+const { minutesByLocalDay } = require("../../dist/packages/planner-core/src/sustainability.js");
 
 function d(value) {
   return new Date(value);
@@ -748,4 +749,296 @@ test("exact ties and repeated plans use stable task IDs", () => {
   assert.deepEqual(generatePlan(input), first);
   input.tasks.reverse();
   assert.deepEqual(generatePlan(input).rankedTaskIds, ["a", "z"]);
+});
+
+test("splittable work is balanced into useful preferred-sized sessions", () => {
+  const input = priorityInput();
+  input.tasks = [priorityTask("essay", 170, "2026-09-21T18:00:00-04:00")];
+  input.tasks[0].minimumSessionMinutes = 20;
+  input.tasks[0].preferredSessionMinutes = 50;
+  input.tasks[0].maximumSessionMinutes = 90;
+  const out = generatePlan(input);
+  const work = out.sessions.filter((session) => session.taskId === "essay");
+  assert.equal(work.length, 3);
+  assert.equal(
+    work.reduce((total, session) => total + session.plannedMinutes, 0),
+    170,
+  );
+  assert.ok(work.every((session) => session.plannedMinutes >= 50 && session.plannedMinutes <= 60));
+  assert.equal(out.unscheduledMinutesByTask.essay, undefined);
+});
+
+test("non-splittable work fits one session or remains explicitly unscheduled", () => {
+  const input = priorityInput();
+  input.tasks = [
+    priorityTask("exam", 100, "2026-09-21T18:00:00-04:00", {
+      splittable: false,
+      maximumSessionMinutes: 90,
+    }),
+  ];
+  const impossible = generatePlan(input);
+  assert.equal(impossible.sessions.length, 0);
+  assert.equal(impossible.unscheduledMinutesByTask.exam, 100);
+  input.tasks[0].remainingMinutes = 75;
+  const feasible = generatePlan(input);
+  assert.equal(feasible.sessions.length, 1);
+  assert.equal(feasible.sessions[0].plannedMinutes, 75);
+});
+
+test("small final work and tiny complete tasks conserve exact remaining minutes", () => {
+  const input = priorityInput();
+  input.tasks = [
+    priorityTask("odd", 67, "2026-09-21T18:00:00-04:00", {
+      minimumSessionMinutes: 20,
+    }),
+  ];
+  let out = generatePlan(input);
+  assert.equal(
+    out.sessions.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    67,
+  );
+  assert.ok(out.sessions.every((session) => session.plannedMinutes >= 20));
+  input.tasks[0].remainingMinutes = 7;
+  out = generatePlan(input);
+  assert.equal(out.sessions.length, 1);
+  assert.equal(out.sessions[0].plannedMinutes, 7);
+});
+
+test("minimum breaks and maximum consecutive work hold across different tasks", () => {
+  const input = priorityInput();
+  input.preferences.maximumConsecutiveWorkMinutes = 60;
+  input.preferences.minimumBreakMinutes = 10;
+  input.tasks = [
+    priorityTask("one", 120, "2026-09-21T18:00:00-04:00"),
+    priorityTask("two", 60, "2026-09-21T18:00:00-04:00"),
+  ];
+  const out = generatePlan(input);
+  const sorted = [...out.sessions].sort((a, b) => a.startAt - b.startAt);
+  assert.equal(
+    sorted.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    180,
+  );
+  for (let index = 0; index < sorted.length; index += 1) {
+    assert.ok((sorted[index].endAt - sorted[index].startAt) / 60_000 <= 60);
+    if (index > 0) assert.ok((sorted[index].startAt - sorted[index - 1].endAt) / 60_000 >= 10);
+  }
+});
+
+test("daily ceiling and free-time buffer are kept when another day can carry work", () => {
+  const input = priorityInput();
+  input.horizonEnd = d("2026-09-22T18:00:00-04:00");
+  input.availability.push({
+    ...input.availability[0],
+    id: "next-day",
+    startAt: d("2026-09-22T08:00:00-04:00"),
+    endAt: input.horizonEnd,
+  });
+  input.preferences.preferredDailyStudyLimitMinutes = 90;
+  input.preferences.minimumFreeTimeMinutes = 60;
+  input.tasks = [priorityTask("spread", 170, "2026-09-22T18:00:00-04:00")];
+  const out = generatePlan(input);
+  assert.equal(
+    out.sessions.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    170,
+  );
+  assert.ok(out.sessions.some((session) => session.startAt.toISOString().startsWith("2026-09-22")));
+  assert.ok(!out.warnings.some((warning) => warning.code === "DAILY_STUDY_LIMIT_EXCEEDED"));
+  assert.ok(!out.warnings.some((warning) => warning.code === "FREE_TIME_BUFFER_USED"));
+});
+
+test("required work may consume soft daily and free-time limits with quantified warnings", () => {
+  const input = priorityInput();
+  input.availability[0].endAt = d("2026-09-21T12:00:00-04:00");
+  input.preferences.preferredDailyStudyLimitMinutes = 90;
+  input.preferences.minimumFreeTimeMinutes = 60;
+  input.tasks = [priorityTask("urgent", 190, "2026-09-21T12:00:00-04:00")];
+  const out = generatePlan(input);
+  assert.equal(
+    out.sessions.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    190,
+  );
+  assert.ok(
+    out.warnings.some(
+      (warning) => warning.code === "DAILY_STUDY_LIMIT_EXCEEDED" && warning.deficitMinutes > 0,
+    ),
+  );
+  assert.ok(
+    out.warnings.some(
+      (warning) => warning.code === "FREE_TIME_BUFFER_USED" && warning.deficitMinutes > 0,
+    ),
+  );
+});
+
+test("free-time reserve remains when a manageable workload fits", () => {
+  const input = priorityInput();
+  input.availability[0].endAt = d("2026-09-21T12:00:00-04:00");
+  input.preferences.preferredDailyStudyLimitMinutes = 1_000;
+  input.preferences.minimumFreeTimeMinutes = 60;
+  input.tasks = [priorityTask("manageable", 150, "2026-09-21T12:00:00-04:00")];
+  const out = generatePlan(input);
+  const study = out.sessions.reduce(
+    (sum, session) => sum + (session.endAt - session.startAt) / 60_000,
+    0,
+  );
+  assert.equal(
+    out.sessions.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    150,
+  );
+  assert.ok(240 - study >= 60);
+  assert.ok(!out.warnings.some((warning) => warning.code === "FREE_TIME_BUFFER_USED"));
+});
+
+test("generated work leaves a meaningful break after a retained session", () => {
+  const input = priorityInput();
+  input.tasks = [priorityTask("study", 90, "2026-09-21T18:00:00-04:00")];
+  input.manualSessions = [
+    {
+      id: "retained",
+      userId: input.userId,
+      taskId: "study",
+      startAt: d("2026-09-21T08:00:00-04:00"),
+      endAt: d("2026-09-21T08:30:00-04:00"),
+      plannedMinutes: 30,
+      state: "PLANNED",
+      generatedBy: "USER",
+      locked: false,
+    },
+  ];
+  const out = generatePlan(input);
+  const generated = out.sessions.filter((session) => session.generatedBy === "PLANNER");
+  assert.ok(generated.every((session) => session.startAt >= d("2026-09-21T08:40:00-04:00")));
+  assert.equal(
+    generated.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    60,
+  );
+});
+
+test("usable-work factor prevents over-allocation and sessions stay on five-minute boundaries", () => {
+  const input = priorityInput();
+  input.now = d("2026-09-21T08:02:00-04:00");
+  input.availability[0].capacityFactor = 0.5;
+  input.tasks = [priorityTask("slow", 60, "2026-09-21T18:00:00-04:00")];
+  const out = generatePlan(input);
+  assert.equal(
+    out.sessions.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    60,
+  );
+  assert.ok(
+    out.sessions.every(
+      (session) => session.plannedMinutes <= (session.endAt - session.startAt) / 120_000,
+    ),
+  );
+  assert.ok(
+    out.sessions.every(
+      (session) =>
+        session.startAt.getTime() % 300_000 === 0 && session.endAt.getTime() % 300_000 === 0,
+    ),
+  );
+});
+
+test("a later better-fit window can beat the first free gap", () => {
+  const input = priorityInput();
+  input.availability = [
+    {
+      ...input.availability[0],
+      id: "low",
+      endAt: d("2026-09-21T09:00:00-04:00"),
+      energyLevel: "LOW",
+    },
+    {
+      ...input.availability[0],
+      id: "high",
+      startAt: d("2026-09-21T10:00:00-04:00"),
+      endAt: d("2026-09-21T11:00:00-04:00"),
+      energyLevel: "HIGH",
+    },
+  ];
+  input.tasks = [
+    priorityTask("focus", 30, "2026-09-21T12:00:00-04:00", { energyRequirement: "HIGH" }),
+  ];
+  const out = generatePlan(input);
+  assert.equal(out.sessions[0].startAt.toISOString(), "2026-09-21T14:00:00.000Z");
+});
+
+test("task grouping avoids repeated context switches when a coherent plan fits", () => {
+  const input = priorityInput();
+  input.tasks = [
+    priorityTask("civ", 170, "2026-09-21T18:00:00-04:00"),
+    priorityTask("mat", 30, "2026-09-21T18:00:00-04:00"),
+  ];
+  const out = generatePlan(input);
+  const ids = out.sessions.map((session) => session.taskId);
+  const switches = ids.slice(1).filter((id, index) => id !== ids[index]).length;
+  assert.ok(switches <= 1);
+  assert.equal(
+    out.sessions.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    200,
+  );
+});
+
+test("infeasible work conserves scheduled plus explicit unscheduled minutes", () => {
+  const input = priorityInput();
+  input.availability[0].endAt = d("2026-09-21T08:40:00-04:00");
+  input.tasks = [priorityTask("too-large", 100, "2026-09-21T18:00:00-04:00")];
+  const out = generatePlan(input);
+  const scheduled = out.sessions.reduce((sum, session) => sum + session.plannedMinutes, 0);
+  assert.equal(scheduled + out.unscheduledMinutesByTask["too-large"], 100);
+  assert.ok(scheduled < 100);
+});
+
+test("maximum consecutive work still reserves a gap with zero configured break", () => {
+  const input = priorityInput();
+  input.preferences.minimumBreakMinutes = 0;
+  input.preferences.maximumConsecutiveWorkMinutes = 50;
+  input.tasks = [priorityTask("long", 100, "2026-09-21T18:00:00-04:00")];
+  const out = generatePlan(input);
+  assert.equal(
+    out.sessions.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    100,
+  );
+  assert.ok(out.sessions.every((session) => (session.endAt - session.startAt) / 60_000 <= 50));
+  for (let index = 1; index < out.sessions.length; index += 1)
+    assert.ok((out.sessions[index].startAt - out.sessions[index - 1].endAt) / 60_000 >= 5);
+});
+
+test("preferred completion buffer use is visible without changing the hard deadline", () => {
+  const input = priorityInput();
+  input.availability[0].startAt = d("2026-09-21T14:00:00-04:00");
+  input.preferences.preferredDeadlineBufferHours = 6;
+  input.tasks = [priorityTask("buffered", 60, "2026-09-21T18:00:00-04:00")];
+  const out = generatePlan(input);
+  assert.equal(
+    out.sessions.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    60,
+  );
+  assert.ok(out.warnings.some((warning) => warning.code === "DEADLINE_BUFFER_USED"));
+  assert.ok(out.sessions.every((session) => session.endAt <= input.tasks[0].dueAt));
+});
+
+test("daily accounting follows the explicit timezone through a DST change", () => {
+  const minutes = minutesByLocalDay(
+    d("2026-11-01T00:30:00-04:00"),
+    d("2026-11-01T02:30:00-05:00"),
+    "America/Toronto",
+  );
+  assert.deepEqual([...minutes], [["2026-11-01", 180]]);
+  const acrossMidnight = minutesByLocalDay(
+    d("2026-09-21T23:30:00-04:00"),
+    d("2026-09-22T00:30:00-04:00"),
+    "America/Toronto",
+  );
+  assert.deepEqual(
+    [...acrossMidnight],
+    [
+      ["2026-09-21", 30],
+      ["2026-09-22", 30],
+    ],
+  );
+});
+
+test("an elapsed planning horizon has no available session capacity", () => {
+  const input = priorityInput();
+  input.now = d("2026-09-22T08:00:00-04:00");
+  input.tasks = [priorityTask("late", 30, "2026-09-22T18:00:00-04:00")];
+  assert.deepEqual(generatePlan(input).sessions, []);
 });

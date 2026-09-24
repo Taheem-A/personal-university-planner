@@ -1,11 +1,12 @@
 import type { PlannerInput, PlannerOutput, PlannerWarning, WorkSession } from "../../domain/src";
 import { sortByStart } from "../../shared/src";
-import { placeTask } from "./allocation";
+import { placeTask, reserveSessionBreaks } from "./allocation";
 import { dependencyReadyAt } from "./eligibility";
 import { normalizePlannerInput } from "./input";
 import { calculatePressure, dependencyImportance, rankTaskPressures, rankTasks } from "./pressure";
 import { validatePlan } from "./validation";
 import { PLANNER_VERSION } from "./version";
+import { dailyPolicy, sustainablePolicyWarnings } from "./sustainability";
 
 export { validatePlan } from "./validation";
 export { simulateProtectedWindow } from "./scenario";
@@ -24,15 +25,16 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
       ...task,
       remainingMinutes: normalized.unallocatedMinutesByTask.get(task.id)!,
     }));
-  const pressures = rankTasks(normalized);
-  const rankedTaskIds = pressures.map((pressure) => pressure.taskId);
-
   const sessionCounter = { value: 1 };
   const sessions: WorkSession[] = [
     ...new Map(
       [...input.manualSessions, ...input.lockedSessions].map((session) => [session.id, session]),
     ).values(),
   ];
+  const policy = dailyPolicy(input, normalized.candidates, sessions);
+  for (const retained of sessions) windows = reserveSessionBreaks(windows, retained, input);
+  const pressures = rankTasks(normalized, windows);
+  const rankedTaskIds = pressures.map((pressure) => pressure.taskId);
   const warnings: PlannerWarning[] = [];
   const unscheduledMinutesByTask: Record<string, number> = {};
 
@@ -73,7 +75,7 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
       ...task,
       availableFrom: task.availableFrom > readyAt ? task.availableFrom : readyAt,
     };
-    const placed = placeTask(schedulable, windows, input, sessionCounter);
+    const placed = placeTask(schedulable, windows, input, sessionCounter, policy, sessions);
     sessions.push(...placed.sessions);
     windows = placed.windows;
     if (placed.remaining > 0) {
@@ -104,6 +106,21 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
           reasonCodes: ["LOW_SLACK"],
         });
       }
+      if (
+        completion &&
+        pressure.preferredCompletionTargetAt &&
+        completion > pressure.preferredCompletionTargetAt
+      ) {
+        warnings.push({
+          code: "DEADLINE_BUFFER_USED",
+          taskId: task.id,
+          message: `${task.title} uses part of its preferred completion buffer.`,
+          deficitMinutes: Math.ceil(
+            (completion.getTime() - pressure.preferredCompletionTargetAt.getTime()) / 60_000,
+          ),
+          reasonCodes: ["DEADLINE_BUFFER_USED"],
+        });
+      }
     }
   }
 
@@ -122,6 +139,7 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
     });
   }
 
+  warnings.push(...sustainablePolicyWarnings(input, policy, sessions));
   const errors = validatePlan(sessions, input);
   if (errors.length > 0) {
     throw new Error(`Planner produced invalid output:\n${errors.join("\n")}`);

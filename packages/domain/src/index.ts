@@ -296,10 +296,20 @@ export type PlannerReasonCode =
   | "HARD_CONSTRAINT"
   | "DEPENDENCY_BLOCKED"
   | "NO_SUITABLE_WINDOW"
-  | "INSUFFICIENT_CAPACITY";
+  | "INSUFFICIENT_CAPACITY"
+  | "DAILY_STUDY_LIMIT_EXCEEDED"
+  | "FREE_TIME_BUFFER_USED"
+  | "DEADLINE_BUFFER_USED";
 
 export interface PlannerWarning {
-  code: "INFEASIBLE" | "LOW_SLACK" | "NO_SUITABLE_WINDOW" | "DEPENDENCY_BLOCKED";
+  code:
+    | "INFEASIBLE"
+    | "LOW_SLACK"
+    | "NO_SUITABLE_WINDOW"
+    | "DEPENDENCY_BLOCKED"
+    | "DAILY_STUDY_LIMIT_EXCEEDED"
+    | "FREE_TIME_BUFFER_USED"
+    | "DEADLINE_BUFFER_USED";
   taskId?: Id;
   message: string;
   deficitMinutes?: number;

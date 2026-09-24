@@ -26,6 +26,12 @@ export interface PlannerHeuristicConfig {
   windowUrgencyWeight: number;
   stabilityWindowBonus: number;
   lateWindowPenalty: number;
+  preferredSessionStretch: number;
+  preferredWindowBonus: number;
+  sessionFitWeight: number;
+  taskContinuationBonus: number;
+  contextSwitchPenalty: number;
+  contextNeighborMinutes: number;
 }
 
 export const HEURISTIC_V1_CONFIG: Readonly<PlannerHeuristicConfig> = Object.freeze({
@@ -57,4 +63,11 @@ export const HEURISTIC_V1_CONFIG: Readonly<PlannerHeuristicConfig> = Object.free
   windowUrgencyWeight: 1,
   stabilityWindowBonus: 0.6,
   lateWindowPenalty: 1.5,
+  // A small stretch groups 170 minutes into three useful sessions near 60/55/55.
+  preferredSessionStretch: 1.2,
+  preferredWindowBonus: 1,
+  sessionFitWeight: 0.7,
+  taskContinuationBonus: 0.8,
+  contextSwitchPenalty: 0.6,
+  contextNeighborMinutes: 30,
 });

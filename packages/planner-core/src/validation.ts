@@ -1,11 +1,19 @@
 import type { PlannerInput, WorkSession } from "../../domain/src";
-import { overlaps, sortByStart } from "../../shared/src";
+import {
+  isOnSchedulingQuantum,
+  overlaps,
+  roundUpToQuantum,
+  sortByStart,
+  MINUTE_MS,
+  SCHEDULING_QUANTUM_MINUTES,
+} from "../../shared/src";
 
 export function validatePlan(sessions: WorkSession[], input: PlannerInput): string[] {
   const errors: string[] = [];
   const active = sortByStart(
     sessions.filter((session) => session.state === "PLANNED" || session.state === "ACTIVE"),
   );
+  const plannedByTask = new Map<string, number>();
   for (let i = 0; i < active.length; i += 1) {
     const session = active[i];
     if (session.endAt <= session.startAt)
@@ -33,6 +41,24 @@ export function validatePlan(sessions: WorkSession[], input: PlannerInput): stri
       }
     }
     if (session.generatedBy === "PLANNER" && !session.locked) {
+      const duration = (session.endAt.getTime() - session.startAt.getTime()) / MINUTE_MS;
+      if (
+        !isOnSchedulingQuantum(session.startAt.getTime() / MINUTE_MS) ||
+        !isOnSchedulingQuantum(session.endAt.getTime() / MINUTE_MS)
+      )
+        errors.push(`Session ${session.id} is off the scheduling quantum.`);
+      if (
+        !Number.isFinite(session.plannedMinutes) ||
+        session.plannedMinutes <= 0 ||
+        session.plannedMinutes > duration
+      )
+        errors.push(`Session ${session.id} has invalid planned work.`);
+      if (
+        task &&
+        (duration > task.maximumSessionMinutes ||
+          duration > input.preferences.maximumConsecutiveWorkMinutes)
+      )
+        errors.push(`Session ${session.id} exceeds a work-session maximum.`);
       for (const window of [
         ...input.sleepWindows,
         ...input.protectedWindows.filter((candidate) => candidate.level === "HARD"),
@@ -47,6 +73,22 @@ export function validatePlan(sessions: WorkSession[], input: PlannerInput): stri
     ) {
       errors.push(`Sessions ${active[i - 1].id} and ${session.id} overlap.`);
     }
+    if (i > 0 && (session.generatedBy === "PLANNER" || active[i - 1].generatedBy === "PLANNER")) {
+      const required = roundUpToQuantum(
+        Math.max(SCHEDULING_QUANTUM_MINUTES, input.preferences.minimumBreakMinutes),
+      );
+      if ((session.startAt.getTime() - active[i - 1].endAt.getTime()) / MINUTE_MS < required)
+        errors.push(`Sessions ${active[i - 1].id} and ${session.id} lack a minimum break.`);
+    }
+    if (session.endAt > input.now)
+      plannedByTask.set(
+        session.taskId,
+        (plannedByTask.get(session.taskId) ?? 0) + session.plannedMinutes,
+      );
+  }
+  for (const task of input.tasks) {
+    if ((plannedByTask.get(task.id) ?? 0) > task.remainingMinutes)
+      errors.push(`Task ${task.id} is allocated more than its remaining work.`);
   }
   for (const locked of [...input.lockedSessions, ...input.manualSessions]) {
     if (

@@ -279,15 +279,18 @@ export function rankTaskPressures(pressures: TaskPressure[]): TaskPressure[] {
     .map((pressure, index) => ({ ...pressure, rank: index + 1 }));
 }
 
-export function rankTasks(state: NormalizedPlanningState): TaskPressure[] {
+export function rankTasks(
+  state: NormalizedPlanningState,
+  windows: CandidateWindow[] = state.candidates,
+): TaskPressure[] {
   const pressures = state.input.tasks
     .filter((task) => state.eligibility.eligibleTaskIds.has(task.id))
     .map((task) =>
       calculatePressure(
         { ...task, remainingMinutes: state.unallocatedMinutesByTask.get(task.id)! },
-        state.candidates,
+        windows,
         state.input,
-        optimisticDependencyReadyAt(task.id, state),
+        optimisticDependencyReadyAt(task.id, state, windows),
         dependencyImportance(task.id, state),
       ),
     );

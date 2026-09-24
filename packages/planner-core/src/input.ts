@@ -146,6 +146,19 @@ export function normalizePlannerInput(input: PlannerInput): NormalizedPlanningSt
   ) {
     throw new RangeError("preferredDeadlineBufferHours must be finite and non-negative");
   }
+  for (const key of [
+    "preferredDailyStudyLimitMinutes",
+    "minimumFreeTimeMinutes",
+    "minimumBreakMinutes",
+  ] as const) {
+    if (!Number.isFinite(input.preferences[key]) || input.preferences[key] < 0)
+      throw new RangeError(`${key} must be finite and non-negative`);
+  }
+  if (
+    !Number.isFinite(input.preferences.maximumConsecutiveWorkMinutes) ||
+    input.preferences.maximumConsecutiveWorkMinutes < 5
+  )
+    throw new RangeError("maximumConsecutiveWorkMinutes must be at least five minutes");
   const effectiveStart = minDate(maxDate(now, horizonStart), horizonEnd);
   const expanded = expandRecurrence(input);
   for (const interval of [

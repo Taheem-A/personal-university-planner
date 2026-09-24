@@ -1,5 +1,14 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 3 sustainable session construction and allocation: IN PROGRESS
+
+- Rebuilt pure session sizing around remaining productive work, preferred/minimum/maximum session lengths, splittability, capacity factor and five-minute clock precision. Tiny complete tasks can form one short session; non-splittable work either fits once or remains explicitly unscheduled. The output conserves required minutes.
+- Reserved unscheduled minimum-break gaps across generated and retained sessions. Maximum consecutive planned work applies to session clock length, with a quantum gap even when the configured break is zero. Window choice now weighs energy, productive rate, preferred completion, useful session size and nearby task switches.
+- Added a local-day sustainability policy. The planner first fits work beneath preferred daily-study and minimum-free-time budgets, then may exceed these soft limits when required work has no compliant placement. Quantified warnings report daily overages, free-time buffer use and preferred deadline-buffer consumption; true deadlines stay unchanged.
+- Focused tests cover splitting, non-splittable work, tiny remainders, breaks, consecutive work, daily and free-time soft limits, context grouping, exact workload conservation, five-minute precision and better-fit windows. Milestone 3 remains **IN PROGRESS**.
+- Full local `pnpm verify` passed: formatting, lint, 70-file package-boundary check, Prisma generation/validation, typecheck, **61/61** unit tests, **36/36** integration tests, core/database/Next.js production builds and **2/2** Chromium E2E tests.
+- **Exact next work item:** planner policy for dependencies, context, commute, weekend bias, manual intent, locks and stability.
+
 ## 2026-09-23 — Milestone 3 capacity, risk and deterministic ranking: IN PROGRESS
 
 - Added task-specific suitable capacity, quantitative slack/pressure/deficit and explicit feasibility categories. The calculation respects true deadlines, availability, occupied time, energy, location, commute policy, capacity factors and optimistic prerequisite completion. Zero suitable capacity is represented by a null ratio rather than a fabricated denominator.
