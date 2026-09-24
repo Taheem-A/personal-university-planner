@@ -317,6 +317,8 @@ export interface PlannerRunCompletionSummary {
   unscheduledMinutes: number;
   risk: PlannerRunRisk[];
   delta: PlannerRunDelta;
+  /** Core placement codes keyed by durable WorkSession ID; older runs may omit this. */
+  sessionReasons?: Record<string, string[]>;
 }
 
 export interface PlannerRunRisk {

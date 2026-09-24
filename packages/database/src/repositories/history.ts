@@ -327,6 +327,12 @@ export function createHistoryRepositories(db: DatabaseExecutor): {
                 retainedSessionCount: result.summary.retainedSessionCount,
                 unscheduledMinutes: result.summary.unscheduledMinutes,
                 risk: result.summary.risk.map((item) => ({ ...item })),
+                sessionReasons: Object.fromEntries(
+                  Object.entries(result.summary.sessionReasons ?? {}).map(([id, codes]) => [
+                    id,
+                    [...codes],
+                  ]),
+                ),
                 delta: {
                   retained: [...result.summary.delta.retained],
                   moved: result.summary.delta.moved.map((item) => ({ ...item })),

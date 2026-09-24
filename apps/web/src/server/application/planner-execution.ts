@@ -120,6 +120,9 @@ export function validateAuthoritativeOutput(input: PlannerInput, output: Planner
     !Array.isArray(output.validationIssues) ||
     !Array.isArray(output.infeasibilities) ||
     !Array.isArray(output.warnings) ||
+    !output.reasonsBySession ||
+    typeof output.reasonsBySession !== "object" ||
+    Array.isArray(output.reasonsBySession) ||
     !output.unscheduledMinutesByTask ||
     typeof output.unscheduledMinutesByTask !== "object"
   )
@@ -158,6 +161,15 @@ export function validateAuthoritativeOutput(input: PlannerInput, output: Planner
       errors.push("New planner output is not an unlocked planned session.");
   }
   if (errors.length) return errors;
+  if (
+    Object.entries(output.reasonsBySession).some(
+      ([sessionId, codes]) =>
+        !ids.has(sessionId) ||
+        !Array.isArray(codes) ||
+        codes.some((code) => typeof code !== "string" || !code),
+    )
+  )
+    errors.push("Planner session reasons are invalid.");
   if (output.validationIssues.length || validatePlanDetailed(output.sessions, input).length)
     errors.push("Planner output violates a hard planning invariant.");
   const deficit = Object.values(output.unscheduledMinutesByTask);
@@ -304,6 +316,7 @@ function planChanges(
 ): {
   created: WorkSessionRecord[];
   superseded: { id: string; replacementId: string | null }[];
+  sessionReasons: Record<string, string[]>;
   delta: PlannerRunDelta;
 } {
   const oldById = new Map(old.map((session) => [session.id, session]));
@@ -311,6 +324,14 @@ function planChanges(
     .filter((session) => oldById.has(session.id))
     .map((session) => session.id);
   const retainedSet = new Set(retained);
+  const durableByEphemeral = new Map(
+    output.sessions
+      .filter(
+        (session) =>
+          retainedSet.has(session.id) || session.generatedBy === "USER" || session.locked,
+      )
+      .map((session) => [session.id, session.id]),
+  );
   const candidates = output.sessions.filter(
     (session) => !retainedSet.has(session.id) && session.generatedBy === "PLANNER",
   );
@@ -329,6 +350,7 @@ function planChanges(
     if (!identical) return true;
     retained.push(identical.id);
     retainedSet.add(identical.id);
+    durableByEphemeral.set(session.id, identical.id);
     return false;
   });
   const newIds = new Set<string>();
@@ -337,6 +359,7 @@ function planChanges(
     if (newIds.has(durableId) || oldById.has(durableId))
       throw new Error("Durable session identity collision");
     newIds.add(durableId);
+    durableByEphemeral.set(session.id, durableId);
     return {
       id: durableId,
       version: 0,
@@ -389,6 +412,12 @@ function planChanges(
   return {
     created,
     superseded,
+    sessionReasons: Object.fromEntries(
+      Object.entries(output.reasonsBySession).flatMap(([sessionId, codes]) => {
+        const durableId = durableByEphemeral.get(sessionId);
+        return durableId ? [[durableId, [...codes]]] : [];
+      }),
+    ),
     delta: {
       retained,
       moved,
@@ -509,6 +538,7 @@ export async function executePlannerForActor(
         ),
         risk: riskFromOutput(output),
         delta: changes.delta,
+        sessionReasons: changes.sessionReasons,
       };
       const completed = await tx.repositories.plannerRuns.complete(userId, runId, {
         status: "SUCCEEDED",

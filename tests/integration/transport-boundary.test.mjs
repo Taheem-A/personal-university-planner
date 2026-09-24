@@ -160,6 +160,7 @@ const schedule = app("application/schedule", {
   "./validation": validation,
 });
 const lifecycle = app("application/lifecycle", {
+  "./planner-reads": { planHistoryItem: (run) => run },
   "./authorization": auth,
   "./errors": errors,
   "./service": serviceUtils,

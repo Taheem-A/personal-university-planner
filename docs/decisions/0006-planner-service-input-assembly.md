@@ -70,6 +70,14 @@ The executor records `CORE_FAILURE`, `INVALID_OUTPUT`, `STALE_SNAPSHOT` or `PERS
 
 Normal CI exercises overlapping real service calls with controlled computation pauses, canonical edits, duplicate keys, rollback, late completion and user independence. `pnpm db:planner:races:verify` additionally exercises the actual PostgreSQL row lock, per-user independence, stale claim after a canonical write, keyed uniqueness and abandoned-run terminal guard. It requires `APP_ENV=test`, `CONFIRM_PLANNER_RACE_DATABASE=RUN_M4_PLANNER_RACES` and a direct disposable Neon database named `up_m4_planner_races_*` in `PLANNER_RACE_TEST_DATABASE_URL`; it does not run against an ambient production URL. The live command is reserved for the acceptance gate.
 
+## Production planner reads
+
+Today and Week are typed application read models, assembled from one user-scoped repeatable-read database snapshot. The read boundary loads the user's timezone, canonical planning state, latest run and latest successful run together. Local calendar-day and Monday-to-Monday week bounds use shared IANA time conversion. Shared recurrence expansion projects course meetings, protected/sleep rules and represented commute availability across DST; fixed events and active WorkSessions stay at their persisted UTC instants. Schedule objects are ordered by instant and stable ID, with no desktop layout coordinates or visual fixture imports.
+
+The current visible plan comprises only `PLANNED` or `ACTIVE` sessions with no supersession link. Manual and locked work remains visible; terminal and superseded rows are history only. The latest successful PlannerRun supplies authoritative risk, change delta and placement reasons even if a more recent attempt failed. The latest run separately marks `RUNNING` or `FAILED`, so a failed attempt never presents its output as the current plan. No run means `UNPLANNED`. The read models show known deadlines and remaining work without inventing missing estimates or due dates. Per-day availability windows are unioned before reporting minutes; they are an availability indicator, not a promise of free capacity.
+
+The successful PlannerRun summary now stores core `reasonsBySession` under durable WorkSession IDs. The executor maps temporary generated IDs and identical regenerated slots to their persisted IDs. Repository serialization copies only reason-code arrays, with no free-form academic text. Existing runs without this field expose an empty reason list. Plan history projects trigger/entity, status, timestamps, version, horizon, safe warning codes, concise summary, risk changes and delta; it omits the raw input snapshot and provider idempotency identity. Minimal authenticated Today, Week and run-history GET routes delegate to application services; transport does no planning or repository access.
+
 ## Next slice
 
-**production Today/Week planner view models and plan-history read services.** Milestone 4 remains in progress.
+**Milestone-4 final acceptance, live PostgreSQL proof, CI and exit-gate audit.** Milestone 4 remains in progress.

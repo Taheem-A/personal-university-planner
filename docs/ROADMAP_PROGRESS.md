@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 4 production planner read contracts: IN PROGRESS
+
+- Added typed Today and Week application read models backed by one authenticated, repeatable-read canonical snapshot. They include active manual/locked/generated work, fixed and recurring commitments, sleep/protected/commute windows, known deadlines, remaining work, risk and current PlannerRun state. Local day and week bounds use shared timezone and recurrence utilities.
+- Persisted planner-core placement reason codes under durable session IDs in safe PlannerRun summaries. Run-history reads expose provenance, version, horizon, warnings, delta and risk changes while omitting raw input snapshots and provider event identities.
+- Added thin authenticated Today, Week and run-history GET routes. The visual UI and demo fixtures remain untouched.
+- Full local `pnpm verify` passed, including unit/integration tests, schema validation, production build with the three new routes and 2 Chromium E2E checks. Planner scenarios (13/13), properties (2/2) and dependency audit passed.
+- **Exact next step: Milestone-4 final acceptance, live PostgreSQL proof, CI and exit-gate audit.** Milestone 4 remains **IN PROGRESS**.
+
 ## 2026-09-24 — Milestone 4 concurrency and idempotency hardening: IN PROGRESS
 
 - Overlapping same-user Planner Service computations now have deterministic CI race coverage: one succeeds and the other receives `STALE_SNAPSHOT`; a canonical edit during computation also rejects the old plan. Different-user progress is checked while one computation is paused.

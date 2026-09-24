@@ -106,7 +106,7 @@ function fakeDatabase() {
       async findMany({ where, take }) {
         return [...runs.values()]
           .filter((row) => row.userId === where.userId)
-          .sort((x, y) => y.startedAt - x.startedAt)
+          .sort((x, y) => y.startedAt - x.startedAt || x.id.localeCompare(y.id))
           .slice(0, take);
       },
       async updateManyAndReturn({ where, data }) {
@@ -225,6 +225,7 @@ test("idempotent start, guarded lifecycle, lookup and latest successful run", as
           retainedSessionCount: 0,
           unscheduledMinutes: 0,
           risk: [],
+          sessionReasons: { "session-1": ["AVAILABLE_CAPACITY", "DEADLINE_PRESSURE"] },
           delta: {
             retained: [],
             moved: [],
@@ -247,6 +248,10 @@ test("idempotent start, guarded lifecycle, lookup and latest successful run", as
   );
   const stored = await repository.getForUser("u1", "r1");
   assert.equal(stored.summary.secret, undefined);
+  assert.deepEqual(stored.summary.sessionReasons["session-1"], [
+    "AVAILABLE_CAPACITY",
+    "DEADLINE_PRESSURE",
+  ]);
   assert.equal(stored.warnings[0].providerPayload, undefined);
   assert.equal(
     (
@@ -261,6 +266,11 @@ test("idempotent start, guarded lifecycle, lookup and latest successful run", as
   );
   assert.equal((await repository.latestSuccessful("u1")).id, "r1");
   assert.equal((await repository.listRecent("u1", 10)).length, 3);
+  assert.deepEqual(
+    (await repository.listRecent("u1", 10)).map((row) => row.id),
+    ["manual-1", "manual-2", "r1"],
+  );
+  assert.equal((await repository.listRecent("u2", 10)).length, 1);
   assert.equal(
     (
       await repository.complete("u1", "manual-1", {

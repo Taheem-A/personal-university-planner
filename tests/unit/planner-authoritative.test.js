@@ -331,6 +331,7 @@ test("canonical snapshot invokes heuristic-v1 and persists a reloadable run and 
   assert.equal(run.inputSnapshot.input.now, now.toISOString());
   assert.equal(run.inputSnapshot.input.tasks.length, 1);
   assert.equal(run.summary.delta.added.length, active(db).length);
+  assert.ok(active(db).every((row) => Array.isArray(run.summary.sessionReasons[row.id])));
   assert.equal(db.data.sessions.filter((row) => row.userId === otherId).length, 0);
 });
 

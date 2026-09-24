@@ -332,6 +332,7 @@ const transactionalService = load("service", {
   "node:crypto": { randomUUID: () => `record-${Math.random()}` },
 });
 const lifecycle = load("lifecycle", {
+  "./planner-reads": { planHistoryItem: (run) => run },
   "./authorization": auth,
   "./errors": errors,
   "./service": transactionalService,
