@@ -13,34 +13,30 @@ export function validatePlan(sessions: WorkSession[], input: PlannerInput): stri
   const active = sortByStart(
     sessions.filter((session) => session.state === "PLANNED" || session.state === "ACTIVE"),
   );
+  const retainedIds = new Set([...input.manualSessions, ...input.lockedSessions].map((s) => s.id));
+  const generated = (session: WorkSession) =>
+    session.generatedBy === "PLANNER" && !session.locked && !retainedIds.has(session.id);
   const plannedByTask = new Map<string, number>();
   for (let i = 0; i < active.length; i += 1) {
     const session = active[i];
     if (session.endAt <= session.startAt)
       errors.push(`Session ${session.id} has non-positive duration.`);
     const task = input.tasks.find((candidate) => candidate.id === session.taskId);
-    if (!task && session.generatedBy === "PLANNER" && !session.locked)
+    if (!task && generated(session))
       errors.push(`Session ${session.id} references missing task ${session.taskId}.`);
-    if (
-      task &&
-      session.generatedBy === "PLANNER" &&
-      !session.locked &&
-      session.startAt < task.availableFrom
-    )
+    if (task && generated(session) && session.startAt < task.availableFrom)
       errors.push(`Session ${session.id} starts before task availability.`);
-    if (
-      task?.dueAt &&
-      session.generatedBy === "PLANNER" &&
-      !session.locked &&
-      session.endAt > task.dueAt
-    )
+    if (task?.dueAt && generated(session) && session.endAt > task.dueAt)
       errors.push(`Session ${session.id} ends after hard deadline.`);
     for (const event of input.events.filter((candidate) => candidate.constraintLevel === "HARD")) {
-      if (overlaps(session.startAt, session.endAt, event.startAt, event.endAt)) {
+      if (
+        generated(session) &&
+        overlaps(session.startAt, session.endAt, event.startAt, event.endAt)
+      ) {
         errors.push(`Session ${session.id} overlaps hard event ${event.id}.`);
       }
     }
-    if (session.generatedBy === "PLANNER" && !session.locked) {
+    if (generated(session)) {
       const duration = (session.endAt.getTime() - session.startAt.getTime()) / MINUTE_MS;
       if (
         !isOnSchedulingQuantum(session.startAt.getTime() / MINUTE_MS) ||
@@ -71,9 +67,10 @@ export function validatePlan(sessions: WorkSession[], input: PlannerInput): stri
       i > 0 &&
       overlaps(active[i - 1].startAt, active[i - 1].endAt, session.startAt, session.endAt)
     ) {
-      errors.push(`Sessions ${active[i - 1].id} and ${session.id} overlap.`);
+      if (generated(active[i - 1]) || generated(session))
+        errors.push(`Sessions ${active[i - 1].id} and ${session.id} overlap.`);
     }
-    if (i > 0 && (session.generatedBy === "PLANNER" || active[i - 1].generatedBy === "PLANNER")) {
+    if (i > 0 && (generated(session) || generated(active[i - 1]))) {
       const required = roundUpToQuantum(
         Math.max(SCHEDULING_QUANTUM_MINUTES, input.preferences.minimumBreakMinutes),
       );

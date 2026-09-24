@@ -32,6 +32,8 @@ export interface PlannerHeuristicConfig {
   taskContinuationBonus: number;
   contextSwitchPenalty: number;
   contextNeighborMinutes: number;
+  weekendBiasWeight: number;
+  sundayConcentrationPenalty: number;
 }
 
 export const HEURISTIC_V1_CONFIG: Readonly<PlannerHeuristicConfig> = Object.freeze({
@@ -70,4 +72,6 @@ export const HEURISTIC_V1_CONFIG: Readonly<PlannerHeuristicConfig> = Object.free
   taskContinuationBonus: 0.8,
   contextSwitchPenalty: 0.6,
   contextNeighborMinutes: 30,
+  weekendBiasWeight: 0.8,
+  sundayConcentrationPenalty: 1.4,
 });

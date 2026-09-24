@@ -204,6 +204,13 @@ export interface PlannerSleepWindow {
   endAt: Date;
 }
 
+/** Capacity explicitly released by an outcome before planner invocation. */
+export interface PlannerReleasedWindow {
+  id: Id;
+  startAt: Date;
+  endAt: Date;
+}
+
 export interface PlannerDependency {
   prerequisiteTaskId: Id;
   dependentTaskId: Id;
@@ -278,9 +285,10 @@ export interface PlannerInput {
   manualSessions: WorkSession[];
   lockedSessions: WorkSession[];
   previousSessions: WorkSession[];
+  releasedWindows: PlannerReleasedWindow[];
   /** Explicit replan intent; incremental is the ordinary scheduling mode. */
   replanMode: "INCREMENTAL" | "FULL" | "SCENARIO";
-  releasedTimePolicy: "REPLAN_IF_USEFUL" | "LEAVE_FREE";
+  releasedTimePolicy: "KEEP_FREE" | "LEAVE_FREE" | "REPLAN_IF_USEFUL" | "ALWAYS_REPLAN";
   /** Minimum protected sleep across each local day, supplied by application policy. */
   minimumSleepMinutes: number;
   preferences: PlanningPreferences;
@@ -299,7 +307,13 @@ export type PlannerReasonCode =
   | "INSUFFICIENT_CAPACITY"
   | "DAILY_STUDY_LIMIT_EXCEEDED"
   | "FREE_TIME_BUFFER_USED"
-  | "DEADLINE_BUFFER_USED";
+  | "DEADLINE_BUFFER_USED"
+  | "SOFT_TIME_USED"
+  | "RELEASED_TIME_USED"
+  | "STABILITY_RELAXED"
+  | "HARD_CONFLICT"
+  | "MANUAL_INTENT_PRESERVED"
+  | "LOCK_PRESERVED";
 
 export interface PlannerWarning {
   code:
@@ -309,7 +323,10 @@ export interface PlannerWarning {
     | "DEPENDENCY_BLOCKED"
     | "DAILY_STUDY_LIMIT_EXCEEDED"
     | "FREE_TIME_BUFFER_USED"
-    | "DEADLINE_BUFFER_USED";
+    | "DEADLINE_BUFFER_USED"
+    | "SOFT_TIME_USED"
+    | "STABILITY_RELAXED"
+    | "HARD_CONFLICT";
   taskId?: Id;
   message: string;
   deficitMinutes?: number;

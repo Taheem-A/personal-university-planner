@@ -1,5 +1,14 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 3 planner policy: IN PROGRESS
+
+- Dependency readiness now governs placement across chains; unknown references and cycles fail explicitly. Retained dependent sessions require completed or fully reserved prerequisites, so a previous schedule cannot bypass ordering.
+- Capability/location and commute policy are enforced when selecting windows. Coarse energy affects productivity and choice. The planner avoids SOFT events and protected time first, then uses them only when needed for required work and reports the compromise. Local-time weekend costs discourage avoidable Sunday concentration.
+- Manual and locked sessions remain user intent. Valid prior planner sessions are retained preferentially, with a firm near-term stability tier and a weaker general churn preference. New hard conflicts or infeasible work may relax ordinary prior sessions; retained user/locked conflicts are reported rather than silently moved. Explicit released windows support `KEEP_FREE`, `REPLAN_IF_USEFUL` and `ALWAYS_REPLAN` without persistence or triggers.
+- Focused tests cover dependencies, hard/soft hierarchy, capability and commute, weekend bias, manual/lock preservation, stability and churn, conflict relaxation, released-time policies and deterministic retention. Milestone 3 remains **IN PROGRESS**.
+- Full local `pnpm verify` passed: format, lint, 71-file package boundaries, Prisma generation/validation, typecheck, **74/74** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests.
+- **Exact next work item:** validation, repair, explicit infeasibility, reason codes and non-mutating scenarios.
+
 ## 2026-09-24 — Milestone 3 sustainable session construction and allocation: IN PROGRESS
 
 - Rebuilt pure session sizing around remaining productive work, preferred/minimum/maximum session lengths, splittability, capacity factor and five-minute clock precision. Tiny complete tasks can form one short session; non-splittable work either fits once or remains explicitly unscheduled. The output conserves required minutes.

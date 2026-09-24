@@ -33,6 +33,13 @@ export function resolveEligibility(
   const dependenciesByTask = new Map<string, string[]>();
   for (const edge of input.dependencies) {
     if (edge.type !== "FINISH_TO_START") throw new Error("Unsupported dependency type.");
+    if (!byId.has(edge.dependentTaskId))
+      throw new Error(`Dependency has unknown dependent task ${edge.dependentTaskId}.`);
+    if (
+      !byId.has(edge.prerequisiteTaskId) &&
+      !input.completedTaskIds.includes(edge.prerequisiteTaskId)
+    )
+      throw new Error(`Dependency has unknown prerequisite task ${edge.prerequisiteTaskId}.`);
     const current = dependenciesByTask.get(edge.dependentTaskId) ?? [];
     if (!current.includes(edge.prerequisiteTaskId)) current.push(edge.prerequisiteTaskId);
     dependenciesByTask.set(edge.dependentTaskId, current);

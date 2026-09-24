@@ -9,6 +9,7 @@ import {
   subtractIntervals,
   SCHEDULING_QUANTUM_MINUTES,
 } from "../../shared/src";
+import type { InstantInterval } from "../../shared/src";
 import { HEURISTIC_V1_CONFIG } from "./config";
 import { fitsDailySoftPolicy, type DailyPolicy } from "./sustainability";
 import type { CandidateWindow, WindowSuitability } from "./windows";
@@ -38,6 +39,14 @@ export function sessionSize(
   if (maxClock < QUANTUM || suitability.effectiveRate <= 0) return undefined;
   if (!task.splittable && remaining > Math.floor(maxClock * suitability.effectiveRate))
     return undefined;
+  const allClock = roundUpToQuantum(remaining / suitability.effectiveRate);
+  const breakLength = roundUpToQuantum(Math.max(QUANTUM, input.preferences.minimumBreakMinutes));
+  if (
+    allClock <= maxClock &&
+    suitability.clockMinutes <
+      allClock + breakLength + Math.max(QUANTUM, task.minimumSessionMinutes)
+  )
+    return { clockMinutes: allClock, workMinutes: remaining };
   const stretched = Math.min(
     maxClock,
     Math.max(
@@ -55,7 +64,6 @@ export function sessionSize(
   const minimum = Math.min(task.minimumSessionMinutes, remaining);
   if (work < minimum) return undefined;
   if (task.splittable && remaining - work > 0 && remaining - work < task.minimumSessionMinutes) {
-    const allClock = roundUpToQuantum(remaining / suitability.effectiveRate);
     if (allClock <= maxClock) {
       clock = allClock;
       work = remaining;
@@ -160,6 +168,14 @@ interface WindowChoice {
   score: number;
 }
 
+function weekendCost(startAt: Date, input: PlannerInput): number {
+  const localDate = instantToLocal(startAt, input.timezone).date;
+  const weekday = new Date(`${localDate}T00:00:00.000Z`).getUTCDay();
+  if (weekday !== 0 && weekday !== 6) return 0;
+  const weekend = (1 - input.preferences.weekendWorkBias) * HEURISTIC_V1_CONFIG.weekendBiasWeight;
+  return weekday === 0 ? weekend + HEURISTIC_V1_CONFIG.sundayConcentrationPenalty : weekend;
+}
+
 function chooseWindow(
   task: PlannableTask,
   remaining: number,
@@ -168,63 +184,76 @@ function chooseWindow(
   policy: DailyPolicy,
   sessions: WorkSession[],
   respectSoftPolicy: boolean,
+  avoided: InstantInterval[],
 ): WindowChoice | undefined {
   let best: WindowChoice | undefined;
   const preferred = preferredTarget(task, input);
   for (let index = 0; index < windows.length; index += 1) {
     const window = windows[index];
-    const suitability = windowSuitability({ ...task, remainingMinutes: remaining }, window, input);
-    if (!suitability) continue;
-    let size = sessionSize(task, suitability, remaining, input);
-    if (!size) continue;
-    if (respectSoftPolicy) {
-      while (
-        size &&
-        !fitsDailySoftPolicy(
-          input,
-          policy,
-          sessions,
-          suitability.startAt,
-          addMinutes(suitability.startAt, size.clockMinutes),
-        )
-      ) {
-        const shorter: number = size.clockMinutes - QUANTUM;
-        const work = Math.min(remaining, Math.floor(shorter * suitability.effectiveRate));
-        size =
-          shorter >= QUANTUM &&
-          work >= Math.min(task.minimumSessionMinutes, remaining) &&
-          (task.splittable || work === remaining)
-            ? { clockMinutes: shorter, workMinutes: work }
-            : undefined;
-      }
+    for (const segment of subtractIntervals([window], avoided)) {
+      const candidate: CandidateWindow = {
+        ...window,
+        startAt: segment.startAt,
+        endAt: segment.endAt,
+      };
+      const suitability = windowSuitability(
+        { ...task, remainingMinutes: remaining },
+        candidate,
+        input,
+      );
+      if (!suitability) continue;
+      let size = sessionSize(task, suitability, remaining, input);
       if (!size) continue;
+      if (respectSoftPolicy) {
+        while (
+          size &&
+          !fitsDailySoftPolicy(
+            input,
+            policy,
+            sessions,
+            suitability.startAt,
+            addMinutes(suitability.startAt, size.clockMinutes),
+          )
+        ) {
+          const shorter: number = size.clockMinutes - QUANTUM;
+          const work = Math.min(remaining, Math.floor(shorter * suitability.effectiveRate));
+          size =
+            shorter >= QUANTUM &&
+            work >= Math.min(task.minimumSessionMinutes, remaining) &&
+            (task.splittable || work === remaining)
+              ? { clockMinutes: shorter, workMinutes: work }
+              : undefined;
+        }
+        if (!size) continue;
+      }
+      const endAt = addMinutes(suitability.startAt, size.clockMinutes);
+      const deadline = task.dueAt ?? input.horizonEnd;
+      const hoursBeforeDeadline = Math.max(
+        HEURISTIC_V1_CONFIG.deadlineMinimumHours,
+        (deadline.getTime() - suitability.startAt.getTime()) / 3_600_000,
+      );
+      const score =
+        suitability.energyMatch * HEURISTIC_V1_CONFIG.windowEnergyWeight +
+        suitability.effectiveRate * HEURISTIC_V1_CONFIG.windowCapacityWeight +
+        (1 / Math.sqrt(hoursBeforeDeadline)) * HEURISTIC_V1_CONFIG.windowUrgencyWeight +
+        (preferred && endAt <= preferred ? HEURISTIC_V1_CONFIG.preferredWindowBonus : 0) +
+        stabilityBonus(task.id, window, input) +
+        (size.clockMinutes / Math.max(QUANTUM, task.preferredSessionMinutes)) *
+          HEURISTIC_V1_CONFIG.sessionFitWeight +
+        neighborScore(task.id, suitability.startAt, endAt, sessions) -
+        suitability.undesirableTimeCost * HEURISTIC_V1_CONFIG.lateWindowPenalty -
+        suitability.fragmentationCost * HEURISTIC_V1_CONFIG.fragmentationPenaltyWeight;
+      const adjustedScore = score - weekendCost(suitability.startAt, input);
+      if (
+        !best ||
+        adjustedScore > best.score ||
+        (adjustedScore === best.score && suitability.startAt < best.suitability.startAt) ||
+        (adjustedScore === best.score &&
+          suitability.startAt.getTime() === best.suitability.startAt.getTime() &&
+          window.id < windows[best.index].id)
+      )
+        best = { index, suitability, size, score: adjustedScore };
     }
-    const endAt = addMinutes(suitability.startAt, size.clockMinutes);
-    const deadline = task.dueAt ?? input.horizonEnd;
-    const hoursBeforeDeadline = Math.max(
-      HEURISTIC_V1_CONFIG.deadlineMinimumHours,
-      (deadline.getTime() - suitability.startAt.getTime()) / 3_600_000,
-    );
-    const score =
-      suitability.energyMatch * HEURISTIC_V1_CONFIG.windowEnergyWeight +
-      suitability.effectiveRate * HEURISTIC_V1_CONFIG.windowCapacityWeight +
-      (1 / Math.sqrt(hoursBeforeDeadline)) * HEURISTIC_V1_CONFIG.windowUrgencyWeight +
-      (preferred && endAt <= preferred ? HEURISTIC_V1_CONFIG.preferredWindowBonus : 0) +
-      stabilityBonus(task.id, window, input) +
-      (size.clockMinutes / Math.max(QUANTUM, task.preferredSessionMinutes)) *
-        HEURISTIC_V1_CONFIG.sessionFitWeight +
-      neighborScore(task.id, suitability.startAt, endAt, sessions) -
-      suitability.undesirableTimeCost * HEURISTIC_V1_CONFIG.lateWindowPenalty -
-      suitability.fragmentationCost * HEURISTIC_V1_CONFIG.fragmentationPenaltyWeight;
-    if (
-      !best ||
-      score > best.score ||
-      (score === best.score && suitability.startAt < best.suitability.startAt) ||
-      (score === best.score &&
-        suitability.startAt.getTime() === best.suitability.startAt.getTime() &&
-        window.id < windows[best.index].id)
-    )
-      best = { index, suitability, size, score };
   }
   return best;
 }
@@ -236,15 +265,28 @@ export function placeTask(
   sessionCounter: { value: number },
   policy: DailyPolicy,
   existingSessions: WorkSession[],
+  softIntervals: InstantInterval[],
 ): { sessions: WorkSession[]; remaining: number; windows: CandidateWindow[] } {
   const generated: WorkSession[] = [];
   let remaining = task.remainingMinutes;
   let mutable = windows;
   while (remaining > 0) {
     const context = [...existingSessions, ...generated];
-    const choice =
-      chooseWindow(task, remaining, mutable, input, policy, context, true) ??
-      chooseWindow(task, remaining, mutable, input, policy, context, false);
+    const released = input.releasedWindows;
+    const keepReleased = input.releasedTimePolicy !== "ALWAYS_REPLAN";
+    const stages = [
+      [...softIntervals, ...(keepReleased ? released : [])],
+      ...(keepReleased ? [released] : []),
+      ...(input.releasedTimePolicy === "REPLAN_IF_USEFUL" ? [softIntervals, []] : []),
+      ...(input.releasedTimePolicy === "ALWAYS_REPLAN" ? [[]] : []),
+    ];
+    let choice: WindowChoice | undefined;
+    for (const avoided of stages) {
+      choice =
+        chooseWindow(task, remaining, mutable, input, policy, context, true, avoided) ??
+        chooseWindow(task, remaining, mutable, input, policy, context, false, avoided);
+      if (choice) break;
+    }
     if (!choice) break;
     const startAt = choice.suitability.startAt;
     const endAt = addMinutes(startAt, choice.size.clockMinutes);

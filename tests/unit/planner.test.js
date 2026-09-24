@@ -101,6 +101,7 @@ function baseInput() {
     lockedSessions: [],
     manualSessions: [],
     previousSessions: [],
+    releasedWindows: [],
     dependencies: [],
     protectedWindows: [],
     sleepWindows: [],
@@ -1041,4 +1042,368 @@ test("an elapsed planning horizon has no available session capacity", () => {
   input.now = d("2026-09-22T08:00:00-04:00");
   input.tasks = [priorityTask("late", 30, "2026-09-22T18:00:00-04:00")];
   assert.deepEqual(generatePlan(input).sessions, []);
+});
+
+function previousSession(id, taskId, start, end, plannedMinutes, changes = {}) {
+  return {
+    id,
+    userId: "user-1",
+    taskId,
+    startAt: d(start),
+    endAt: d(end),
+    plannedMinutes,
+    state: "PLANNED",
+    generatedBy: "PLANNER",
+    locked: false,
+    ...changes,
+  };
+}
+
+test("dependency chains unlock in order and invalid graphs fail before allocation", () => {
+  const input = priorityInput();
+  input.tasks = ["a", "b", "c"].map((id) => priorityTask(id, 30, "2026-09-21T12:00:00-04:00"));
+  input.dependencies = [
+    { prerequisiteTaskId: "a", dependentTaskId: "b", type: "FINISH_TO_START" },
+    { prerequisiteTaskId: "b", dependentTaskId: "c", type: "FINISH_TO_START" },
+  ];
+  const output = generatePlan(input);
+  assert.deepEqual(output.allocationOrderTaskIds, ["a", "b", "c"]);
+  assert.deepEqual(
+    output.sessions.map((session) => session.taskId),
+    ["a", "b", "c"],
+  );
+  input.dependencies.push({
+    prerequisiteTaskId: "c",
+    dependentTaskId: "a",
+    type: "FINISH_TO_START",
+  });
+  assert.throws(() => generatePlan(input), /cycle/);
+  input.dependencies = [
+    { prerequisiteTaskId: "missing", dependentTaskId: "b", type: "FINISH_TO_START" },
+  ];
+  assert.throws(() => generatePlan(input), /unknown prerequisite/);
+});
+
+test("soft time is used only when ordinary capacity cannot fit required work", () => {
+  const input = priorityInput();
+  input.availability[0].endAt = d("2026-09-21T09:00:00-04:00");
+  input.tasks = [priorityTask("study", 30, "2026-09-21T09:00:00-04:00")];
+  input.protectedWindows = [
+    {
+      id: "rest",
+      startAt: d("2026-09-21T08:00:00-04:00"),
+      endAt: d("2026-09-21T08:30:00-04:00"),
+      level: "SOFT",
+      reason: "Preferred rest",
+    },
+  ];
+  const ordinary = generatePlan(input);
+  assert.ok(
+    ordinary.sessions.every((session) => session.startAt >= input.protectedWindows[0].endAt),
+  );
+  assert.ok(!ordinary.warnings.some((warning) => warning.code === "SOFT_TIME_USED"));
+  input.availability[0].endAt = d("2026-09-21T08:30:00-04:00");
+  const soft = generatePlan(input);
+  assert.equal(soft.sessions[0].plannedMinutes, 30);
+  assert.ok(soft.warnings.some((warning) => warning.code === "SOFT_TIME_USED"));
+  input.protectedWindows[0].level = "HARD";
+  const hard = generatePlan(input);
+  assert.equal(hard.sessions.length, 0);
+  assert.equal(hard.unscheduledMinutesByTask.study, 30);
+});
+
+test("capability constraints and commute opt-in govern actual sessions", () => {
+  const input = priorityInput();
+  input.availability = [
+    {
+      ...input.availability[0],
+      kind: "COMMUTE",
+      allowedLocationTags: ["TRANSIT_OK"],
+      endAt: d("2026-09-21T09:00:00-04:00"),
+    },
+  ];
+  input.tasks = [
+    priorityTask("reading", 30, "2026-09-21T09:00:00-04:00", {
+      locationRequirements: ["TRANSIT_OK"],
+    }),
+  ];
+  assert.equal(generatePlan(input).sessions.length, 0);
+  input.preferences.scheduleCommuteWork = true;
+  assert.equal(generatePlan(input).sessions[0].plannedMinutes, 30);
+  input.tasks[0].locationRequirements = ["DESK"];
+  assert.equal(generatePlan(input).sessions.length, 0);
+  input.availability[0].kind = "ORDINARY";
+  assert.equal(generatePlan(input).sessions.length, 0);
+});
+
+test("weekend policy avoids gratuitous Sunday dumping", () => {
+  const input = priorityInput();
+  input.now = d("2026-09-25T08:00:00-04:00");
+  input.horizonStart = input.now;
+  input.horizonEnd = d("2026-09-28T12:00:00-04:00");
+  input.availability = [
+    {
+      ...input.availability[0],
+      id: "saturday",
+      startAt: d("2026-09-26T10:00:00-04:00"),
+      endAt: d("2026-09-26T11:00:00-04:00"),
+    },
+    {
+      ...input.availability[0],
+      id: "sunday",
+      startAt: d("2026-09-27T10:00:00-04:00"),
+      endAt: d("2026-09-27T11:00:00-04:00"),
+    },
+  ];
+  input.tasks = [
+    priorityTask("assignment", 30, "2026-09-28T11:00:00-04:00", {
+      availableFrom: input.now,
+    }),
+  ];
+  input.preferences.weekendWorkBias = -0.5;
+  const output = generatePlan(input);
+  assert.equal(output.sessions[0].startAt.toISOString().slice(0, 10), "2026-09-26");
+});
+
+test("manual and locked intent survives a hard conflict with an explicit warning", () => {
+  const input = priorityInput();
+  input.tasks = [
+    priorityTask("manual-task", 30, "2026-09-21T18:00:00-04:00"),
+    priorityTask("locked-task", 30, "2026-09-21T18:00:00-04:00"),
+  ];
+  input.manualSessions = [
+    previousSession(
+      "manual-intent",
+      "manual-task",
+      "2026-09-21T08:00:00-04:00",
+      "2026-09-21T08:30:00-04:00",
+      30,
+      { generatedBy: "USER" },
+    ),
+  ];
+  input.lockedSessions = [
+    previousSession(
+      "locked-intent",
+      "locked-task",
+      "2026-09-21T09:00:00-04:00",
+      "2026-09-21T09:30:00-04:00",
+      30,
+      { locked: true },
+    ),
+  ];
+  input.events = [
+    {
+      ...baseInput().events[0],
+      startAt: input.lockedSessions[0].startAt,
+      endAt: input.lockedSessions[0].endAt,
+    },
+  ];
+  const output = generatePlan(input);
+  assert.ok(output.sessions.some((session) => session.id === "manual-intent" && !session.locked));
+  assert.ok(output.sessions.some((session) => session.id === "locked-intent" && session.locked));
+  assert.ok(output.warnings.some((warning) => warning.code === "HARD_CONFLICT"));
+  assert.deepEqual(output.reasonsBySession["locked-intent"], ["LOCK_PRESERVED"]);
+});
+
+test("near-term and later valid previous sessions remain stable", () => {
+  const input = priorityInput();
+  input.tasks = [
+    priorityTask("near", 30, "2026-09-21T18:00:00-04:00"),
+    priorityTask("later", 30, "2026-09-21T18:00:00-04:00"),
+  ];
+  input.previousSessions = [
+    previousSession(
+      "old-near",
+      "near",
+      "2026-09-21T09:00:00-04:00",
+      "2026-09-21T09:30:00-04:00",
+      30,
+    ),
+    previousSession(
+      "old-later",
+      "later",
+      "2026-09-21T12:00:00-04:00",
+      "2026-09-21T12:30:00-04:00",
+      30,
+    ),
+  ];
+  const output = generatePlan(input);
+  assert.ok(output.sessions.some((session) => session.id === "old-near"));
+  assert.ok(output.sessions.some((session) => session.id === "old-later"));
+  assert.deepEqual(output.reasonsBySession["old-near"], ["STABILITY_PRESERVED"]);
+  assert.equal(output.warnings.filter((warning) => warning.code === "STABILITY_RELAXED").length, 0);
+});
+
+test("a new hard conflict releases ordinary near-term stability", () => {
+  const input = priorityInput();
+  input.tasks = [priorityTask("near", 30, "2026-09-21T18:00:00-04:00")];
+  input.previousSessions = [
+    previousSession(
+      "old-near",
+      "near",
+      "2026-09-21T09:00:00-04:00",
+      "2026-09-21T09:30:00-04:00",
+      30,
+    ),
+  ];
+  input.events = [
+    {
+      ...baseInput().events[0],
+      startAt: input.previousSessions[0].startAt,
+      endAt: input.previousSessions[0].endAt,
+    },
+  ];
+  const output = generatePlan(input);
+  assert.ok(!output.sessions.some((session) => session.id === "old-near"));
+  assert.ok(
+    output.sessions.every(
+      (session) =>
+        !(session.startAt < input.events[0].endAt && input.events[0].startAt < session.endAt),
+    ),
+  );
+  assert.ok(output.warnings.some((warning) => warning.code === "STABILITY_RELAXED"));
+});
+
+test("near-term stability yields only when preserving it makes required work infeasible", () => {
+  const input = priorityInput();
+  input.availability[0].endAt = d("2026-09-21T10:00:00-04:00");
+  input.tasks = [
+    priorityTask("movable", 30, "2026-09-21T10:00:00-04:00"),
+    priorityTask("urgent", 60, "2026-09-21T09:00:00-04:00"),
+  ];
+  input.previousSessions = [
+    previousSession(
+      "old-movable",
+      "movable",
+      "2026-09-21T08:00:00-04:00",
+      "2026-09-21T08:30:00-04:00",
+      30,
+    ),
+  ];
+  const output = generatePlan(input);
+  assert.ok(!output.sessions.some((session) => session.id === "old-movable"));
+  assert.equal(
+    output.sessions.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    90,
+  );
+  assert.ok(output.warnings.some((warning) => warning.code === "STABILITY_RELAXED"));
+});
+
+test("released time can stay free, refill when useful, or always rejoin capacity", () => {
+  const input = priorityInput();
+  input.availability[0].endAt = d("2026-09-21T09:00:00-04:00");
+  input.tasks = [priorityTask("reading", 30, "2026-09-21T09:00:00-04:00")];
+  input.releasedWindows = [{ id: "freed", startAt: input.now, endAt: input.availability[0].endAt }];
+  input.releasedTimePolicy = "KEEP_FREE";
+  const kept = generatePlan(input);
+  assert.equal(kept.sessions.length, 0);
+  assert.equal(kept.unscheduledMinutesByTask.reading, 30);
+  input.releasedTimePolicy = "REPLAN_IF_USEFUL";
+  const useful = generatePlan(input);
+  assert.equal(useful.sessions[0].plannedMinutes, 30);
+  assert.ok(useful.reasonsBySession[useful.sessions[0].id].includes("RELEASED_TIME_USED"));
+  input.releasedTimePolicy = "ALWAYS_REPLAN";
+  assert.equal(generatePlan(input).sessions[0].plannedMinutes, 30);
+  input.releasedTimePolicy = "REPLAN_IF_USEFUL";
+  input.availability.push({
+    ...input.availability[0],
+    id: "ordinary",
+    startAt: d("2026-09-21T09:00:00-04:00"),
+    endAt: d("2026-09-21T10:00:00-04:00"),
+  });
+  input.tasks[0].dueAt = d("2026-09-21T10:00:00-04:00");
+  const preserved = generatePlan(input);
+  assert.ok(preserved.sessions[0].startAt >= input.releasedWindows[0].endAt);
+});
+
+test("manual dependency conflict remains visible without moving user intent", () => {
+  const input = priorityInput();
+  input.tasks = [
+    priorityTask("prerequisite", 30, "2026-09-21T18:00:00-04:00"),
+    priorityTask("dependent", 30, "2026-09-21T18:00:00-04:00"),
+  ];
+  input.dependencies = [
+    { prerequisiteTaskId: "prerequisite", dependentTaskId: "dependent", type: "FINISH_TO_START" },
+  ];
+  input.manualSessions = [
+    previousSession(
+      "user-dependent",
+      "dependent",
+      "2026-09-21T08:00:00-04:00",
+      "2026-09-21T08:30:00-04:00",
+      30,
+      { generatedBy: "USER" },
+    ),
+  ];
+  const output = generatePlan(input);
+  assert.ok(output.sessions.some((session) => session.id === "user-dependent"));
+  assert.ok(
+    output.warnings.some(
+      (warning) => warning.code === "HARD_CONFLICT" && warning.taskId === "dependent",
+    ),
+  );
+});
+
+test("active prior work remains fixed and an explicit full replan releases ordinary prior work", () => {
+  const input = priorityInput();
+  input.now = d("2026-09-21T08:15:00-04:00");
+  input.tasks = [
+    priorityTask("active", 30, "2026-09-21T18:00:00-04:00"),
+    priorityTask("ordinary", 30, "2026-09-21T18:00:00-04:00"),
+  ];
+  input.previousSessions = [
+    previousSession(
+      "active-old",
+      "active",
+      "2026-09-21T08:00:00-04:00",
+      "2026-09-21T08:30:00-04:00",
+      30,
+      { state: "ACTIVE" },
+    ),
+    previousSession(
+      "ordinary-old",
+      "ordinary",
+      "2026-09-21T12:00:00-04:00",
+      "2026-09-21T12:30:00-04:00",
+      30,
+    ),
+  ];
+  input.replanMode = "FULL";
+  const output = generatePlan(input);
+  assert.ok(output.sessions.some((session) => session.id === "active-old"));
+  assert.ok(!output.sessions.some((session) => session.id === "ordinary-old"));
+});
+
+test("a previously planned dependency chain can remain fixed when every prerequisite fits", () => {
+  const input = priorityInput();
+  input.tasks = ["a", "b", "c"].map((id) => priorityTask(id, 30, "2026-09-21T12:00:00-04:00"));
+  input.dependencies = [
+    { prerequisiteTaskId: "a", dependentTaskId: "b", type: "FINISH_TO_START" },
+    { prerequisiteTaskId: "b", dependentTaskId: "c", type: "FINISH_TO_START" },
+  ];
+  input.previousSessions = [
+    previousSession("old-a", "a", "2026-09-21T08:00:00-04:00", "2026-09-21T08:30:00-04:00", 30),
+    previousSession("old-b", "b", "2026-09-21T08:40:00-04:00", "2026-09-21T09:10:00-04:00", 30),
+    previousSession("old-c", "c", "2026-09-21T09:20:00-04:00", "2026-09-21T09:50:00-04:00", 30),
+  ];
+  const output = generatePlan(input);
+  assert.deepEqual(
+    output.sessions.map((session) => session.id),
+    ["old-a", "old-b", "old-c"],
+  );
+});
+
+test("energy is a coarse productivity preference while missing capability is a hard mismatch", () => {
+  const input = priorityInput();
+  input.availability[0].energyLevel = "LOW";
+  input.availability[0].endAt = d("2026-09-21T10:00:00-04:00");
+  input.tasks = [
+    priorityTask("thinking", 30, "2026-09-21T10:00:00-04:00", { energyRequirement: "HIGH" }),
+  ];
+  assert.equal(
+    generatePlan(input).sessions.reduce((sum, session) => sum + session.plannedMinutes, 0),
+    30,
+  );
+  input.availability[0].allowedLocationTags = ["CAMPUS"];
+  assert.equal(generatePlan(input).sessions.length, 0);
 });

@@ -159,6 +159,23 @@ export function normalizePlannerInput(input: PlannerInput): NormalizedPlanningSt
     input.preferences.maximumConsecutiveWorkMinutes < 5
   )
     throw new RangeError("maximumConsecutiveWorkMinutes must be at least five minutes");
+  if (
+    !Number.isFinite(input.preferences.weekendWorkBias) ||
+    input.preferences.weekendWorkBias < -1 ||
+    input.preferences.weekendWorkBias > 1
+  )
+    throw new RangeError("weekendWorkBias must be in [-1, 1]");
+  if (
+    !Number.isFinite(input.preferences.planStabilityWindowMinutes) ||
+    input.preferences.planStabilityWindowMinutes < 0
+  )
+    throw new RangeError("planStabilityWindowMinutes must be finite and non-negative");
+  if (
+    !["KEEP_FREE", "LEAVE_FREE", "REPLAN_IF_USEFUL", "ALWAYS_REPLAN"].includes(
+      input.releasedTimePolicy,
+    )
+  )
+    throw new Error("Unsupported released-time policy");
   const effectiveStart = minDate(maxDate(now, horizonStart), horizonEnd);
   const expanded = expandRecurrence(input);
   for (const interval of [
@@ -166,6 +183,7 @@ export function normalizePlannerInput(input: PlannerInput): NormalizedPlanningSt
     ...expanded.protectedWindows,
     ...expanded.sleepWindows,
     ...expanded.availability,
+    ...input.releasedWindows,
   ])
     createInterval(interval.startAt, interval.endAt);
   for (const window of expanded.availability) {
@@ -245,6 +263,11 @@ export function normalizePlannerInput(input: PlannerInput): NormalizedPlanningSt
     manualSessions,
     lockedSessions,
     previousSessions: dedupeSessions(input.previousSessions.map(copySession)),
+    releasedWindows: input.releasedWindows.map((window) => ({
+      ...window,
+      startAt: new Date(window.startAt),
+      endAt: new Date(window.endAt),
+    })),
     preferences: { ...input.preferences },
   };
   const occupied = occupiedTimeline(snapshot, effectiveStart);
