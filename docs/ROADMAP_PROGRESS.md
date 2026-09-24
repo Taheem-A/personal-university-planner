@@ -1,5 +1,11 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 3 merged and closed
+
+- [PR #3](https://github.com/Taheem-A/personal-university-planner/pull/3) is merged into `master` at `e8b5e846e72a4269d304213adbf81ba22416a915`. The final PR head `da2345813a325ae7f5e8bf19743776fb3328d13a` is an ancestor of `master`.
+- The implementation-head [CI run 36025989398](https://github.com/Taheem-A/personal-university-planner/actions/runs/36025989398) and [dependency review 36025989365](https://github.com/Taheem-A/personal-university-planner/actions/runs/36025989365) passed. Final-head [CI run 36046159256](https://github.com/Taheem-A/personal-university-planner/actions/runs/36046159256) and [dependency review 36046159376](https://github.com/Taheem-A/personal-university-planner/actions/runs/36046159376) also passed. The [Milestone-3 exit gate](./milestone-3-exit-gate.md) is **PASSED**.
+- **Exact next roadmap item:** Milestone 4 — Planner Service, PlannerRuns, Persistence, and Incremental Replanning. It has **not started**.
+
 ## 2026-09-24 — Milestone 3: GATE PASSED
 
 - The [literal exit-gate audit](./milestone-3-exit-gate.md) maps all 14 pipeline steps, required behavior, 13 canonical scenarios, major invariants and five exit criteria to source and test evidence. The roadmap gate passes on local and GitHub CI evidence. [CI run 36025989398](https://github.com/Taheem-A/personal-university-planner/actions/runs/36025989398) and [dependency review run 36025989365](https://github.com/Taheem-A/personal-university-planner/actions/runs/36025989365) both succeeded for implementation head `47f2bd87421b1d85453beb7d9df68990f40641b6`. Final-head checks follow this documentation update. Milestone 4 has **not started**.
