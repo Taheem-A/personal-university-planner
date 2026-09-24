@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 4 authoritative planner execution: IN PROGRESS
+
+- The authenticated Planner Service now loads one revisioned canonical snapshot, invokes explicit `heuristic-v1`, independently validates its output, and records a versioned serializable PlannerRun input snapshot. Ordinary run reads omit the raw input.
+- The guarded authoritative transaction claims the expected revision, creates genuinely new durable generated sessions, retains unchanged IDs, supersedes obsolete generated history, and finalizes a successful run with safe warnings and an inspectable structured delta. Core failure, invalid output, stale state and persistence rollback preserve the preceding schedule and complete a failed run where the database permits.
+- Synthetic service tests cover real core invocation from canonical records, repeat stability, idempotency, moved/removed deltas, manual/locked preservation, quantified infeasibility, ownership, stale claims and transactional rollback. The live PostgreSQL end-to-end planner acceptance remains for the Milestone-4 gate.
+- Full local `pnpm verify` passed, including unit and integration tests, package boundaries, schema validation, production build and Chromium E2E. Dedicated planner scenarios (13/13), planner properties (2/2) and dependency audit passed.
+- **Exact next slice: replan triggers and incremental/minimal-change orchestration.** Milestone 4 remains **IN PROGRESS**.
+
 ## 2026-09-24 — Milestone 4 persistence/concurrency substrate: IN PROGRESS
 
 - Added `User.planningRevision` with database triggers for planning-relevant canonical writes. The Planner Service now carries the snapshot revision, and the repository exposes an atomic expected-revision claim for the next authoritative transaction.

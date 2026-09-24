@@ -313,6 +313,14 @@ export function createHistoryRepositories(db: DatabaseExecutor): {
                 generatedSessionCount: result.summary.generatedSessionCount,
                 retainedSessionCount: result.summary.retainedSessionCount,
                 unscheduledMinutes: result.summary.unscheduledMinutes,
+                delta: {
+                  retained: [...result.summary.delta.retained],
+                  moved: result.summary.delta.moved.map((item) => ({ ...item })),
+                  added: [...result.summary.delta.added],
+                  removed: [...result.summary.delta.removed],
+                  newlyAtRisk: [...result.summary.delta.newlyAtRisk],
+                  resolvedRisk: [...result.summary.delta.resolvedRisk],
+                },
               };
         if (
           summary &&

@@ -315,6 +315,22 @@ export interface PlannerRunCompletionSummary {
   generatedSessionCount: number;
   retainedSessionCount: number;
   unscheduledMinutes: number;
+  delta: PlannerRunDelta;
+}
+
+export interface PlannerRunDelta {
+  retained: string[];
+  moved: {
+    fromSessionId: string;
+    toSessionId: string;
+    taskId: string;
+    fromStartAt: string;
+    toStartAt: string;
+  }[];
+  added: string[];
+  removed: string[];
+  newlyAtRisk: string[];
+  resolvedRisk: string[];
 }
 
 export interface PlannerRunStoredWarning {

@@ -224,6 +224,14 @@ test("idempotent start, guarded lifecycle, lookup and latest successful run", as
           generatedSessionCount: 1,
           retainedSessionCount: 0,
           unscheduledMinutes: 0,
+          delta: {
+            retained: [],
+            moved: [],
+            added: ["session-1"],
+            removed: [],
+            newlyAtRisk: [],
+            resolvedRisk: [],
+          },
           secret: "must-not-persist",
         },
         warnings: [

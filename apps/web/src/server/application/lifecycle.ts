@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { IntegrationAccountRecord } from "@university-planner/database";
+import type { IntegrationAccountRecord, PlannerRunRecord } from "@university-planner/database";
 import { requireAssessment, requireCourse, requireTask } from "./authorization";
 import { ApplicationError } from "./errors";
 import { auditNow, newRecordId, requireUpdated, service } from "./service";
@@ -149,13 +149,17 @@ export const completionRecords = {
   },
 };
 
-/** Reads existing metadata only. No invented planner executions. */
+/** Ordinary run reads expose bounded diagnostics, never the reproducibility snapshot. */
+function publicPlannerRun({ inputSnapshot: _snapshot, ...run }: PlannerRunRecord) {
+  void _snapshot;
+  return run;
+}
 export const plannerRuns = {
   get(input: unknown) {
     return service(id, input, async ({ id }, actor, tx) => {
       const run = await tx.repositories.plannerRuns.getForUser(actor.userId, id);
       if (!run) throw new ApplicationError("NOT_FOUND", "Record not found.");
-      return redact(run);
+      return publicPlannerRun(run);
     });
   },
   list(input: unknown = {}) {
@@ -163,7 +167,7 @@ export const plannerRuns = {
       z.object({ limit: z.number().int().min(1).max(100).default(20) }).strict(),
       input,
       async ({ limit }, actor, tx) =>
-        redact(await tx.repositories.plannerRuns.listRecent(actor.userId, limit)),
+        (await tx.repositories.plannerRuns.listRecent(actor.userId, limit)).map(publicPlannerRun),
     );
   },
 };
