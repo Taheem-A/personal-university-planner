@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 3 canonical scenario and regression suite: IN PROGRESS
+
+- Added permanent synthetic Toronto engineering-semester fixtures and a dedicated `pnpm test:planner-scenarios` command. The [scenario matrix](./milestone-3-scenario-matrix.md) records all 13 required roadmap cases and their exact local pass state; the targeted suite passed **13/13**.
+- Shared assertions check version attribution, repeated-run determinism, input purity, ordered sessions, workload conservation, reasons/warnings and the hard validator for successful plans. The Saturday-off preview checks minimal movement plus a separately infeasible variant; commute, released-time, hard-lock and DST cases use explicit policies and instants.
+- The deadline-move fixture found a real soft-policy defect: a preferred free-time reserve could shorten a feasible full session and strand required work. Allocation now retries without that daily soft preference only if the first attempt leaves work unplaced, and selects the retry only when it fits more work. The normal unit suite passed **96/96** locally after this fix. Milestone 3 remains **IN PROGRESS**.
+- Full local `pnpm verify` passed: format, lint, 73-file package boundaries, Prisma generation/validation, typecheck, **96/96** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests. The dedicated canonical suite passed **13/13**.
+- **Exact next work item:** randomized property/invariant testing, determinism/version proof and literal Milestone-3 exit-gate audit.
+
 ## 2026-09-24 — Milestone 3 validation, repair and scenarios: IN PROGRESS
 
 - The complete output audit reports structured issues for session validity, hard occupancy, availability/capability/commute, task state, dependency order, break and length rules, workload, ownership, deadlines and exact manual/lock preservation. `generatePlan` marks any remaining work or hard issue `INFEASIBLE`; a retained hard conflict is visible without moving user intent.

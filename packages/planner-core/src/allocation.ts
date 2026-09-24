@@ -258,7 +258,7 @@ function chooseWindow(
   return best;
 }
 
-export function placeTask(
+function allocateTask(
   task: PlannableTask,
   windows: CandidateWindow[],
   input: PlannerInput,
@@ -266,6 +266,7 @@ export function placeTask(
   policy: DailyPolicy,
   existingSessions: WorkSession[],
   softIntervals: InstantInterval[],
+  preferDailySoftPolicy: boolean,
 ): { sessions: WorkSession[]; remaining: number; windows: CandidateWindow[] } {
   const generated: WorkSession[] = [];
   let remaining = task.remainingMinutes;
@@ -282,9 +283,10 @@ export function placeTask(
     ];
     let choice: WindowChoice | undefined;
     for (const avoided of stages) {
-      choice =
-        chooseWindow(task, remaining, mutable, input, policy, context, true, avoided) ??
-        chooseWindow(task, remaining, mutable, input, policy, context, false, avoided);
+      choice = preferDailySoftPolicy
+        ? (chooseWindow(task, remaining, mutable, input, policy, context, true, avoided) ??
+          chooseWindow(task, remaining, mutable, input, policy, context, false, avoided))
+        : chooseWindow(task, remaining, mutable, input, policy, context, false, avoided);
       if (choice) break;
     }
     if (!choice) break;
@@ -307,4 +309,49 @@ export function placeTask(
     if (!task.splittable) break;
   }
   return { sessions: generated, remaining, windows: mutable };
+}
+
+export function placeTask(
+  task: PlannableTask,
+  windows: CandidateWindow[],
+  input: PlannerInput,
+  sessionCounter: { value: number },
+  policy: DailyPolicy,
+  existingSessions: WorkSession[],
+  softIntervals: InstantInterval[],
+): { sessions: WorkSession[]; remaining: number; windows: CandidateWindow[] } {
+  const firstCounter = { value: sessionCounter.value };
+  const first = allocateTask(
+    task,
+    windows,
+    input,
+    firstCounter,
+    policy,
+    existingSessions,
+    softIntervals,
+    true,
+  );
+  if (first.remaining === 0) {
+    sessionCounter.value = firstCounter.value;
+    return first;
+  }
+  // A soft daily preference must not manufacture infeasibility. Retry the task
+  // without that preference and keep the retry only if it places more work.
+  const retryCounter = { value: sessionCounter.value };
+  const retry = allocateTask(
+    task,
+    windows,
+    input,
+    retryCounter,
+    policy,
+    existingSessions,
+    softIntervals,
+    false,
+  );
+  if (retry.remaining < first.remaining) {
+    sessionCounter.value = retryCounter.value;
+    return retry;
+  }
+  sessionCounter.value = firstCounter.value;
+  return first;
 }

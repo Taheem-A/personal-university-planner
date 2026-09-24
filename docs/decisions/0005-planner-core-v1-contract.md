@@ -84,3 +84,11 @@ If a generated session fails validation, core makes one deterministic repair att
 `PlannerOutput` now includes a binary validity state, validation issues and per-task quantitative infeasibility evidence. Limiting factors describe observed capacity restrictions; they are not automatic lifestyle decisions. Concise session reason codes describe actual placement conditions and remain separate from numerical pressure components. Scenario simulation clones through normalization, generates a full alternative, compares sessions and reports capacity/deficit deltas and feasibility. It does not persist or apply constraints.
 
 **Exact next slice:** canonical scenario/regression suite with representative fixtures and randomized invariants, followed by a Milestone-3 exit audit.
+
+## Canonical scenario suite
+
+`tests/fixtures/planner/semester.js` and `tests/unit/planner-scenarios.test.js` are the permanent, synthetic regression contract. The [scenario matrix](../milestone-3-scenario-matrix.md) enumerates all 13 roadmap cases and outcomes. Real-world failures must be reduced to synthetic fixtures, tested, fixed and retained permanently; private user data must not be copied into tests.
+
+The deadline-move case demonstrated that a soft daily free-time reserve could cause false infeasibility: the first session was shortened even though no later pre-deadline capacity remained. `placeTask` now runs a second deterministic allocation for that task without the daily soft preference if the first leaves work unplaced. It chooses the retry only if more required work fits, then reports the soft-policy compromise through existing sustainability warnings. This changes no hard constraint or true deadline.
+
+**Exact next slice:** randomized property/invariant testing, determinism and version proof, and a literal Milestone-3 exit-gate audit.
