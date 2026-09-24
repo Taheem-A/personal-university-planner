@@ -1,18 +1,19 @@
 import type { PlannerInput, PlannableTask, WorkSession } from "../../domain/src";
 import {
   addMinutes,
-  instantToLocal,
   maxDate,
   minDate,
   minutesBetween,
   overlaps,
   roundUpToQuantum,
   MINUTE_MS,
+  SCHEDULING_QUANTUM_MINUTES,
 } from "../../shared/src";
 import type { CandidateWindow } from "./windows";
-import { energyFit, locationFits, windowUsableMinutes } from "./windows";
+import { windowSuitability } from "./windows";
+import { HEURISTIC_V1_CONFIG } from "./config";
 
-const FIVE_MINUTES = 5;
+const FIVE_MINUTES = SCHEDULING_QUANTUM_MINUTES;
 
 function sessionTarget(
   task: PlannableTask,
@@ -34,7 +35,7 @@ function stableSessionBonus(taskId: string, window: CandidateWindow, input: Plan
       session.taskId === taskId &&
       overlaps(session.startAt, session.endAt, window.startAt, window.endAt),
   );
-  return old ? 0.6 : 0;
+  return old ? HEURISTIC_V1_CONFIG.stabilityWindowBonus : 0;
 }
 
 function chooseWindow(
@@ -46,29 +47,21 @@ function chooseWindow(
   let bestScore = -Infinity;
   for (let index = 0; index < windows.length; index += 1) {
     const window = windows[index];
-    const usable = windowUsableMinutes(task, window, input);
-    if (usable < Math.min(task.minimumSessionMinutes, task.remainingMinutes)) continue;
-    if (!locationFits(task, window, input)) continue;
-    const energy = energyFit(task, window, input);
+    const suitability = windowSuitability(task, window, input);
+    if (!suitability) continue;
     const deadline = task.dueAt ?? input.horizonEnd;
     const hoursBeforeDeadline = Math.max(
-      0.25,
+      HEURISTIC_V1_CONFIG.deadlineMinimumHours,
       (deadline.getTime() - window.startAt.getTime()) / 3_600_000,
     );
     const earlyUsefulness = 1 / Math.sqrt(hoursBeforeDeadline);
-    const lateHour = Number(instantToLocal(window.startAt, input.timezone).time.slice(0, 2));
-    const latePenalty =
-      task.energyRequirement === "HIGH" &&
-      input.preferences.avoidLateHighEnergyTasks &&
-      lateHour >= 21
-        ? 1.5
-        : 0;
     const score =
-      energy * 2 +
-      window.capacityFactor +
-      earlyUsefulness +
+      suitability.energyMatch * HEURISTIC_V1_CONFIG.windowEnergyWeight +
+      suitability.effectiveRate * HEURISTIC_V1_CONFIG.windowCapacityWeight +
+      earlyUsefulness * HEURISTIC_V1_CONFIG.windowUrgencyWeight +
       stableSessionBonus(task.id, window, input) -
-      latePenalty;
+      suitability.undesirableTimeCost * HEURISTIC_V1_CONFIG.lateWindowPenalty -
+      suitability.fragmentationCost * HEURISTIC_V1_CONFIG.fragmentationPenaltyWeight;
     if (score > bestScore) {
       bestScore = score;
       bestIndex = index;

@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-23 — Milestone 3 capacity, risk and deterministic ranking: IN PROGRESS
+
+- Added task-specific suitable capacity, quantitative slack/pressure/deficit and explicit feasibility categories. The calculation respects true deadlines, availability, occupied time, energy, location, commute policy, capacity factors and optimistic prerequisite completion. Zero suitable capacity is represented by a null ratio rather than a fabricated denominator.
+- Added nonlinear deadline pressure, separate soft preferred-completion pressure, optional normalized importance, explicit prerequisite value, context fit, fragmentation and undesirable-time costs. Named typed `heuristic-v1` configuration holds weights and thresholds; stable score/deadline/preferred-target/task-ID tie-breakers determine ranking. Ready tasks are rescored after each placement.
+- Added focused ranking and numerical tests. Milestone 3 remains **IN PROGRESS**; placement sustainability, stability, repair, explanations and broader scenario/property verification remain.
+- Full local `pnpm verify` passed: format, lint, 69-file package-boundary check, Prisma generation/validation, typecheck, **45/45** unit tests, **36/36** integration tests, core/database/Next.js production builds and **2/2** Chromium E2E tests.
+- **Exact next work item:** sustainable session construction and allocation.
+
 ## 2026-09-23 — Milestone 3 normalization and candidate capacity: IN PROGRESS
 
 - Added a pure normalization stage that clones and validates the planner snapshot, expands local recurrence with shared timezone utilities, retains unknown deadlines, and requires resolved estimates. Completed prerequisites can be supplied without fabricated estimates.

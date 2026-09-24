@@ -140,6 +140,12 @@ export function normalizePlannerInput(input: PlannerInput): NormalizedPlanningSt
   if (!Number.isInteger(input.minimumSleepMinutes) || input.minimumSleepMinutes < 0) {
     throw new RangeError("minimumSleepMinutes must be a non-negative integer");
   }
+  if (
+    !Number.isFinite(input.preferences.preferredDeadlineBufferHours) ||
+    input.preferences.preferredDeadlineBufferHours < 0
+  ) {
+    throw new RangeError("preferredDeadlineBufferHours must be finite and non-negative");
+  }
   const effectiveStart = minDate(maxDate(now, horizonStart), horizonEnd);
   const expanded = expandRecurrence(input);
   for (const interval of [
@@ -169,8 +175,13 @@ export function normalizePlannerInput(input: PlannerInput): NormalizedPlanningSt
       task.originalEstimatedMinutes <= 0
     )
       throw new RangeError(`Task ${task.id} needs explicit valid estimates and remaining work.`);
-    if (!Number.isFinite(task.importance) || task.importance < 0 || task.importance > 1)
+    if (
+      task.importance !== undefined &&
+      (!Number.isFinite(task.importance) || task.importance < 0 || task.importance > 1)
+    )
       throw new RangeError(`Task ${task.id} has invalid normalized importance.`);
+    if (task.priorityOverride !== undefined && !Number.isFinite(task.priorityOverride))
+      throw new RangeError(`Task ${task.id} has invalid priority override.`);
     return {
       ...task,
       availableFrom: validInstant(task.availableFrom, `Task ${task.id} availableFrom`),

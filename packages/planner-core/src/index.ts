@@ -3,7 +3,7 @@ import { sortByStart } from "../../shared/src";
 import { placeTask } from "./allocation";
 import { dependencyReadyAt } from "./eligibility";
 import { normalizePlannerInput } from "./input";
-import { calculatePressure } from "./pressure";
+import { calculatePressure, dependencyImportance, rankTaskPressures, rankTasks } from "./pressure";
 import { validatePlan } from "./validation";
 import { PLANNER_VERSION } from "./version";
 
@@ -11,6 +11,8 @@ export { validatePlan } from "./validation";
 export { simulateProtectedWindow } from "./scenario";
 export { PLANNER_VERSION } from "./version";
 export { normalizePlannerInput } from "./input";
+export { calculatePressure, rankTaskPressures, rankTasks } from "./pressure";
+export { HEURISTIC_V1_CONFIG } from "./config";
 
 export function generatePlan(rawInput: PlannerInput): PlannerOutput {
   const normalized = normalizePlannerInput(rawInput);
@@ -22,16 +24,8 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
       ...task,
       remainingMinutes: normalized.unallocatedMinutesByTask.get(task.id)!,
     }));
-  const pressures = tasks.map((task) => calculatePressure(task, windows, input));
-  const pressureByTask = new Map(pressures.map((pressure) => [pressure.taskId, pressure]));
-  const ranked = [...tasks].sort((a, b) => {
-    const pressureDelta =
-      (pressureByTask.get(b.id)?.score ?? 0) - (pressureByTask.get(a.id)?.score ?? 0);
-    if (Math.abs(pressureDelta) > 0.0001) return pressureDelta;
-    const aDue = a.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    const bDue = b.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    return aDue - bDue;
-  });
+  const pressures = rankTasks(normalized);
+  const rankedTaskIds = pressures.map((pressure) => pressure.taskId);
 
   const sessionCounter = { value: 1 };
   const sessions: WorkSession[] = [
@@ -42,16 +36,38 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
   const warnings: PlannerWarning[] = [];
   const unscheduledMinutesByTask: Record<string, number> = {};
 
-  const pending = [...ranked];
+  const pending = [...tasks];
+  const allocationOrderTaskIds: string[] = [];
   const allocatedCompletion = new Map<string, Date>(
     [...normalized.reservedEndByTask].filter(([id]) => normalized.fullyReservedTaskIds.has(id)),
   );
   while (pending.length > 0) {
-    const index = pending.findIndex((task) =>
-      dependencyReadyAt(task.id, input, normalized.eligibility, allocatedCompletion),
+    const readyPressures = rankTaskPressures(
+      pending.flatMap((task) => {
+        const readyAt = dependencyReadyAt(
+          task.id,
+          input,
+          normalized.eligibility,
+          allocatedCompletion,
+        );
+        return readyAt
+          ? [
+              calculatePressure(
+                task,
+                windows,
+                input,
+                readyAt,
+                dependencyImportance(task.id, normalized),
+              ),
+            ]
+          : [];
+      }),
     );
-    if (index < 0) break;
+    if (readyPressures.length === 0) break;
+    const pressure = readyPressures[0];
+    const index = pending.findIndex((task) => task.id === pressure.taskId);
     const task = pending.splice(index, 1)[0];
+    allocationOrderTaskIds.push(task.id);
     const readyAt = dependencyReadyAt(task.id, input, normalized.eligibility, allocatedCompletion)!;
     const schedulable = {
       ...task,
@@ -62,17 +78,13 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
     windows = placed.windows;
     if (placed.remaining > 0) {
       unscheduledMinutesByTask[task.id] = placed.remaining;
-      const pressure = pressureByTask.get(task.id);
       warnings.push({
-        code:
-          pressure && pressure.suitableCapacityMinutes <= 0 ? "NO_SUITABLE_WINDOW" : "INFEASIBLE",
+        code: pressure.suitableCapacityMinutes <= 0 ? "NO_SUITABLE_WINDOW" : "INFEASIBLE",
         taskId: task.id,
         message: `Task ${task.title} has ${placed.remaining} minute(s) that do not currently fit.`,
         deficitMinutes: placed.remaining,
         reasonCodes: [
-          pressure && pressure.suitableCapacityMinutes <= 0
-            ? "NO_SUITABLE_WINDOW"
-            : "INSUFFICIENT_CAPACITY",
+          pressure.suitableCapacityMinutes <= 0 ? "NO_SUITABLE_WINDOW" : "INSUFFICIENT_CAPACITY",
         ],
       });
     } else {
@@ -84,8 +96,7 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
       const completion =
         last && reservedEnd ? (last > reservedEnd ? last : reservedEnd) : (last ?? reservedEnd);
       if (completion) allocatedCompletion.set(task.id, completion);
-      const pressure = pressureByTask.get(task.id);
-      if (pressure && pressure.slackMinutes >= 0 && pressure.slackMinutes <= 60) {
+      if (pressure.slackMinutes >= 0 && pressure.slackMinutes <= 60) {
         warnings.push({
           code: "LOW_SLACK",
           taskId: task.id,
@@ -121,6 +132,8 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
     sessions: sortByStart(sessions),
     warnings,
     pressures,
+    rankedTaskIds,
+    allocationOrderTaskIds,
     unscheduledMinutesByTask,
     reasonsBySession: {},
   };

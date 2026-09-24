@@ -136,7 +136,7 @@ export interface PlannableTask {
   interruptible: boolean;
   priorityOverride?: number;
   /** Normalized, source-independent importance in [0, 1]. */
-  importance: number;
+  importance?: number;
   /** Whether the due instant is fixed or still tentative. */
   deadlineConfidence: "FIXED" | "TENTATIVE" | "UNKNOWN";
 }
@@ -311,8 +311,32 @@ export interface TaskPressure {
   suitableCapacityMinutes: number;
   remainingMinutes: number;
   slackMinutes: number;
-  pressureRatio: number;
+  /** Null means positive work with zero suitable capacity. */
+  pressureRatio: number | null;
+  capacityDeficitMinutes: number;
+  feasibility: "COMFORTABLE" | "CONSTRAINED" | "CRITICAL" | "INFEASIBLE" | "HORIZON_LIMITED";
+  actualDeadlineAt?: Date;
+  deadlineHoursRemaining?: number;
+  preferredCompletionTargetAt?: Date;
+  preferredTargetSource: "EXPLICIT" | "BUFFER" | "NONE";
+  preferredCapacityMinutes?: number;
+  preferredSlackMinutes?: number;
+  dependencyReadyAt?: Date;
+  scoreComponents: {
+    capacityPressure: number;
+    lowSlackPressure: number;
+    deadlinePressure: number;
+    preferredCompletionPressure: number;
+    importance: number;
+    importanceKnown: boolean;
+    dependencyImportance: number;
+    contextFit: number;
+    fragmentationCost: number;
+    undesirableTimeCost: number;
+    priorityOverride: number;
+  };
   score: number;
+  rank: number;
 }
 
 export interface PlannerOutput {
@@ -320,6 +344,8 @@ export interface PlannerOutput {
   sessions: WorkSession[];
   warnings: PlannerWarning[];
   pressures: TaskPressure[];
+  rankedTaskIds: Id[];
+  allocationOrderTaskIds: Id[];
   unscheduledMinutesByTask: Record<Id, number>;
   /** Reserved for placement explanations; later Milestone-3 slices populate it. */
   reasonsBySession: Record<Id, PlannerReasonCode[]>;

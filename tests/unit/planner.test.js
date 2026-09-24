@@ -6,6 +6,8 @@ const {
   validatePlan,
   PLANNER_VERSION,
   normalizePlannerInput,
+  calculatePressure,
+  rankTasks,
 } = require("../../dist/packages/planner-core/src/index.js");
 const { windowUsableMinutes } = require("../../dist/packages/planner-core/src/windows.js");
 
@@ -562,4 +564,188 @@ test("late-work policy uses the user's explicit timezone, not the host timezone"
 
   const out = generatePlan(input);
   assert.equal(out.sessions[0].startAt.toISOString(), "2026-09-22T00:00:00.000Z");
+});
+
+function priorityInput() {
+  const input = baseInput();
+  input.horizonEnd = d("2026-09-21T18:00:00-04:00");
+  input.events = [];
+  input.availability = [
+    {
+      ...input.availability[0],
+      endAt: input.horizonEnd,
+      allowedLocationTags: ["ANYWHERE", "DESK", "TRANSIT_OK"],
+    },
+  ];
+  input.preferences.preferredDeadlineBufferHours = 0;
+  input.tasks = [];
+  return input;
+}
+
+function priorityTask(id, work, due, changes = {}) {
+  return {
+    ...baseInput().tasks[0],
+    id,
+    title: id,
+    dueAt: d(due),
+    currentEstimatedMinutes: Math.max(1, work),
+    originalEstimatedMinutes: Math.max(1, work),
+    remainingMinutes: work,
+    energyRequirement: "LOW",
+    minimumSessionMinutes: 5,
+    preferredSessionMinutes: 30,
+    importance: undefined,
+    ...changes,
+  };
+}
+
+function pressureFor(input, id) {
+  const state = normalizePlannerInput(input);
+  return calculatePressure(
+    state.input.tasks.find((task) => task.id === id),
+    state.candidates,
+    state.input,
+  );
+}
+
+test("low slack and large workload outrank deceptively sooner small work", () => {
+  const input = priorityInput();
+  input.availability[0].endAt = d("2026-09-21T12:00:00-04:00");
+  input.tasks = [
+    priorityTask("tiny", 10, "2026-09-21T10:00:00-04:00"),
+    priorityTask("large", 180, "2026-09-21T12:00:00-04:00"),
+  ];
+  const out = generatePlan(input);
+  assert.equal(out.rankedTaskIds[0], "large");
+  assert.ok(out.pressures[0].pressureRatio > 0.7);
+  assert.ok(out.pressures[0].slackMinutes < out.pressures[1].slackMinutes);
+});
+
+test("deadline urgency rises nonlinearly and preferred targets do not replace deadlines", () => {
+  const input = priorityInput();
+  input.tasks = [priorityTask("essay", 120, "2026-09-21T14:00:00-04:00")];
+  const sixHours = pressureFor(input, "essay").scoreComponents.deadlinePressure;
+  input.tasks[0].dueAt = d("2026-09-21T11:00:00-04:00");
+  const threeHours = pressureFor(input, "essay").scoreComponents.deadlinePressure;
+  assert.ok(threeHours > 2 * sixHours);
+  input.tasks[0].dueAt = d("2026-09-21T18:00:00-04:00");
+  input.tasks[0].preferredCompletionAt = d("2026-09-21T09:00:00-04:00");
+  const preferred = pressureFor(input, "essay");
+  assert.equal(preferred.actualDeadlineAt.toISOString(), "2026-09-21T22:00:00.000Z");
+  assert.ok(preferred.preferredSlackMinutes < 0);
+  assert.ok(preferred.scoreComponents.preferredCompletionPressure > 0);
+  input.tasks[0].preferredCompletionAt = undefined;
+  input.preferences.preferredDeadlineBufferHours = 9;
+  const buffered = pressureFor(input, "essay");
+  assert.equal(buffered.preferredTargetSource, "BUFFER");
+  assert.equal(buffered.actualDeadlineAt.toISOString(), preferred.actualDeadlineAt.toISOString());
+});
+
+test("late high-energy windows carry an explicit undesirable-time cost", () => {
+  const input = priorityInput();
+  input.now = d("2026-09-21T20:00:00-04:00");
+  input.horizonStart = input.now;
+  input.horizonEnd = d("2026-09-21T23:00:00-04:00");
+  input.availability[0].startAt = d("2026-09-21T21:00:00-04:00");
+  input.availability[0].endAt = input.horizonEnd;
+  input.tasks = [
+    priorityTask("late", 30, "2026-09-21T23:00:00-04:00", {
+      energyRequirement: "HIGH",
+    }),
+  ];
+  const late = pressureFor(input, "late");
+  assert.ok(late.scoreComponents.undesirableTimeCost > 0);
+  input.preferences.avoidLateHighEnergyTasks = false;
+  assert.equal(pressureFor(input, "late").scoreComponents.undesirableTimeCost, 0);
+});
+
+test("importance influences ranking without overpowering feasibility", () => {
+  const input = priorityInput();
+  input.tasks = [
+    priorityTask("low", 30, "2026-09-21T18:00:00-04:00", { importance: 0 }),
+    priorityTask("high", 30, "2026-09-21T18:00:00-04:00", { importance: 1 }),
+  ];
+  assert.equal(generatePlan(input).rankedTaskIds[0], "high");
+  input.tasks[0].remainingMinutes = 500;
+  assert.equal(generatePlan(input).rankedTaskIds[0], "low");
+  input.tasks[1].importance = undefined;
+  assert.equal(pressureFor(input, "high").scoreComponents.importanceKnown, false);
+});
+
+test("prerequisites gain importance and dependent capacity starts after prerequisite work", () => {
+  const input = priorityInput();
+  input.tasks = [
+    priorityTask("prerequisite", 60, "2026-09-21T18:00:00-04:00"),
+    priorityTask("dependent", 60, "2026-09-21T18:00:00-04:00"),
+  ];
+  input.dependencies = [
+    {
+      prerequisiteTaskId: "prerequisite",
+      dependentTaskId: "dependent",
+      type: "FINISH_TO_START",
+    },
+  ];
+  const ranked = rankTasks(normalizePlannerInput(input));
+  const prerequisite = ranked.find((item) => item.taskId === "prerequisite");
+  const dependent = ranked.find((item) => item.taskId === "dependent");
+  assert.ok(prerequisite.scoreComponents.dependencyImportance > 0);
+  assert.ok(dependent.dependencyReadyAt > input.now);
+  assert.ok(dependent.suitableCapacityMinutes < prerequisite.suitableCapacityMinutes);
+});
+
+test("capacity respects factor, energy, capability, and commute policy", () => {
+  const input = priorityInput();
+  input.availability[0].capacityFactor = 0.5;
+  input.availability[0].energyLevel = "LOW";
+  input.tasks = [priorityTask("desk", 30, "2026-09-21T18:00:00-04:00")];
+  const lowEnergy = pressureFor(input, "desk");
+  input.tasks[0].energyRequirement = "HIGH";
+  assert.ok(pressureFor(input, "desk").suitableCapacityMinutes < lowEnergy.suitableCapacityMinutes);
+  input.availability[0].allowedLocationTags = ["TRANSIT_OK"];
+  assert.equal(pressureFor(input, "desk").suitableCapacityMinutes, 0);
+  input.tasks[0].locationRequirements = ["TRANSIT_OK"];
+  input.availability[0].kind = "COMMUTE";
+  assert.equal(pressureFor(input, "desk").suitableCapacityMinutes, 0);
+  input.preferences.scheduleCommuteWork = true;
+  assert.ok(pressureFor(input, "desk").suitableCapacityMinutes > 0);
+});
+
+test("zero, tiny, and large workloads retain explicit finite pressure diagnostics", () => {
+  const input = priorityInput();
+  input.availability = [];
+  input.tasks = [priorityTask("edge", 30, "2026-09-21T18:00:00-04:00")];
+  const empty = pressureFor(input, "edge");
+  assert.equal(empty.pressureRatio, null);
+  assert.equal(empty.feasibility, "INFEASIBLE");
+  assert.ok(Number.isFinite(empty.score));
+  input.tasks[0].remainingMinutes = 0;
+  assert.equal(pressureFor(input, "edge").pressureRatio, 0);
+  input.availability = priorityInput().availability;
+  input.tasks[0].remainingMinutes = 1;
+  assert.ok(Number.isFinite(pressureFor(input, "edge").pressureRatio));
+  input.tasks[0].remainingMinutes = 1_000_000_000;
+  assert.ok(Number.isFinite(pressureFor(input, "edge").score));
+});
+
+test("priority inputs reject non-finite values before ranking", () => {
+  const input = priorityInput();
+  input.tasks = [priorityTask("bad", 30, "2026-09-21T18:00:00-04:00")];
+  input.tasks[0].priorityOverride = Number.NaN;
+  assert.throws(() => normalizePlannerInput(input), /priority override/);
+  input.tasks[0].priorityOverride = 0;
+  input.preferences.preferredDeadlineBufferHours = Number.POSITIVE_INFINITY;
+  assert.throws(() => normalizePlannerInput(input), /preferredDeadlineBufferHours/);
+});
+
+test("exact ties and repeated plans use stable task IDs", () => {
+  const input = priorityInput();
+  input.tasks = [
+    priorityTask("z", 30, "2026-09-21T18:00:00-04:00"),
+    priorityTask("a", 30, "2026-09-21T18:00:00-04:00"),
+  ];
+  const first = generatePlan(input);
+  assert.deepEqual(first.rankedTaskIds, ["a", "z"]);
+  assert.deepEqual(generatePlan(input), first);
+  input.tasks.reverse();
+  assert.deepEqual(generatePlan(input).rankedTaskIds, ["a", "z"]);
 });

@@ -11,6 +11,7 @@ import {
   roundUpToQuantum,
   MINUTE_MS,
 } from "../../shared/src";
+import { HEURISTIC_V1_CONFIG } from "./config";
 
 export interface CandidateWindow extends AvailabilityWindow {
   startAt: Date;
@@ -21,6 +22,18 @@ export interface CandidateWindow extends AvailabilityWindow {
   localStartTime: string;
   /** Simultaneous alternatives share one clock interval, never additive capacity. */
   alternatives: AvailabilityWindow[];
+}
+
+export interface WindowSuitability {
+  startAt: Date;
+  endAt: Date;
+  clockMinutes: number;
+  capacityMinutes: number;
+  effectiveRate: number;
+  energyMatch: number;
+  commute: boolean;
+  fragmentationCost: number;
+  undesirableTimeCost: number;
 }
 
 function clamp01(value: number): number {
@@ -153,26 +166,60 @@ export function candidateWindows(
   return sortByStart(result);
 }
 
+export function windowSuitability(
+  task: PlannableTask,
+  window: CandidateWindow,
+  input: PlannerInput,
+  endLimit?: Date,
+): WindowSuitability | undefined {
+  if (task.remainingMinutes <= 0 || !locationFits(task, window, input)) return undefined;
+  const earliest = maxDate(window.startAt, task.availableFrom, input.now);
+  const start = new Date(roundUpToQuantum(earliest.getTime() / MINUTE_MS) * MINUTE_MS);
+  const deadline = task.dueAt ?? input.horizonEnd;
+  const latest = minDate(window.endAt, deadline, input.horizonEnd, endLimit ?? input.horizonEnd);
+  const end = new Date(roundDownToQuantum(latest.getTime() / MINUTE_MS) * MINUTE_MS);
+  if (end <= start) return undefined;
+  const clockMinutes = minutesBetween(start, end);
+  const suitable = window.alternatives
+    .filter((option) => optionFits(task, option, input))
+    .map((option) => ({
+      option,
+      energyMatch: optionEnergyFit(task, option),
+      effectiveRate: clamp01(option.capacityFactor) * optionEnergyFit(task, option),
+    }))
+    .sort((a, b) => b.effectiveRate - a.effectiveRate || a.option.id.localeCompare(b.option.id));
+  const best = suitable[0];
+  if (!best || best.effectiveRate <= 0) return undefined;
+  const capacityMinutes = Math.floor(clockMinutes * best.effectiveRate);
+  const minimumUseful = Math.min(task.minimumSessionMinutes, task.remainingMinutes);
+  if (
+    capacityMinutes < minimumUseful ||
+    (!task.splittable && capacityMinutes < task.remainingMinutes)
+  )
+    return undefined;
+  const localHour = Number(instantToLocal(start, input.timezone).time.slice(0, 2));
+  return {
+    startAt: start,
+    endAt: end,
+    clockMinutes,
+    capacityMinutes,
+    effectiveRate: best.effectiveRate,
+    energyMatch: best.energyMatch,
+    commute: best.option.kind === "COMMUTE",
+    fragmentationCost: Math.max(0, 1 - clockMinutes / Math.max(1, task.preferredSessionMinutes)),
+    undesirableTimeCost:
+      task.energyRequirement === "HIGH" &&
+      input.preferences.avoidLateHighEnergyTasks &&
+      localHour >= HEURISTIC_V1_CONFIG.lateHighEnergyHour
+        ? 1
+        : 0,
+  };
+}
+
 export function windowUsableMinutes(
   task: PlannableTask,
   window: CandidateWindow,
   input: PlannerInput,
 ): number {
-  if (!locationFits(task, window, input)) return 0;
-  const earliest = maxDate(window.startAt, task.availableFrom, input.now);
-  const start = new Date(roundUpToQuantum(earliest.getTime() / MINUTE_MS) * MINUTE_MS);
-  const deadline = task.dueAt ?? input.horizonEnd;
-  const latest = minDate(window.endAt, deadline, input.horizonEnd);
-  const end = new Date(roundDownToQuantum(latest.getTime() / MINUTE_MS) * MINUTE_MS);
-  if (end <= start) return 0;
-  const clock = minutesBetween(start, end);
-  return Math.floor(
-    clock *
-      Math.max(
-        0,
-        ...window.alternatives
-          .filter((option) => optionFits(task, option, input))
-          .map((option) => clamp01(option.capacityFactor) * optionEnergyFit(task, option)),
-      ),
-  );
+  return windowSuitability(task, window, input)?.capacityMinutes ?? 0;
 }
