@@ -2,7 +2,11 @@
 
 ## Current milestone status
 
-**Milestone 2 — GATE PASSED.** Google-only Auth.js, persistent canonical identity provisioning, authenticated and validated service families, explicit optimistic versions, account lifecycle, and representative protected Next.js routes are implemented on `auth/milestone-2-trust-boundary`. Migrations 0001–0006 deployed from zero on a fresh disposable Neon database; guarded live route/service/PostgreSQL, concurrent identity provisioning, rollback and schema-drift checks passed. Draft PR #2 supplied clean GitHub Actions `pnpm verify` with Chromium and a green dependency review. The final literal exit-gate audit is recorded in [Milestone 2 exit gate](./milestone-2-exit-gate.md). The PR remains unmerged.
+**Milestone 3 — IN PROGRESS.** The planner contract and architecture slice is implemented on `plan/milestone-3-planner-core-v1`. The core now has focused pure modules for input capability checks, candidate windows, pressure, allocation, validation, simulation and versioning. Its fully explicit snapshot includes the facts needed by later Milestone-3 stages, and output carries `heuristic-v1`. Deferred constraints fail fast rather than being silently ignored. See [ADR 0005](./decisions/0005-planner-core-v1-contract.md). This is not the complete scheduling engine or the Milestone-3 exit gate.
+
+On this slice, full `pnpm verify` passed locally: formatting, lint, package boundaries (66 source files), Prisma generation/validation, typecheck, 25/25 unit tests, 36/36 integration tests, core/database/Next.js production builds and 2/2 Chromium E2E tests. No live PostgreSQL planner execution was part of this pure-core slice.
+
+**Milestone 2 — GATE PASSED and merged.** PR #2 was merged into default branch `master` at `d98dfd6`. Google-only Auth.js, persistent canonical identity provisioning, authenticated and validated service families, explicit optimistic versions, account lifecycle, and representative protected Next.js routes are implemented. Migrations 0001–0006 deployed from zero on a fresh disposable Neon database; guarded live route/service/PostgreSQL, concurrent identity provisioning, rollback and schema-drift checks passed. PR #2 supplied clean GitHub Actions `pnpm verify` with Chromium and a green dependency review. The final literal exit-gate audit is recorded in [Milestone 2 exit gate](./milestone-2-exit-gate.md).
 
 **Milestone 1 — GATE PASSED**
 
@@ -58,8 +62,8 @@ The canonical schema/domain audit, centralized time foundation, first source-con
 
 ## Gate outcome and later risks
 
-No Milestone-2 exit blocker remains after the literal re-audit. External Google OAuth redirect/callback availability has not been exercised with deployment credentials; the Auth.js callback boundary is tested locally and canonical identity concurrency was verified against PostgreSQL. Provider integration, snapshot-consistent export and credential revocation remain later-roadmap work. PR #2 stays unmerged for separate review and merge.
+No Milestone-2 exit blocker remains after the literal re-audit and PR #2 merge. External Google OAuth redirect/callback availability has not been exercised with deployment credentials; the Auth.js callback boundary is tested locally and canonical identity concurrency was verified against PostgreSQL. Provider integration, snapshot-consistent export and credential revocation remain later-roadmap work.
 
 ## Exact next work item
 
-**Milestone 3 — Planner-Core v1: Complete Deterministic Scheduling Engine**
+**Milestone-3 normalization/eligibility/timeline/candidate-capacity slice.** Resolve dependency and availability semantics, hard/soft/protected/sleep intervals, manual and locked occupancy, commute eligibility and capacity metadata from the explicit snapshot. The remaining scoring, sustainable allocation, stability, repair, explanations and scenario/property suite follow before the gate.

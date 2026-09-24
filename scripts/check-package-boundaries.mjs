@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -24,6 +24,14 @@ const allowedInternalImports = {
 
 const roots = [path.join(repositoryRoot, "packages"), path.join(repositoryRoot, "apps")];
 const sourceFiles = [];
+const plannerManifestPath = path.join(repositoryRoot, "packages/planner-core/package.json");
+const plannerManifest = existsSync(plannerManifestPath)
+  ? JSON.parse(readFileSync(plannerManifestPath, "utf8"))
+  : {};
+const allowedPlannerDependencies = new Set([
+  "@university-planner/domain",
+  "@university-planner/shared",
+]);
 
 function collect(directory) {
   for (const entry of readdirSync(directory)) {
@@ -52,7 +60,19 @@ function targetOf(importerPath, specifier) {
 }
 
 const violations = [];
-const importPattern = /(?:from\s+|import\s*\(|require\s*\()\s*["']([^"']+)["']/g;
+for (const field of [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+  "optionalDependencies",
+]) {
+  for (const name of Object.keys(plannerManifest[field] ?? {})) {
+    if (!allowedPlannerDependencies.has(name)) {
+      violations.push(`packages/planner-core/package.json: planner-core cannot depend on ${name}`);
+    }
+  }
+}
+const importPattern = /(?:from\s+|import\s*\(|import\s+|require\s*\()\s*["']([^"']+)["']/g;
 
 for (const filePath of sourceFiles) {
   const owner = ownerOf(filePath);
@@ -118,7 +138,8 @@ for (const filePath of sourceFiles) {
     }
     if (
       owner === "planner-core" &&
-      /^(?:next|react|@prisma|@auth|openai|ai)(?:\/|$)/.test(specifier)
+      !specifier.startsWith(".") &&
+      !allowedPlannerDependencies.has(specifier)
     ) {
       violations.push(
         `${path.relative(repositoryRoot, filePath)}: planner-core cannot import ${specifier}`,

@@ -113,16 +113,31 @@ export interface Task {
   planningMode: PlanningMode;
 }
 
-/** A canonical Task after application services have supplied every planner prerequisite. */
-export interface PlannableTask extends Task {
+/** Plain planner snapshot, assembled and validated outside planner-core. */
+export interface PlannableTask {
+  id: Id;
+  userId: Id;
+  title: string;
+  status: TaskStatus;
+  planningMode: PlanningMode;
   availableFrom: Date;
+  dueAt?: Date;
+  preferredCompletionAt?: Date;
   currentEstimatedMinutes: number;
   originalEstimatedMinutes: number;
   remainingMinutes: number;
   energyRequirement: EnergyLevel;
+  locationRequirements: LocationTag[];
   minimumSessionMinutes: number;
   preferredSessionMinutes: number;
   maximumSessionMinutes: number;
+  splittable: boolean;
+  interruptible: boolean;
+  priorityOverride?: number;
+  /** Normalized, source-independent importance in [0, 1]. */
+  importance: number;
+  /** Whether the due instant is fixed or still tentative. */
+  deadlineConfidence: "FIXED" | "TENTATIVE" | "UNKNOWN";
 }
 
 export interface TaskDependency {
@@ -169,6 +184,29 @@ export interface AvailabilityWindow {
   capacityFactor: number;
   energyLevel: EnergyLevel;
   allowedLocationTags: LocationTag[];
+  /** Commute capacity is usable only when the user's policy permits it. */
+  kind?: "ORDINARY" | "COMMUTE";
+}
+
+/** Expanded, half-open planner interval. Recurrence expansion happens before core entry. */
+export interface PlannerProtectedWindow {
+  id: Id;
+  startAt: Date;
+  endAt: Date;
+  level: "HARD" | "SOFT";
+  reason: string;
+}
+
+export interface PlannerSleepWindow {
+  id: Id;
+  startAt: Date;
+  endAt: Date;
+}
+
+export interface PlannerDependency {
+  prerequisiteTaskId: Id;
+  dependentTaskId: Id;
+  type: "FINISH_TO_START";
 }
 
 export interface WorkSession {
@@ -214,18 +252,40 @@ export interface PlannerInput {
   horizonStart: Date;
   horizonEnd: Date;
   tasks: PlannableTask[];
+  dependencies: PlannerDependency[];
   events: CalendarEvent[];
+  protectedWindows: PlannerProtectedWindow[];
+  sleepWindows: PlannerSleepWindow[];
   availability: AvailabilityWindow[];
+  manualSessions: WorkSession[];
   lockedSessions: WorkSession[];
-  previousSessions?: WorkSession[];
+  previousSessions: WorkSession[];
+  /** Explicit replan intent; incremental is the ordinary scheduling mode. */
+  replanMode: "INCREMENTAL" | "FULL" | "SCENARIO";
+  releasedTimePolicy: "REPLAN_IF_USEFUL" | "LEAVE_FREE";
+  /** Minimum protected sleep across each local day, supplied by application policy. */
+  minimumSleepMinutes: number;
   preferences: PlanningPreferences;
 }
+
+export type PlannerVersion = "heuristic-v1";
+export type PlannerReasonCode =
+  | "DEADLINE_PRESSURE"
+  | "LOW_SLACK"
+  | "ENERGY_MATCH"
+  | "LOCATION_MATCH"
+  | "STABILITY_PRESERVED"
+  | "HARD_CONSTRAINT"
+  | "DEPENDENCY_BLOCKED"
+  | "NO_SUITABLE_WINDOW"
+  | "INSUFFICIENT_CAPACITY";
 
 export interface PlannerWarning {
   code: "INFEASIBLE" | "LOW_SLACK" | "NO_SUITABLE_WINDOW";
   taskId?: Id;
   message: string;
   deficitMinutes?: number;
+  reasonCodes?: PlannerReasonCode[];
 }
 
 export interface TaskPressure {
@@ -238,10 +298,13 @@ export interface TaskPressure {
 }
 
 export interface PlannerOutput {
+  plannerVersion: PlannerVersion;
   sessions: WorkSession[];
   warnings: PlannerWarning[];
   pressures: TaskPressure[];
   unscheduledMinutesByTask: Record<Id, number>;
+  /** Reserved for placement explanations; later Milestone-3 slices populate it. */
+  reasonsBySession: Record<Id, PlannerReasonCode[]>;
 }
 
 export interface ScenarioRequest {

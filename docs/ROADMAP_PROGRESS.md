@@ -1,5 +1,12 @@
 # Roadmap progress
 
+## 2026-09-23 — Milestone 3 planner contract and architecture: IN PROGRESS
+
+- PR #2 is merged into default branch `master` at `d98dfd6`; Milestone 2 remains gate passed. The unmerged wording in the prior audit entry below is historical evidence from before the merge.
+- Established the explicit planner snapshot, typed `heuristic-v1` output version and pure module responsibilities recorded in [ADR 0005](./decisions/0005-planner-core-v1-contract.md). Existing baseline behavior was preserved. New constraint fields reject unsupported nonempty inputs until implemented; no planner persistence, production UI wiring or migration was added.
+- Local full `pnpm verify` passed: formatting, lint, boundaries, Prisma generation/validation, typecheck, **25/25** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests.
+- Milestone 3 remains **IN PROGRESS**. Exact next work item: normalization/eligibility/timeline/candidate-capacity slice.
+
 ## 2026-09-23 — Milestone 2: GATE PASSED
 
 - The final literal audit verified Google-only Auth.js, atomic/idempotent canonical identity mapping, session-derived actor scope, service-side Zod/domain checks, transaction-bound repositories, structured safe errors, explicit optimistic versions, account export/deletion and all intended Milestone-2 service families. No production route imports Prisma or repositories directly; no client-supplied owner ID is authoritative.

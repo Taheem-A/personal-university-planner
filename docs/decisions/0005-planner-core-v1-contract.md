@@ -1,0 +1,36 @@
+# ADR 0005: Milestone-3 planner-core contract and architecture
+
+- Status: Accepted for the Milestone-3 contract slice
+- Date: 2026-09-23
+- Scope: Deterministic planner-core v1; no persistence or production UI wiring
+
+## Authority and sequencing
+
+The master _Personal University Planning System_ specification governs planner behavior and invariants. The _University Planner — Implementation Roadmap_ governs the Milestone-3 pipeline, test families and exit gate. This slice establishes the contract and module boundaries; it does not claim the complete heuristic or the milestone gate.
+
+## Planner-facing snapshot
+
+`PlannerInput` is a fully supplied, plain typed snapshot. The application layer must resolve canonical records, recurrence, timezone-local rules and unknown estimates before calling core. `PlannableTask` is now a narrow planner representation instead of inheriting the richer canonical `Task`; unknown canonical estimates must remain unknown until the caller has a justified value. Explicit inputs cover dependency edges, fixed events, expanded protected/sleep intervals, availability including commute classification, manual and locked sessions, previous sessions, policy preferences, replan intent and released-time policy. The task snapshot includes normalized importance and deadline confidence. `minimumSleepMinutes` is a planner policy value supplied by the caller. It is not silently derived from a database row.
+
+The canonical schema has protected-time rules and user day bounds, but no dedicated minimum-sleep preference. This is a policy-source gap for the later normalization slice, not grounds for a migration in this contract slice. That slice must document its source/default and expand hard sleep windows before enforcing minimum sleep. No planner input is fetched from PostgreSQL by core.
+
+`PlannerOutput.plannerVersion` identifies the centrally defined `heuristic-v1` contract. Warnings can carry machine-readable reason codes and quantified deficits. The placement-reason map is present but empty until explanation generation is implemented. No PlannerRun is written here.
+
+## Pure module boundaries
+
+- `index.ts`: public orchestration, baseline ranking, workload accounting, output assembly.
+- `input.ts`: baseline capability gate so explicit but deferred constraints cannot be silently ignored.
+- `windows.ts`: occupied intervals, candidate subtraction, eligibility and suitability helpers.
+- `pressure.ts`: suitable capacity, slack and pressure calculation.
+- `allocation.ts`: window selection, session sizing and placement, including the existing stability bonus.
+- `validation.ts`: current hard-event, task, overlap and lock checks.
+- `scenario.ts`: side-effect-free protected-window simulation.
+- `version.ts`: one named planner version.
+
+The current heuristic was moved with its established behavior. The next slices may split these modules further as normalization, dependency eligibility, sustainability, repair and explanation become real stages. The planner package depends only on domain and shared; the boundary checker rejects any other package dependency or external import, including database, UI, network and AI libraries.
+
+## Deliberate deferrals
+
+The baseline rejects nonempty dependencies, protected/sleep windows, manual sessions and commute windows, positive minimum sleep, non-incremental modes and a nondefault released-time policy. This is intentional fail-fast behavior while those semantics are being implemented. The existing daily limit, free-time buffer, deadline buffer, weekend bias, maximum consecutive work and complete stability policy remain unimplemented; callers must not treat this slice as production scheduling. Full placement reasons, hard/soft hierarchy, workload-conserving repair and randomized invariant tests remain Milestone-3 work.
+
+**Exact next slice:** normalization, eligibility, occupied timeline and candidate capacity, including dependency and sleep/protected-time handling. Subsequent slices complete risk/ranking, sustainable allocation, stability/repair, explanations and the canonical scenario/property suite before the Milestone-3 exit gate.

@@ -4,6 +4,7 @@ const {
   generatePlan,
   simulateProtectedWindow,
   validatePlan,
+  PLANNER_VERSION,
 } = require("../../dist/packages/planner-core/src/index.js");
 
 function d(value) {
@@ -36,6 +37,8 @@ function baseInput() {
         splittable: true,
         interruptible: true,
         planningMode: "AUTO",
+        importance: 0.5,
+        deadlineConfidence: "FIXED",
       },
       {
         id: "aps",
@@ -55,6 +58,8 @@ function baseInput() {
         splittable: true,
         interruptible: true,
         planningMode: "AUTO",
+        importance: 0.5,
+        deadlineConfidence: "FIXED",
       },
     ],
     events: [
@@ -88,6 +93,14 @@ function baseInput() {
       },
     ],
     lockedSessions: [],
+    manualSessions: [],
+    previousSessions: [],
+    dependencies: [],
+    protectedWindows: [],
+    sleepWindows: [],
+    replanMode: "INCREMENTAL",
+    releasedTimePolicy: "REPLAN_IF_USEFUL",
+    minimumSleepMinutes: 0,
     preferences: {
       preferredDailyStudyLimitMinutes: 240,
       minimumFreeTimeMinutes: 60,
@@ -111,6 +124,19 @@ test("planner never overlaps hard events", () => {
       !(session.startAt < input.events[0].endAt && input.events[0].startAt < session.endAt),
     );
   }
+});
+
+test("planner output carries its named heuristic version", () => {
+  const output = generatePlan(baseInput());
+  assert.equal(PLANNER_VERSION, "heuristic-v1");
+  assert.equal(output.plannerVersion, PLANNER_VERSION);
+  assert.deepEqual(output.reasonsBySession, {});
+});
+
+test("baseline rejects explicit constraints it cannot yet enforce", () => {
+  const input = baseInput();
+  input.sleepWindows = [{ id: "sleep", startAt: d("2026-09-21T04:00:00-04:00"), endAt: input.now }];
+  assert.throws(() => generatePlan(input), /does not yet support sleep windows/);
 });
 
 test("planner schedules all feasible work", () => {
