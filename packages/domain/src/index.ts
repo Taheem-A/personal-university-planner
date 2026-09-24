@@ -297,9 +297,14 @@ export interface PlannerInput {
 export type PlannerVersion = "heuristic-v1";
 export type PlannerReasonCode =
   | "DEADLINE_PRESSURE"
+  | "PREFERRED_COMPLETION_PRESSURE"
   | "LOW_SLACK"
   | "ENERGY_MATCH"
   | "LOCATION_MATCH"
+  | "PREREQUISITE"
+  | "ONLY_SUITABLE_CAPACITY"
+  | "AVOIDED_OVERLOAD"
+  | "AVOIDED_FRAGMENTATION"
   | "STABILITY_PRESERVED"
   | "HARD_CONSTRAINT"
   | "DEPENDENCY_BLOCKED"
@@ -314,6 +319,40 @@ export type PlannerReasonCode =
   | "HARD_CONFLICT"
   | "MANUAL_INTENT_PRESERVED"
   | "LOCK_PRESERVED";
+
+export type PlannerLimitingFactor =
+  | "NO_SUITABLE_WINDOW"
+  | "INSUFFICIENT_CAPACITY"
+  | "HARD_COMMITMENT"
+  | "PROTECTED_TIME"
+  | "LOCK_PRESSURE"
+  | "DEADLINE_COLLISION"
+  | "CAPABILITY_MISMATCH"
+  | "COMMUTE_DISABLED"
+  | "DEPENDENCY_BLOCKED"
+  | "HORIZON_LIMIT";
+
+export interface PlannerValidationIssue {
+  code: string;
+  message: string;
+  sessionId?: Id;
+  taskId?: Id;
+  /** Minutes of a measured overlap or missing break, when applicable. */
+  conflictMinutes?: number;
+  /** A retained user/locked session is reported but never silently moved. */
+  retained: boolean;
+}
+
+export interface PlannerInfeasibility {
+  taskId: Id;
+  requiredMinutes: number;
+  scheduledMinutes: number;
+  unscheduledMinutes: number;
+  suitableCapacityMinutes: number;
+  deficitMinutes: number;
+  limitingFactors: PlannerLimitingFactor[];
+  actualDeadlineAt?: Date;
+}
 
 export interface PlannerWarning {
   code:
@@ -368,13 +407,15 @@ export interface TaskPressure {
 
 export interface PlannerOutput {
   plannerVersion: PlannerVersion;
+  status: "VALID" | "INFEASIBLE";
   sessions: WorkSession[];
+  validationIssues: PlannerValidationIssue[];
+  infeasibilities: PlannerInfeasibility[];
   warnings: PlannerWarning[];
   pressures: TaskPressure[];
   rankedTaskIds: Id[];
   allocationOrderTaskIds: Id[];
   unscheduledMinutesByTask: Record<Id, number>;
-  /** Reserved for placement explanations; later Milestone-3 slices populate it. */
   reasonsBySession: Record<Id, PlannerReasonCode[]>;
 }
 
@@ -390,6 +431,11 @@ export interface ScenarioResult {
   before: PlannerOutput;
   after: PlannerOutput;
   movedTaskIds: Id[];
+  addedSessionIds: Id[];
+  removedSessionIds: Id[];
+  movedSessionIds: Id[];
+  capacityDeltaMinutes: number;
+  deficitDeltaMinutes: number;
   canApply: boolean;
   deadlineSafe: boolean;
 }

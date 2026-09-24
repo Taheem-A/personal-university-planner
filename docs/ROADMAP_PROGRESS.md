@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 3 validation, repair and scenarios: IN PROGRESS
+
+- The complete output audit reports structured issues for session validity, hard occupancy, availability/capability/commute, task state, dependency order, break and length rules, workload, ownership, deadlines and exact manual/lock preservation. `generatePlan` marks any remaining work or hard issue `INFEASIBLE`; a retained hard conflict is visible without moving user intent.
+- A bounded deterministic repair retries invalid generated placements with their conflicting intervals excluded, then validates the result again. Task-level evidence includes required/scheduled/unscheduled/suitable minutes, deficit, deadline and supported limiting factors. Concise placement reason codes are distinct from numeric ranking diagnostics.
+- Protected-window scenarios derive an in-memory alternative without changing input or persisting anything. Results include feasibility, moved/added/removed sessions, affected task IDs, capacity change and deficit change. Focused tests cover hard-validator families, repairable and non-repairable conflicts, deficits and causes, truthful reasons, and feasible/infeasible scenario deltas. Milestone 3 remains **IN PROGRESS**.
+- Full local `pnpm verify` passed: format, lint, 73-file package boundaries, Prisma generation/validation, typecheck, **83/83** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests.
+- **Exact next work item:** canonical scenario/regression suite, including semester fixtures, randomized invariants, DST/horizon edges and stability/replanning regressions.
+
 ## 2026-09-24 — Milestone 3 planner policy: IN PROGRESS
 
 - Dependency readiness now governs placement across chains; unknown references and cycles fail explicitly. Retained dependent sessions require completed or fully reserved prerequisites, so a previous schedule cannot bypass ordering.

@@ -6,6 +6,56 @@ import type {
   WorkSession,
 } from "../../domain/src";
 import { generatePlan } from "./index";
+import { normalizePlannerInput } from "./input";
+
+function sessionKey(session: WorkSession): string {
+  return [
+    session.taskId,
+    session.startAt.toISOString(),
+    session.endAt.toISOString(),
+    session.plannedMinutes,
+  ].join("|");
+}
+
+function sessionDelta(before: WorkSession[], after: WorkSession[]) {
+  const unchanged = new Map<string, number>();
+  for (const session of after)
+    unchanged.set(sessionKey(session), (unchanged.get(sessionKey(session)) ?? 0) + 1);
+  const oldRemaining = before.filter((session) => {
+    const count = unchanged.get(sessionKey(session)) ?? 0;
+    if (!count) return true;
+    unchanged.set(sessionKey(session), count - 1);
+    return false;
+  });
+  const oldKeys = new Map<string, number>();
+  for (const session of before)
+    oldKeys.set(sessionKey(session), (oldKeys.get(sessionKey(session)) ?? 0) + 1);
+  const newRemaining = after.filter((session) => {
+    const count = oldKeys.get(sessionKey(session)) ?? 0;
+    if (!count) return true;
+    oldKeys.set(sessionKey(session), count - 1);
+    return false;
+  });
+  const movedSessionIds: string[] = [];
+  const addedSessionIds: string[] = [];
+  const removedSessionIds: string[] = [];
+  const movedTaskIds = new Set<string>();
+  for (const taskId of [
+    ...new Set([
+      ...oldRemaining.map((session) => session.taskId),
+      ...newRemaining.map((session) => session.taskId),
+    ]),
+  ].sort()) {
+    const old = oldRemaining.filter((session) => session.taskId === taskId);
+    const next = newRemaining.filter((session) => session.taskId === taskId);
+    const paired = Math.min(old.length, next.length);
+    for (let index = 0; index < paired; index += 1) movedSessionIds.push(old[index].id);
+    for (const session of old.slice(paired)) removedSessionIds.push(session.id);
+    for (const session of next.slice(paired)) addedSessionIds.push(session.id);
+    movedTaskIds.add(taskId);
+  }
+  return { movedTaskIds: [...movedTaskIds], movedSessionIds, addedSessionIds, removedSessionIds };
+}
 
 export function simulateProtectedWindow(
   input: PlannerInput,
@@ -27,31 +77,22 @@ export function simulateProtectedWindow(
     previousSessions: before.sessions,
   };
   const after = generatePlan(afterInput);
-  const beforeByTask = new Map<string, WorkSession[]>();
-  const afterByTask = new Map<string, WorkSession[]>();
-  for (const session of before.sessions)
-    beforeByTask.set(session.taskId, [...(beforeByTask.get(session.taskId) ?? []), session]);
-  for (const session of after.sessions)
-    afterByTask.set(session.taskId, [...(afterByTask.get(session.taskId) ?? []), session]);
-  const movedTaskIds = [...new Set([...beforeByTask.keys(), ...afterByTask.keys()])].filter(
-    (taskId) => {
-      const a = beforeByTask.get(taskId) ?? [];
-      const b = afterByTask.get(taskId) ?? [];
-      if (a.length !== b.length) return true;
-      return a.some((session, index) => session.startAt.getTime() !== b[index]?.startAt.getTime());
-    },
-  );
-  const deadlineSafe = after.warnings.every(
-    (warning) =>
-      warning.code !== "INFEASIBLE" &&
-      warning.code !== "NO_SUITABLE_WINDOW" &&
-      warning.code !== "DEPENDENCY_BLOCKED",
-  );
+  const delta = sessionDelta(before.sessions, after.sessions);
+  const capacity = (snapshot: PlannerInput) =>
+    normalizePlannerInput(snapshot).candidates.reduce(
+      (sum, window) => sum + window.remainingUsableMinutes,
+      0,
+    );
+  const deficit = (result: typeof after) =>
+    result.infeasibilities.reduce((sum, item) => sum + item.deficitMinutes, 0);
+  const deadlineSafe = after.status === "VALID";
   return {
     request,
     before,
     after,
-    movedTaskIds,
+    ...delta,
+    capacityDeltaMinutes: capacity(afterInput) - capacity(input),
+    deficitDeltaMinutes: deficit(after) - deficit(before),
     canApply: deadlineSafe,
     deadlineSafe,
   };

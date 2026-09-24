@@ -178,6 +178,17 @@ export function normalizePlannerInput(input: PlannerInput): NormalizedPlanningSt
     throw new Error("Unsupported released-time policy");
   const effectiveStart = minDate(maxDate(now, horizonStart), horizonEnd);
   const expanded = expandRecurrence(input);
+  for (const owned of [
+    ...input.tasks,
+    ...expanded.events,
+    ...expanded.availability,
+    ...input.manualSessions,
+    ...input.lockedSessions,
+    ...input.previousSessions,
+  ]) {
+    if (owned.userId !== input.userId)
+      throw new Error(`Planner snapshot contains another user's record ${owned.id}.`);
+  }
   for (const interval of [
     ...expanded.events,
     ...expanded.protectedWindows,

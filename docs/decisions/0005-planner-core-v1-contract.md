@@ -74,3 +74,13 @@ Manual/locked sessions and active previous sessions are strong user intent and a
 Released capacity is supplied explicitly as windows; core does not infer completion or run triggers. `KEEP_FREE` reserves it, `REPLAN_IF_USEFUL` tries ordinary capacity before consuming it, and `ALWAYS_REPLAN` treats it as ordinary capacity. The prior `LEAVE_FREE` spelling remains a compatible alias. A use of released time is reported. No plan persistence or UI connection is introduced.
 
 **Exact next slice:** validation, repair, explicit infeasibility, reason codes and non-mutating scenarios. Full explanations and broad property testing remain open before the Milestone-3 gate.
+
+## Validation, repair and scenario slice
+
+`validatePlanDetailed` audits the complete returned session set against the normalized explicit snapshot. It reports machine-readable issues for hard occupancy, availability, capability, commute, task state, ownership, dependency order, deadline, workload, precision, session/break lengths and exact fixed-session preservation. Retained user/locked conflicts remain in the plan with explicit issues and `INFEASIBLE` status; core does not silently override the user. An already active retained session that began before `now` cannot have its elapsed portion remeasured from future candidate capacity without a supplied actual-work split.
+
+If a generated session fails validation, core makes one deterministic repair attempt by excluding the invalid placement interval and reallocating. The repaired attempt is validated again and accepted only if it improves the issue count or ties while reducing unplaced work. Hard impossibility is returned as `INFEASIBLE`, never labelled valid. Input facts that cannot be normalized, such as invalid instants, dependency cycles or retained allocations exceeding remaining work, still fail fast as invalid input.
+
+`PlannerOutput` now includes a binary validity state, validation issues and per-task quantitative infeasibility evidence. Limiting factors describe observed capacity restrictions; they are not automatic lifestyle decisions. Concise session reason codes describe actual placement conditions and remain separate from numerical pressure components. Scenario simulation clones through normalization, generates a full alternative, compares sessions and reports capacity/deficit deltas and feasibility. It does not persist or apply constraints.
+
+**Exact next slice:** canonical scenario/regression suite with representative fixtures and randomized invariants, followed by a Milestone-3 exit audit.

@@ -4,6 +4,8 @@ const {
   generatePlan,
   simulateProtectedWindow,
   validatePlan,
+  validatePlanDetailed,
+  repairPlan,
   PLANNER_VERSION,
   normalizePlannerInput,
   calculatePressure,
@@ -138,7 +140,8 @@ test("planner output carries its named heuristic version", () => {
   const output = generatePlan(baseInput());
   assert.equal(PLANNER_VERSION, "heuristic-v1");
   assert.equal(output.plannerVersion, PLANNER_VERSION);
-  assert.deepEqual(output.reasonsBySession, {});
+  // The contract slice reserved an empty explanation map; Prompt 6 now populates real causes.
+  assert.ok(output.sessions.every((session) => output.reasonsBySession[session.id]));
 });
 
 test("hard events, protected time, and sleep merge into one occupied interval", () => {
@@ -1406,4 +1409,290 @@ test("energy is a coarse productivity preference while missing capability is a h
   );
   input.availability[0].allowedLocationTags = ["CAMPUS"];
   assert.equal(generatePlan(input).sessions.length, 0);
+});
+
+function validationFixture() {
+  const input = baseInput();
+  input.tasks = [
+    {
+      ...input.tasks[0],
+      remainingMinutes: 30,
+      currentEstimatedMinutes: 30,
+      dueAt: d("2026-09-21T18:00:00-04:00"),
+    },
+  ];
+  input.availability = [input.availability[0]];
+  const session = {
+    id: "check",
+    userId: input.userId,
+    taskId: "civ",
+    startAt: d("2026-09-21T08:30:00-04:00"),
+    endAt: d("2026-09-21T09:00:00-04:00"),
+    plannedMinutes: 30,
+    state: "PLANNED",
+    generatedBy: "PLANNER",
+    locked: false,
+  };
+  return { input, session };
+}
+
+test("detailed validator checks hard session invariants and ownership", () => {
+  const { input, session } = validationFixture();
+  assert.deepEqual(validatePlanDetailed([session], input), []);
+  const cases = [
+    ["INVALID_DURATION", { endAt: d("2026-09-21T08:20:00-04:00") }, () => {}],
+    ["INVALID_WORK", { plannedMinutes: 40 }, () => {}],
+    ["OWNERSHIP", { userId: "other" }, () => {}],
+    [
+      "TASK_UNAVAILABLE",
+      {},
+      (value) => {
+        value.tasks[0].availableFrom = d("2026-09-21T08:45:00-04:00");
+      },
+    ],
+    [
+      "DEADLINE",
+      {},
+      (value) => {
+        value.tasks[0].dueAt = d("2026-09-21T08:45:00-04:00");
+      },
+    ],
+    [
+      "HARD_EVENT",
+      {},
+      (value) => {
+        value.events[0].startAt = d("2026-09-21T08:40:00-04:00");
+      },
+    ],
+    [
+      "PROTECTED_TIME",
+      {},
+      (value) => {
+        value.protectedWindows = [
+          {
+            id: "protect",
+            startAt: d("2026-09-21T08:40:00-04:00"),
+            endAt: d("2026-09-21T08:50:00-04:00"),
+            level: "HARD",
+            reason: "rest",
+          },
+        ];
+      },
+    ],
+    [
+      "PROTECTED_TIME",
+      {},
+      (value) => {
+        value.sleepWindows = [
+          {
+            id: "sleep",
+            startAt: d("2026-09-21T08:40:00-04:00"),
+            endAt: d("2026-09-21T08:50:00-04:00"),
+          },
+        ];
+      },
+    ],
+    [
+      "UNAVAILABLE_WINDOW",
+      {},
+      (value) => {
+        value.availability[0].startAt = d("2026-09-21T09:00:00-04:00");
+      },
+    ],
+    [
+      "CAPABILITY_OR_CAPACITY",
+      {},
+      (value) => {
+        value.availability[0].allowedLocationTags = ["ANYWHERE"];
+      },
+    ],
+    [
+      "CAPABILITY_OR_CAPACITY",
+      {},
+      (value) => {
+        value.availability[0].kind = "COMMUTE";
+        value.availability[0].allowedLocationTags = ["TRANSIT_OK"];
+        value.tasks[0].locationRequirements = ["TRANSIT_OK"];
+      },
+    ],
+    [
+      "INACTIVE_TASK",
+      {},
+      (value) => {
+        value.tasks[0].status = "COMPLETED";
+      },
+    ],
+    [
+      "SESSION_MAXIMUM",
+      {},
+      (value) => {
+        value.tasks[0].maximumSessionMinutes = 20;
+      },
+    ],
+    ["SESSION_MINIMUM", { plannedMinutes: 10 }, () => {}],
+  ];
+  for (const [code, change, changeInput] of cases) {
+    const fixture = validationFixture();
+    changeInput(fixture.input);
+    const issues = validatePlanDetailed([{ ...fixture.session, ...change }], fixture.input);
+    assert.ok(
+      issues.some((issue) => issue.code === code),
+      code,
+    );
+  }
+});
+
+test("validator detects overlap, dependency, workload, split and lost fixed intent", () => {
+  const { input, session } = validationFixture();
+  const second = {
+    ...session,
+    id: "second",
+    startAt: d("2026-09-21T08:45:00-04:00"),
+    endAt: d("2026-09-21T09:15:00-04:00"),
+  };
+  const codes = validatePlanDetailed([session, second], input).map((issue) => issue.code);
+  assert.ok(codes.includes("SESSION_OVERLAP"));
+  assert.ok(codes.includes("WORKLOAD_EXCEEDED"));
+  input.tasks[0].splittable = false;
+  assert.ok(
+    validatePlanDetailed([session, second], input).some((issue) => issue.code === "NON_SPLITTABLE"),
+  );
+  input.tasks[0].splittable = true;
+  input.tasks.push({ ...input.tasks[0], id: "pre" });
+  input.dependencies = [
+    { prerequisiteTaskId: "pre", dependentTaskId: "civ", type: "FINISH_TO_START" },
+  ];
+  assert.ok(validatePlanDetailed([session], input).some((issue) => issue.code === "DEPENDENCY"));
+  input.dependencies = [];
+  input.manualSessions = [{ ...session, generatedBy: "USER" }];
+  assert.ok(
+    validatePlanDetailed([], input).some((issue) => issue.code === "RETAINED_NOT_PRESERVED"),
+  );
+  input.manualSessions = [];
+  input.lockedSessions = [{ ...session, locked: true }];
+  assert.ok(
+    validatePlanDetailed([], input).some((issue) => issue.code === "RETAINED_NOT_PRESERVED"),
+  );
+});
+
+test("repair retries a generated conflict but never moves a conflicting lock", () => {
+  const { input } = validationFixture();
+  const valid = generatePlan(input);
+  const corrupt = {
+    ...valid,
+    sessions: valid.sessions.map((session) => ({
+      ...session,
+      startAt: d("2026-09-21T10:00:00-04:00"),
+      endAt: d("2026-09-21T10:30:00-04:00"),
+    })),
+  };
+  corrupt.validationIssues = validatePlanDetailed(corrupt.sessions, input);
+  corrupt.status = "INFEASIBLE";
+  let excluded;
+  const repaired = repairPlan(corrupt, (blocks) => {
+    excluded = blocks;
+    return generatePlan(input);
+  });
+  assert.equal(excluded.length, 1);
+  assert.equal(repaired.status, "VALID");
+  const locked = { ...corrupt.sessions[0], id: "locked", locked: true };
+  input.lockedSessions = [locked];
+  const impossible = generatePlan(input);
+  assert.equal(impossible.status, "INFEASIBLE");
+  assert.ok(impossible.sessions.some((session) => session.id === "locked"));
+  assert.ok(
+    impossible.validationIssues.some((issue) => issue.retained && issue.code === "HARD_EVENT"),
+  );
+  assert.ok(
+    impossible.validationIssues.some(
+      (issue) => issue.retained && issue.code === "HARD_EVENT" && issue.conflictMinutes === 30,
+    ),
+  );
+});
+
+test("infeasibility exposes minutes and limiting causes without claiming success", () => {
+  const { input } = validationFixture();
+  input.tasks[0].remainingMinutes = 180;
+  input.tasks[0].currentEstimatedMinutes = 180;
+  input.availability[0].endAt = d("2026-09-21T09:00:00-04:00");
+  const result = generatePlan(input);
+  assert.equal(result.status, "INFEASIBLE");
+  const detail = result.infeasibilities.find((item) => item.taskId === "civ");
+  assert.equal(detail.requiredMinutes, 180);
+  assert.equal(detail.scheduledMinutes + detail.unscheduledMinutes, 180);
+  assert.ok(detail.deficitMinutes > 0);
+  assert.ok(detail.limitingFactors.includes("INSUFFICIENT_CAPACITY"));
+  assert.equal(result.plannerVersion, PLANNER_VERSION);
+});
+
+test("placement reasons describe actual constraints without inventing urgency", () => {
+  const { input } = validationFixture();
+  input.tasks[0].dueAt = undefined;
+  input.tasks[0].preferredCompletionAt = undefined;
+  const output = generatePlan(input);
+  assert.equal(output.status, "VALID");
+  const reasons = output.reasonsBySession[output.sessions[0].id];
+  assert.ok(reasons.includes("LOCATION_MATCH"));
+  assert.ok(reasons.includes("ENERGY_MATCH"));
+  assert.ok(!reasons.includes("DEADLINE_PRESSURE"));
+  assert.ok(!reasons.includes("PREFERRED_COMPLETION_PRESSURE"));
+});
+
+test("scenario deltas expose changed work, capacity loss and feasibility without mutation", () => {
+  const { input } = validationFixture();
+  input.availability[0].endAt = d("2026-09-21T09:00:00-04:00");
+  const original = structuredClone(input);
+  const scenario = simulateProtectedWindow(input, {
+    title: "Take Saturday off",
+    startAt: d("2026-09-21T08:00:00-04:00"),
+    endAt: d("2026-09-21T09:00:00-04:00"),
+    protectionLevel: "HARD",
+  });
+  assert.deepEqual(input, original);
+  assert.equal(scenario.before.status, "VALID");
+  assert.equal(scenario.after.status, "INFEASIBLE");
+  assert.ok(scenario.capacityDeltaMinutes < 0);
+  assert.ok(scenario.deficitDeltaMinutes > 0);
+  assert.ok(scenario.removedSessionIds.length > 0);
+  assert.ok(scenario.movedTaskIds.includes("civ"));
+  assert.equal(scenario.canApply, false);
+});
+
+test("limiting factors distinguish capability, commute policy and hard occupancy", () => {
+  const fixture = validationFixture();
+  fixture.input.availability[0].allowedLocationTags = ["ANYWHERE"];
+  let result = generatePlan(fixture.input);
+  assert.ok(result.infeasibilities[0].limitingFactors.includes("CAPABILITY_MISMATCH"));
+  fixture.input.tasks[0].locationRequirements = ["TRANSIT_OK"];
+  fixture.input.availability[0].allowedLocationTags = ["TRANSIT_OK"];
+  fixture.input.availability[0].kind = "COMMUTE";
+  result = generatePlan(fixture.input);
+  assert.ok(result.infeasibilities[0].limitingFactors.includes("COMMUTE_DISABLED"));
+  fixture.input.preferences.scheduleCommuteWork = true;
+  fixture.input.events[0].startAt = d("2026-09-21T08:00:00-04:00");
+  fixture.input.events[0].endAt = d("2026-09-21T18:00:00-04:00");
+  result = generatePlan(fixture.input);
+  assert.ok(result.infeasibilities[0].limitingFactors.includes("HARD_COMMITMENT"));
+});
+
+test("overdue AUTO work is explicit horizon infeasibility, not fake success", () => {
+  const { input } = validationFixture();
+  input.tasks[0].dueAt = d("2026-09-21T07:00:00-04:00");
+  const output = generatePlan(input);
+  assert.equal(output.status, "INFEASIBLE");
+  assert.equal(output.unscheduledMinutesByTask.civ, 30);
+  assert.equal(output.infeasibilities[0].deficitMinutes, 30);
+});
+
+test("feasible protected-time scenario reports a valid alternative", () => {
+  const scenario = simulateProtectedWindow(baseInput(), {
+    title: "Protect free afternoon",
+    startAt: d("2026-09-21T13:00:00-04:00"),
+    endAt: d("2026-09-21T18:00:00-04:00"),
+    protectionLevel: "HARD",
+  });
+  assert.equal(scenario.after.status, "VALID");
+  assert.equal(scenario.canApply, true);
+  assert.ok(scenario.capacityDeltaMinutes < 0);
+  assert.equal(scenario.deficitDeltaMinutes, 0);
 });

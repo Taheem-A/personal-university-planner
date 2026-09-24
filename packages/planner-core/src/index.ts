@@ -10,19 +10,26 @@ import { placeTask, reserveSessionBreaks } from "./allocation";
 import { dependencyReadyAt } from "./eligibility";
 import { normalizePlannerInput } from "./input";
 import { calculatePressure, dependencyImportance, rankTaskPressures, rankTasks } from "./pressure";
-import { validatePlan } from "./validation";
+import { validatePlanDetailed } from "./validation";
+import { placementReasons, quantifyInfeasibility } from "./diagnostics";
 import { PLANNER_VERSION } from "./version";
 import { dailyPolicy, sustainablePolicyWarnings } from "./sustainability";
 import { retainedPreviousSessions, type RetentionTier } from "./policy";
+import { repairPlan } from "./repair";
 
-export { validatePlan } from "./validation";
+export { validatePlan, validatePlanDetailed } from "./validation";
 export { simulateProtectedWindow } from "./scenario";
 export { PLANNER_VERSION } from "./version";
 export { normalizePlannerInput } from "./input";
 export { calculatePressure, rankTaskPressures, rankTasks } from "./pressure";
 export { HEURISTIC_V1_CONFIG } from "./config";
+export { repairPlan } from "./repair";
 
-function planAttempt(rawInput: PlannerInput, retainedPrevious: WorkSession[]): PlannerOutput {
+function planAttempt(
+  rawInput: PlannerInput,
+  retainedPrevious: WorkSession[],
+  repairBlocks: { startAt: Date; endAt: Date }[] = [],
+): PlannerOutput {
   const normalized = normalizePlannerInput(rawInput);
   const input = normalized.input;
   const softIntervals = [
@@ -30,6 +37,14 @@ function planAttempt(rawInput: PlannerInput, retainedPrevious: WorkSession[]): P
     ...input.protectedWindows.filter((window) => window.level === "SOFT"),
   ];
   let windows = normalized.candidates;
+  if (repairBlocks.length > 0)
+    windows = windows.flatMap((window) =>
+      subtractIntervals([window], repairBlocks).map((part) => ({
+        ...window,
+        startAt: part.startAt,
+        endAt: part.endAt,
+      })),
+    );
   if (input.releasedTimePolicy === "KEEP_FREE" || input.releasedTimePolicy === "LEAVE_FREE")
     windows = windows.flatMap((window) =>
       subtractIntervals([window], input.releasedWindows).map((part) => ({
@@ -254,6 +269,25 @@ function planAttempt(rawInput: PlannerInput, retainedPrevious: WorkSession[]): P
       reasonCodes: ["DEPENDENCY_BLOCKED"],
     });
   }
+  for (const task of input.tasks) {
+    if (
+      (task.status !== "READY" && task.status !== "IN_PROGRESS") ||
+      task.planningMode !== "AUTO" ||
+      normalized.eligibility.eligibleTaskIds.has(task.id) ||
+      normalized.eligibility.blockedTaskIds.has(task.id)
+    )
+      continue;
+    const unallocated = normalized.unallocatedMinutesByTask.get(task.id) ?? task.remainingMinutes;
+    if (unallocated <= 0) continue;
+    unscheduledMinutesByTask[task.id] = unallocated;
+    warnings.push({
+      code: "NO_SUITABLE_WINDOW",
+      taskId: task.id,
+      message: `Task ${task.title} has no schedulable capacity in this horizon.`,
+      deficitMinutes: unallocated,
+      reasonCodes: ["NO_SUITABLE_WINDOW"],
+    });
+  }
 
   for (const retained of [...input.manualSessions, ...input.lockedSessions]) {
     for (const prerequisiteId of normalized.eligibility.dependenciesByTask.get(retained.taskId) ??
@@ -283,14 +317,33 @@ function planAttempt(rawInput: PlannerInput, retainedPrevious: WorkSession[]): P
   }
 
   warnings.push(...sustainablePolicyWarnings(input, policy, sessions));
-  const errors = validatePlan(sessions, input);
-  if (errors.length > 0) {
-    throw new Error(`Planner produced invalid output:\n${errors.join("\n")}`);
+  const validationIssues = validatePlanDetailed(sessions, input);
+  const infeasibilities = quantifyInfeasibility(input, sessions, pressures, validationIssues);
+  for (const session of sessions) {
+    if (
+      session.generatedBy !== "PLANNER" ||
+      session.locked ||
+      input.manualSessions.some((fixed) => fixed.id === session.id)
+    )
+      continue;
+    const task = input.tasks.find((candidate) => candidate.id === session.taskId);
+    if (task)
+      reasonsBySession[session.id] = placementReasons(
+        session,
+        task,
+        pressures.find((pressure) => pressure.taskId === task.id),
+        input,
+        normalized.candidates,
+        reasonsBySession[session.id] ?? [],
+      );
   }
 
   return {
     plannerVersion: PLANNER_VERSION,
+    status: validationIssues.length > 0 || infeasibilities.length > 0 ? "INFEASIBLE" : "VALID",
     sessions: sortByStart(sessions),
+    validationIssues,
+    infeasibilities,
     warnings,
     pressures,
     rankedTaskIds,
@@ -318,7 +371,9 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
       ...base.input,
       manualSessions: [...base.input.manualSessions, ...retained],
     };
-    const output = planAttempt(attemptInput, retained);
+    const output = repairPlan(planAttempt(attemptInput, retained), (blocks) =>
+      planAttempt(attemptInput, retained, blocks),
+    );
     if (!best || unscheduledTotal(output) < unscheduledTotal(best.output)) best = { output, tier };
     if (unscheduledTotal(best.output) === 0) break;
   }
@@ -346,5 +401,10 @@ export function generatePlan(rawInput: PlannerInput): PlannerOutput {
         });
     }
   }
+  // A result with remaining work or retained hard conflicts is explicitly infeasible.
+  result.status =
+    result.validationIssues.length > 0 || result.infeasibilities.length > 0
+      ? "INFEASIBLE"
+      : "VALID";
   return result;
 }
