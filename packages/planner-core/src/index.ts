@@ -1,20 +1,27 @@
 import type { PlannerInput, PlannerOutput, PlannerWarning, WorkSession } from "../../domain/src";
 import { sortByStart } from "../../shared/src";
 import { placeTask } from "./allocation";
-import { assertBaselineSupported } from "./input";
+import { dependencyReadyAt } from "./eligibility";
+import { normalizePlannerInput } from "./input";
 import { calculatePressure } from "./pressure";
 import { validatePlan } from "./validation";
-import { candidateWindows, eligibleTask } from "./windows";
 import { PLANNER_VERSION } from "./version";
 
 export { validatePlan } from "./validation";
 export { simulateProtectedWindow } from "./scenario";
 export { PLANNER_VERSION } from "./version";
+export { normalizePlannerInput } from "./input";
 
-export function generatePlan(input: PlannerInput): PlannerOutput {
-  assertBaselineSupported(input);
-  let windows = candidateWindows(input);
-  const tasks = input.tasks.filter((task) => eligibleTask(task, input));
+export function generatePlan(rawInput: PlannerInput): PlannerOutput {
+  const normalized = normalizePlannerInput(rawInput);
+  const input = normalized.input;
+  let windows = normalized.candidates;
+  const tasks = input.tasks
+    .filter((task) => normalized.eligibility.eligibleTaskIds.has(task.id))
+    .map((task) => ({
+      ...task,
+      remainingMinutes: normalized.unallocatedMinutesByTask.get(task.id)!,
+    }));
   const pressures = tasks.map((task) => calculatePressure(task, windows, input));
   const pressureByTask = new Map(pressures.map((pressure) => [pressure.taskId, pressure]));
   const ranked = [...tasks].sort((a, b) => {
@@ -27,12 +34,30 @@ export function generatePlan(input: PlannerInput): PlannerOutput {
   });
 
   const sessionCounter = { value: 1 };
-  const sessions: WorkSession[] = [...input.lockedSessions];
+  const sessions: WorkSession[] = [
+    ...new Map(
+      [...input.manualSessions, ...input.lockedSessions].map((session) => [session.id, session]),
+    ).values(),
+  ];
   const warnings: PlannerWarning[] = [];
   const unscheduledMinutesByTask: Record<string, number> = {};
 
-  for (const task of ranked) {
-    const placed = placeTask(task, windows, input, sessionCounter);
+  const pending = [...ranked];
+  const allocatedCompletion = new Map<string, Date>(
+    [...normalized.reservedEndByTask].filter(([id]) => normalized.fullyReservedTaskIds.has(id)),
+  );
+  while (pending.length > 0) {
+    const index = pending.findIndex((task) =>
+      dependencyReadyAt(task.id, input, normalized.eligibility, allocatedCompletion),
+    );
+    if (index < 0) break;
+    const task = pending.splice(index, 1)[0];
+    const readyAt = dependencyReadyAt(task.id, input, normalized.eligibility, allocatedCompletion)!;
+    const schedulable = {
+      ...task,
+      availableFrom: task.availableFrom > readyAt ? task.availableFrom : readyAt,
+    };
+    const placed = placeTask(schedulable, windows, input, sessionCounter);
     sessions.push(...placed.sessions);
     windows = placed.windows;
     if (placed.remaining > 0) {
@@ -51,6 +76,14 @@ export function generatePlan(input: PlannerInput): PlannerOutput {
         ],
       });
     } else {
+      const last = placed.sessions.reduce<Date | undefined>(
+        (latest, session) => (!latest || session.endAt > latest ? session.endAt : latest),
+        undefined,
+      );
+      const reservedEnd = normalized.reservedEndByTask.get(task.id);
+      const completion =
+        last && reservedEnd ? (last > reservedEnd ? last : reservedEnd) : (last ?? reservedEnd);
+      if (completion) allocatedCompletion.set(task.id, completion);
       const pressure = pressureByTask.get(task.id);
       if (pressure && pressure.slackMinutes >= 0 && pressure.slackMinutes <= 60) {
         warnings.push({
@@ -61,6 +94,21 @@ export function generatePlan(input: PlannerInput): PlannerOutput {
         });
       }
     }
+  }
+
+  for (const task of [
+    ...pending,
+    ...input.tasks.filter((candidate) => normalized.eligibility.blockedTaskIds.has(candidate.id)),
+  ]) {
+    const unallocated = normalized.unallocatedMinutesByTask.get(task.id) ?? task.remainingMinutes;
+    unscheduledMinutesByTask[task.id] = unallocated;
+    warnings.push({
+      code: "DEPENDENCY_BLOCKED",
+      taskId: task.id,
+      message: `Task ${task.title} is blocked by a prerequisite.`,
+      deficitMinutes: unallocated,
+      reasonCodes: ["DEPENDENCY_BLOCKED"],
+    });
   }
 
   const errors = validatePlan(sessions, input);

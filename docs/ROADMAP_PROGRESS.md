@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-23 — Milestone 3 normalization and candidate capacity: IN PROGRESS
+
+- Added a pure normalization stage that clones and validates the planner snapshot, expands local recurrence with shared timezone utilities, retains unknown deadlines, and requires resolved estimates. Completed prerequisites can be supplied without fabricated estimates.
+- Eligibility excludes inactive, non-AUTO, zero-work and out-of-horizon tasks; dependency cycles are rejected, and dependents wait for fully allocated or completed prerequisites. The occupied timeline merges hard events, hard protected time, sleep and retained sessions. Disjoint candidate windows preserve energy, capability, location, commute and local-time metadata without counting overlapping availability twice.
+- Focused tests cover hard/soft subtraction, sleep, five-minute bounds, eligibility, dependencies, manual/locked sessions, overlapping availability, commute policy, timezone and DST recurrence, determinism and input purity. Milestone 3 remains **IN PROGRESS**.
+- Full local `pnpm verify` passed: formatting, lint, package boundaries, Prisma generation/validation, typecheck, **36/36** unit tests, **36/36** integration tests, core/database/Next.js production builds and **2/2** Chromium E2E tests.
+- **Exact next work item:** capacity/slack/risk/scoring/deterministic-ranking slice.
+
 ## 2026-09-23 — Milestone 3 planner contract and architecture: IN PROGRESS
 
 - PR #2 is merged into default branch `master` at `d98dfd6`; Milestone 2 remains gate passed. The unmerged wording in the prior audit entry below is historical evidence from before the merge.

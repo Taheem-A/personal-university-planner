@@ -1,5 +1,6 @@
 import type {
   IanaTimezone,
+  LocalRecurrenceWindow,
   LocalDate,
   LocalTime,
   RecurrenceRule,
@@ -209,6 +210,20 @@ export interface PlannerDependency {
   type: "FINISH_TO_START";
 }
 
+/** Local wall-clock rules expand inside normalization, before capacity is calculated. */
+export type PlannerRecurringWindow = LocalRecurrenceWindow & { id: Id } & (
+    | { source: "EVENT"; title: string; constraintLevel: ConstraintLevel }
+    | { source: "PROTECTED"; level: "HARD" | "SOFT"; reason: string }
+    | { source: "SLEEP" }
+    | {
+        source: "AVAILABILITY";
+        capacityFactor: number;
+        energyLevel: EnergyLevel;
+        allowedLocationTags: LocationTag[];
+        availabilityKind?: "ORDINARY" | "COMMUTE";
+      }
+  );
+
 export interface WorkSession {
   id: Id;
   userId: Id;
@@ -252,10 +267,13 @@ export interface PlannerInput {
   horizonStart: Date;
   horizonEnd: Date;
   tasks: PlannableTask[];
+  /** Completed prerequisites whose original estimates need not be supplied. */
+  completedTaskIds: Id[];
   dependencies: PlannerDependency[];
   events: CalendarEvent[];
   protectedWindows: PlannerProtectedWindow[];
   sleepWindows: PlannerSleepWindow[];
+  recurringWindows: PlannerRecurringWindow[];
   availability: AvailabilityWindow[];
   manualSessions: WorkSession[];
   lockedSessions: WorkSession[];
@@ -281,7 +299,7 @@ export type PlannerReasonCode =
   | "INSUFFICIENT_CAPACITY";
 
 export interface PlannerWarning {
-  code: "INFEASIBLE" | "LOW_SLACK" | "NO_SUITABLE_WINDOW";
+  code: "INFEASIBLE" | "LOW_SLACK" | "NO_SUITABLE_WINDOW" | "DEPENDENCY_BLOCKED";
   taskId?: Id;
   message: string;
   deficitMinutes?: number;

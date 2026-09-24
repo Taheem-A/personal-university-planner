@@ -42,7 +42,10 @@ export function simulateProtectedWindow(
     },
   );
   const deadlineSafe = after.warnings.every(
-    (warning) => warning.code !== "INFEASIBLE" && warning.code !== "NO_SUITABLE_WINDOW",
+    (warning) =>
+      warning.code !== "INFEASIBLE" &&
+      warning.code !== "NO_SUITABLE_WINDOW" &&
+      warning.code !== "DEPENDENCY_BLOCKED",
   );
   return {
     request,

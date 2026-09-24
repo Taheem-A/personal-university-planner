@@ -2,9 +2,13 @@
 
 ## Current milestone status
 
-**Milestone 3 — IN PROGRESS.** The planner contract and architecture slice is implemented on `plan/milestone-3-planner-core-v1`. The core now has focused pure modules for input capability checks, candidate windows, pressure, allocation, validation, simulation and versioning. Its fully explicit snapshot includes the facts needed by later Milestone-3 stages, and output carries `heuristic-v1`. Deferred constraints fail fast rather than being silently ignored. See [ADR 0005](./decisions/0005-planner-core-v1-contract.md). This is not the complete scheduling engine or the Milestone-3 exit gate.
+**Milestone 3 — IN PROGRESS.** The planner contract, architecture and normalization/candidate-capacity slices are implemented on `plan/milestone-3-planner-core-v1`. The core now has focused pure modules for normalization, eligibility, occupied timeline, candidate windows, pressure, allocation, validation, simulation and versioning. Its fully explicit snapshot includes the facts needed by later Milestone-3 stages, and output carries `heuristic-v1`. See [ADR 0005](./decisions/0005-planner-core-v1-contract.md). This is not the complete scheduling engine or the Milestone-3 exit gate.
 
-On this slice, full `pnpm verify` passed locally: formatting, lint, package boundaries (66 source files), Prisma generation/validation, typecheck, 25/25 unit tests, 36/36 integration tests, core/database/Next.js production builds and 2/2 Chromium E2E tests. No live PostgreSQL planner execution was part of this pure-core slice.
+The normalization/eligibility/timeline/candidate-capacity slice is also implemented on this branch. Core now expands explicit wall-clock recurrence through shared time utilities, validates resolved task facts, excludes non-AUTO or inactive work, resolves dependency readiness, merges hard occupancy, preserves manual/locked sessions, and builds disjoint five-minute candidate windows with capability and commute metadata. Hard protected time and sleep remove capacity; soft time remains soft. Unknown deadlines remain unknown. The exact rules and remaining limits are recorded in ADR 0005.
+
+Full `pnpm verify` passed for this slice: format, lint, package boundaries (68 source files), Prisma generation/validation, typecheck, 36/36 unit tests, 36/36 integration tests, production build and 2/2 Chromium E2E tests. The planner-specific tests cover recurrence/DST, hard-time subtraction, eligibility, dependencies, retained work, overlapping availability, commute and input purity.
+
+The preceding contract/architecture slice also passed full local `pnpm verify` at its commit: 25/25 unit tests, 36/36 integration tests and 2/2 Chromium E2E tests. No live PostgreSQL planner execution is part of these pure-core slices.
 
 **Milestone 2 — GATE PASSED and merged.** PR #2 was merged into default branch `master` at `d98dfd6`. Google-only Auth.js, persistent canonical identity provisioning, authenticated and validated service families, explicit optimistic versions, account lifecycle, and representative protected Next.js routes are implemented. Migrations 0001–0006 deployed from zero on a fresh disposable Neon database; guarded live route/service/PostgreSQL, concurrent identity provisioning, rollback and schema-drift checks passed. PR #2 supplied clean GitHub Actions `pnpm verify` with Chromium and a green dependency review. The final literal exit-gate audit is recorded in [Milestone 2 exit gate](./milestone-2-exit-gate.md).
 
@@ -66,4 +70,4 @@ No Milestone-2 exit blocker remains after the literal re-audit and PR #2 merge. 
 
 ## Exact next work item
 
-**Milestone-3 normalization/eligibility/timeline/candidate-capacity slice.** Resolve dependency and availability semantics, hard/soft/protected/sleep intervals, manual and locked occupancy, commute eligibility and capacity metadata from the explicit snapshot. The remaining scoring, sustainable allocation, stability, repair, explanations and scenario/property suite follow before the gate.
+**Milestone-3 capacity/slack/risk/scoring/deterministic-ranking slice.** Calculate task-specific suitable capacity and explicit slack/deadline/preferred-completion risk from normalized candidate windows, then rank deterministically using documented factors. Sustainable allocation, stability, repair, explanations and the scenario/property suite follow before the gate.

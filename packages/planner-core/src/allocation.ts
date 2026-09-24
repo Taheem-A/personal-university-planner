@@ -7,6 +7,7 @@ import {
   minutesBetween,
   overlaps,
   roundUpToQuantum,
+  MINUTE_MS,
 } from "../../shared/src";
 import type { CandidateWindow } from "./windows";
 import { energyFit, locationFits, windowUsableMinutes } from "./windows";
@@ -28,7 +29,7 @@ function sessionTarget(
 }
 
 function stableSessionBonus(taskId: string, window: CandidateWindow, input: PlannerInput): number {
-  const old = input.previousSessions?.find(
+  const old = input.previousSessions.find(
     (session) =>
       session.taskId === taskId &&
       overlaps(session.startAt, session.endAt, window.startAt, window.endAt),
@@ -47,8 +48,8 @@ function chooseWindow(
     const window = windows[index];
     const usable = windowUsableMinutes(task, window, input);
     if (usable < Math.min(task.minimumSessionMinutes, task.remainingMinutes)) continue;
-    if (!locationFits(task, window)) continue;
-    const energy = energyFit(task, window);
+    if (!locationFits(task, window, input)) continue;
+    const energy = energyFit(task, window, input);
     const deadline = task.dueAt ?? input.horizonEnd;
     const hoursBeforeDeadline = Math.max(
       0.25,
@@ -90,9 +91,13 @@ export function placeTask(
     const windowIndex = chooseWindow({ ...task, remainingMinutes: remaining }, mutable, input);
     if (windowIndex < 0) break;
     const window = mutable[windowIndex];
-    const startAt = maxDate(window.startAt, task.availableFrom, input.now);
+    const earliest = maxDate(window.startAt, task.availableFrom, input.now);
+    const startAt = new Date(roundUpToQuantum(earliest.getTime() / MINUTE_MS) * MINUTE_MS);
     const deadline = task.dueAt ?? input.horizonEnd;
-    const endBound = minDate(window.endAt, deadline, input.horizonEnd);
+    const latest = minDate(window.endAt, deadline, input.horizonEnd);
+    const endBound = new Date(
+      Math.floor(latest.getTime() / (FIVE_MINUTES * MINUTE_MS)) * FIVE_MINUTES * MINUTE_MS,
+    );
     const availableClock = minutesBetween(startAt, endBound);
     const target = sessionTarget(task, availableClock, remaining);
     if (target <= 0) break;
@@ -115,6 +120,17 @@ export function placeTask(
       mutable[windowIndex] = {
         ...window,
         startAt: addMinutes(endAt, input.preferences.minimumBreakMinutes),
+        clockMinutes: Math.max(
+          0,
+          minutesBetween(addMinutes(endAt, input.preferences.minimumBreakMinutes), window.endAt),
+        ),
+        remainingUsableMinutes: Math.max(
+          0,
+          Math.floor(
+            minutesBetween(addMinutes(endAt, input.preferences.minimumBreakMinutes), window.endAt) *
+              window.capacityFactor,
+          ),
+        ),
       };
     }
     if (!task.splittable) break;
