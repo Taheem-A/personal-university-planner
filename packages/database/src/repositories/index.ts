@@ -6,12 +6,14 @@ import { createHistoryRepositories } from "./history.js";
 import { createAccountLifecycleRepository } from "./lifecycle.js";
 import { createIntegrationRepositories } from "./integrations.js";
 import { createPlanningRepositories } from "./planning.js";
+import { createPlanningStateRepository } from "./planning-state.js";
 import type { CanonicalRepositories } from "./types.js";
 
 export type * from "./types.js";
 
 export function createRepositories(db: DatabaseExecutor): CanonicalRepositories {
   return {
+    planningState: createPlanningStateRepository(db),
     accountLifecycle: createAccountLifecycleRepository(db),
     authIdentities: createAuthIdentityRepository(db),
     ...createAcademicRepositories(db),

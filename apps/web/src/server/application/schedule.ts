@@ -199,12 +199,14 @@ const protectionFields = z.object({
   ...localRecurrenceSchema.shape,
   protectionLevel: constraint,
   reason: textSchema,
+  isSleep: z.boolean(),
   active: z.boolean(),
 });
 const protectionCreate = localRecurrenceSchema
   .safeExtend({
     protectionLevel: constraint,
     reason: textSchema,
+    isSleep: z.boolean().default(false),
     active: z.boolean().default(true),
   })
   .strict();
@@ -214,15 +216,17 @@ const protectionPatch = protectionFields
   .strict();
 export const protectedTimeRules = {
   create(input: unknown) {
-    return service(protectionCreate, input, async (data, actor, tx) =>
-      tx.repositories.protectedTimeRules.create({
+    return service(protectionCreate, input, async (data, actor, tx) => {
+      if (data.isSleep && data.protectionLevel !== "HARD")
+        throw new ApplicationError("VALIDATION_ERROR", "Sleep must be hard protected time.");
+      return tx.repositories.protectedTimeRules.create({
         ...data,
         id: newRecordId(),
         userId: actor.userId,
         version: 0,
         ...auditNow(),
-      }),
-    );
+      });
+    });
   },
   get(input: unknown) {
     return service(id, input, async ({ id }, actor, tx) => {
@@ -242,6 +246,11 @@ export const protectedTimeRules = {
       if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
       if (!localRecurrenceSchema.safeParse({ ...current, ...patch }).success)
         throw new ApplicationError("VALIDATION_ERROR", "Invalid recurrence.");
+      if (
+        (patch.isSleep ?? current.isSleep) &&
+        (patch.protectionLevel ?? current.protectionLevel) !== "HARD"
+      )
+        throw new ApplicationError("VALIDATION_ERROR", "Sleep must be hard protected time.");
       return requireUpdated(
         await tx.repositories.protectedTimeRules.updateIfCurrent(
           actor.userId,
@@ -276,6 +285,7 @@ const preferenceFields = z.object({
   scheduleCommuteWork: z.boolean(),
   weekendWorkBias: z.number().min(-1).max(1),
   planStabilityWindowMinutes: nonnegativeMinutesSchema,
+  minimumSleepMinutes: positiveMinutesSchema.nullable(),
 });
 const preferencePatch = preferenceFields
   .partial()
@@ -288,17 +298,23 @@ export const planningPreferences = {
     );
   },
   create(input: unknown) {
-    return service(preferenceFields.strict(), input, async (data, actor, tx) => {
-      if (await tx.repositories.planningPreferences.getForUser(actor.userId))
-        throw new ApplicationError("CONFLICT", "Preferences already exist.");
-      return tx.repositories.planningPreferences.create({
-        ...data,
-        id: newRecordId(),
-        userId: actor.userId,
-        version: 0,
-        ...auditNow(),
-      });
-    });
+    return service(
+      preferenceFields
+        .extend({ minimumSleepMinutes: positiveMinutesSchema.nullable().default(null) })
+        .strict(),
+      input,
+      async (data, actor, tx) => {
+        if (await tx.repositories.planningPreferences.getForUser(actor.userId))
+          throw new ApplicationError("CONFLICT", "Preferences already exist.");
+        return tx.repositories.planningPreferences.create({
+          ...data,
+          id: newRecordId(),
+          userId: actor.userId,
+          version: 0,
+          ...auditNow(),
+        });
+      },
+    );
   },
   update(input: unknown) {
     return service(preferencePatch, input, async ({ expectedVersion, ...patch }, actor, tx) => {

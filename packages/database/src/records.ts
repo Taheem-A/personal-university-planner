@@ -228,6 +228,7 @@ export interface ProtectedTimeRuleRecord extends AuditFields, LocalRecurrenceFie
   userId: string;
   protectionLevel: ConstraintLevel;
   reason: string;
+  isSleep: boolean;
   active: boolean;
 }
 
@@ -244,6 +245,8 @@ export interface PlanningPreferenceRecord extends AuditFields {
   scheduleCommuteWork: boolean;
   weekendWorkBias: number;
   planStabilityWindowMinutes: number;
+  /** Null until the user explicitly supplies this non-negotiable boundary. */
+  minimumSleepMinutes: number | null;
 }
 
 export interface WorkSessionRecord extends AuditFields {

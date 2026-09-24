@@ -1,5 +1,15 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 4 Planner Service/input assembly: IN PROGRESS
+
+- Added typed authoritative-generation, incremental-replan and full-replan request/result vocabulary, the complete roadmap trigger vocabulary, explicit planner version and released-time policy, and structured input/precondition failures.
+- Added user-scoped planning-state reads under a repeatable-read snapshot. The application layer maps canonical facts into pure `PlannerInput` and can invoke `heuristic-v1` without persisting output.
+- Added a nullable, explicitly configured minimum-sleep preference and a durable sleep marker on protected-time recurrence, with migration `0007_planner_sleep_policy`. Missing policy or sleep windows fail assembly.
+- Exact planning ends at the seventh upcoming local midnight; the first 24 hours are identified as immediate. Shared timezone/recurrence utilities preserve wall-clock DST behavior.
+- Focused synthetic tests cover state mapping, isolation, inactivity, dependencies, session classes, recurrence/DST, horizon determinism, unknown deadlines, precondition failures and planner-core entry. See [ADR 0006](./decisions/0006-planner-service-input-assembly.md).
+- Full local `pnpm verify` passed, including package boundaries, Prisma generation/validation, typecheck, unit/integration tests, production build and Chromium E2E. Dedicated scenario (13/13), property (2/2), and dependency audit commands passed.
+- **Exact next slice: Planner persistence/concurrency substrate.** Milestone 4 remains **IN PROGRESS**.
+
 ## 2026-09-24 — Milestone 3 merged and closed
 
 - [PR #3](https://github.com/Taheem-A/personal-university-planner/pull/3) is merged into `master` at `e8b5e846e72a4269d304213adbf81ba22416a915`. The final PR head `da2345813a325ae7f5e8bf19743776fb3328d13a` is an ancestor of `master`.

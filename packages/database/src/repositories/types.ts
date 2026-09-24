@@ -388,6 +388,27 @@ export interface AccountSnapshot {
   externalObjectMaps: ExternalObjectMapRecord[];
 }
 
+/** Only canonical facts used for planner-input assembly. */
+export type PlanningStateSnapshot = Pick<
+  AccountSnapshot,
+  | "user"
+  | "academicTerms"
+  | "courses"
+  | "courseMeetings"
+  | "assessments"
+  | "tasks"
+  | "taskDependencies"
+  | "calendarEvents"
+  | "availabilityRules"
+  | "protectedTimeRules"
+  | "planningPreferences"
+  | "workSessions"
+>;
+
+export interface PlanningStateRepository {
+  snapshot(userId: string, startAt: Date, endAt: Date): Promise<PlanningStateSnapshot | null>;
+}
+
 export interface AccountLifecycleRepository {
   snapshot(userId: string): Promise<AccountSnapshot | null>;
   deleteAccount(userId: string): Promise<boolean>;
@@ -414,6 +435,7 @@ export interface InboxItemRepository {
 }
 
 export interface CanonicalRepositories {
+  planningState: PlanningStateRepository;
   accountLifecycle: AccountLifecycleRepository;
   users: UserRepository;
   authIdentities: AuthIdentityRepository;

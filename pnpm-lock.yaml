@@ -200,6 +200,12 @@ importers:
       '@university-planner/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@university-planner/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@university-planner/planner-core':
+        specifier: workspace:*
+        version: link:../../packages/planner-core
       '@university-planner/shared':
         specifier: workspace:*
         version: link:../../packages/shared

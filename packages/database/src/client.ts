@@ -7,6 +7,7 @@ import { runInTransaction } from "./transaction.js";
 export interface Database {
   repositories: CanonicalRepositories;
   transaction<T>(operation: (context: TransactionContext) => Promise<T>): Promise<T>;
+  readSnapshot<T>(operation: (context: TransactionContext) => Promise<T>): Promise<T>;
   disconnect(): Promise<void>;
 }
 
@@ -23,6 +24,10 @@ class PrismaDatabase implements Database {
 
   transaction<T>(operation: (context: TransactionContext) => Promise<T>): Promise<T> {
     return runInTransaction(this.client, operation);
+  }
+
+  readSnapshot<T>(operation: (context: TransactionContext) => Promise<T>): Promise<T> {
+    return runInTransaction(this.client, operation, "RepeatableRead");
   }
 
   disconnect(): Promise<void> {

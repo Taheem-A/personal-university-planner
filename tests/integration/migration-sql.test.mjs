@@ -46,3 +46,14 @@ test("canonical foundation migration contains the audited PostgreSQL shape", asy
   assert.match(sql, /IntegrationAccount_id_userId_provider_key/);
   assert.doesNotMatch(sql, /postgres(?:ql)?:\/\//i);
 });
+
+test("planner sleep migration preserves unknown policy and marks only explicit hard sleep", async () => {
+  const sql = await readFile(
+    path.resolve("packages/database/prisma/migrations/0007_planner_sleep_policy/migration.sql"),
+    "utf8",
+  );
+  assert.match(sql, /"minimumSleepMinutes" INTEGER;/);
+  assert.match(sql, /"minimumSleepMinutes" IS NULL OR "minimumSleepMinutes" > 0/);
+  assert.match(sql, /"isSleep" BOOLEAN NOT NULL DEFAULT false/);
+  assert.match(sql, /NOT "isSleep" OR "protectionLevel" = 'HARD'/);
+});

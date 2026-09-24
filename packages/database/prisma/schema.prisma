@@ -459,6 +459,7 @@ model ProtectedTimeRule {
   timezone        String
   protectionLevel ConstraintLevel
   reason          String
+  isSleep         Boolean         @default(false)
   effectiveFrom   DateTime        @db.Date
   effectiveUntil  DateTime?       @db.Date
   active          Boolean         @default(true)
@@ -482,6 +483,7 @@ model PlanningPreference {
   scheduleCommuteWork             Boolean
   weekendWorkBias                 Float
   planStabilityWindowMinutes      Int
+  minimumSleepMinutes             Int?
   createdAt                       DateTime @default(now()) @db.Timestamptz(3)
   updatedAt                       DateTime @updatedAt @db.Timestamptz(3)
   user                            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
