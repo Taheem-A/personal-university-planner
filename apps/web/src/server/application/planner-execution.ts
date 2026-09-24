@@ -6,6 +6,7 @@ import type {
   PlannerRunCompletionSummary,
   PlannerRunDelta,
   PlannerRunRecord,
+  PlannerRunRisk,
   PlannerRunStoredWarning,
   WorkSessionRecord,
 } from "@university-planner/database";
@@ -181,22 +182,80 @@ export function validateAuthoritativeOutput(input: PlannerInput, output: Planner
   return errors;
 }
 
-function riskIds(warnings: PlannerRunStoredWarning[]): Set<string> {
-  const riskCodes = new Set([
-    "LOW_SLACK",
-    "INFEASIBLE",
-    "NO_SUITABLE_WINDOW",
-    "DEPENDENCY_BLOCKED",
-    "DEADLINE_BUFFER_USED",
-    "HARD_CONFLICT",
-  ]);
-  return new Set(
-    warnings
-      .filter(
-        (warning) =>
-          warning.taskId && (riskCodes.has(warning.code) || (warning.deficitMinutes ?? 0) > 0),
+/** A projection of core diagnostics, with no independent scheduling or risk inference. */
+export function riskFromOutput(output: PlannerOutput): PlannerRunRisk[] {
+  const risks = new Map<string, PlannerRunRisk>();
+  for (const pressure of output.pressures) {
+    if (pressure.feasibility === "COMFORTABLE") continue;
+    risks.set(pressure.taskId, {
+      taskId: pressure.taskId,
+      feasibility: pressure.feasibility,
+      deficitMinutes: pressure.capacityDeficitMinutes,
+      slackMinutes: pressure.slackMinutes,
+    });
+  }
+  for (const infeasible of output.infeasibilities) {
+    const prior = risks.get(infeasible.taskId);
+    risks.set(infeasible.taskId, {
+      taskId: infeasible.taskId,
+      feasibility: "INFEASIBLE",
+      deficitMinutes: infeasible.deficitMinutes,
+      slackMinutes: prior?.slackMinutes ?? null,
+    });
+  }
+  return [...risks.values()].sort((a, b) => a.taskId.localeCompare(b.taskId));
+}
+
+function priorRisk(run: PlannerRunRecord | null): PlannerRunRisk[] {
+  const summary = run?.summary;
+  if (
+    summary &&
+    typeof summary === "object" &&
+    !Array.isArray(summary) &&
+    Array.isArray(summary.risk)
+  )
+    return summary.risk.flatMap((item) => {
+      if (
+        !item ||
+        typeof item !== "object" ||
+        Array.isArray(item) ||
+        typeof item.taskId !== "string" ||
+        typeof item.feasibility !== "string" ||
+        typeof item.deficitMinutes !== "number"
       )
-      .map((warning) => warning.taskId!),
+        return [];
+      if (!["CONSTRAINED", "CRITICAL", "INFEASIBLE", "HORIZON_LIMITED"].includes(item.feasibility))
+        return [];
+      return [
+        {
+          taskId: item.taskId,
+          feasibility: item.feasibility as PlannerRunRisk["feasibility"],
+          deficitMinutes: item.deficitMinutes,
+          slackMinutes: typeof item.slackMinutes === "number" ? item.slackMinutes : null,
+        },
+      ];
+    });
+  // Runs created before this projection retained bounded warning diagnostics.
+  return priorWarnings(run)
+    .filter((warning) => warning.taskId && (warning.deficitMinutes ?? 0) > 0)
+    .map((warning) => ({
+      taskId: warning.taskId!,
+      feasibility: "INFEASIBLE" as const,
+      deficitMinutes: warning.deficitMinutes!,
+      slackMinutes: null,
+    }));
+}
+
+const severity = { HORIZON_LIMITED: 1, CONSTRAINED: 2, CRITICAL: 3, INFEASIBLE: 4 };
+function riskWorsened(before: PlannerRunRisk, after: PlannerRunRisk): boolean {
+  return (
+    severity[after.feasibility] > severity[before.feasibility] ||
+    (after.feasibility === before.feasibility &&
+      (after.deficitMinutes > before.deficitMinutes ||
+        (after.deficitMinutes === before.deficitMinutes &&
+          before.slackMinutes !== null &&
+          after.slackMinutes !== null &&
+          after.slackMinutes < before.slackMinutes)))
   );
 }
 
@@ -322,8 +381,8 @@ function planChanges(
     }
     return { id: session.id, replacementId: match?.id ?? null };
   });
-  const before = riskIds(priorWarnings(previousRun));
-  const after = riskIds(storedWarnings(output));
+  const before = new Map(priorRisk(previousRun).map((risk) => [risk.taskId, risk]));
+  const after = new Map(riskFromOutput(output).map((risk) => [risk.taskId, risk]));
   return {
     created,
     superseded,
@@ -332,8 +391,22 @@ function planChanges(
       moved,
       added: created.filter((session) => available.has(session.id)).map((session) => session.id),
       removed: superseded.filter((change) => !change.replacementId).map((change) => change.id),
-      newlyAtRisk: [...after].filter((taskId) => !before.has(taskId)),
-      resolvedRisk: [...before].filter((taskId) => !after.has(taskId)),
+      newlyAtRisk: [...after.keys()].filter((taskId) => !before.has(taskId)),
+      worsenedRisk: [...after]
+        .filter(([taskId, risk]) => before.has(taskId) && riskWorsened(before.get(taskId)!, risk))
+        .map(([taskId]) => taskId),
+      improvedRisk: [...after]
+        .filter(([taskId, risk]) => before.has(taskId) && riskWorsened(risk, before.get(taskId)!))
+        .map(([taskId]) => taskId),
+      resolvedRisk: [...before.keys()].filter((taskId) => !after.has(taskId)),
+      unchangedRisk: [...after]
+        .filter(
+          ([taskId, risk]) =>
+            before.has(taskId) &&
+            !riskWorsened(before.get(taskId)!, risk) &&
+            !riskWorsened(risk, before.get(taskId)!),
+        )
+        .map(([taskId]) => taskId),
     },
   };
 }
@@ -423,6 +496,7 @@ export async function executePlannerForActor(
             (sum, value) => sum + value,
             0,
           ),
+          risk: riskFromOutput(output),
           delta: changes.delta,
         };
         const completed = await tx.repositories.plannerRuns.complete(userId, runId, {

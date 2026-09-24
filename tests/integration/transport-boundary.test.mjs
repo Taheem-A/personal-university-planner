@@ -136,12 +136,19 @@ const serviceUtils = app("application/service", {
   },
   "node:crypto": { randomUUID: () => `new-${Math.random()}` },
 });
+const plannerTriggerStub = {
+  planAfterMutation: (mutation) => mutation,
+  classifyTaskMutation: () => null,
+  classifyCalendarMutation: () => null,
+  classifyPlanningFields: () => null,
+};
 function academic() {
   return app("application/academic", {
     "./authorization": auth,
     "./dependencies": app("application/dependencies", { "./errors": errors }),
     "./errors": errors,
     "./service": serviceUtils,
+    "./planner-triggers": plannerTriggerStub,
     "./validation": validation,
   });
 }
@@ -149,12 +156,14 @@ const schedule = app("application/schedule", {
   "./authorization": auth,
   "./errors": errors,
   "./service": serviceUtils,
+  "./planner-triggers": plannerTriggerStub,
   "./validation": validation,
 });
 const lifecycle = app("application/lifecycle", {
   "./authorization": auth,
   "./errors": errors,
   "./service": serviceUtils,
+  "./planner-triggers": plannerTriggerStub,
   "./validation": validation,
 });
 const transport = app("transport", {});

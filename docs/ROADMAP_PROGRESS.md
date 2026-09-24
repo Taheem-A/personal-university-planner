@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 4 replan triggers and incremental repair: IN PROGRESS
+
+- Centralized post-commit classification of planning-relevant task, deadline, calendar, academic, availability, protected-time, preference and manual-session mutations. Cosmetic edits do not request a plan. Ordinary factual changes use `INCREMENTAL` and retain exact trigger/entity provenance.
+- Added explicit manual and callable daily refresh operations; a keyed integration-batch boundary commits many future canonical writes before one replan. Completed/skip trigger paths require matching already-committed session, completion and remaining-work facts. The Milestone-7 outcome loop and provider sync remain deferred.
+- Previous generated sessions and the stability preference flow into core; structured deltas retain unchanged IDs and record moved/added/superseded sessions. Explicit released windows respect core policy. Risk comparisons now use persisted core pressure/infeasibility projections and report newly at-risk, worse, improved, resolved and unchanged risk.
+- Full local `pnpm verify` passed, including package boundaries, unit/integration tests, schema validation, production build and Chromium E2E. Dedicated planner scenarios (13/13), properties (2/2) and dependency audit passed.
+- **Exact next slice: concurrency, stale-result and idempotency hardening.** Milestone 4 remains **IN PROGRESS**.
+
 ## 2026-09-24 — Milestone 4 authoritative planner execution: IN PROGRESS
 
 - The authenticated Planner Service now loads one revisioned canonical snapshot, invokes explicit `heuristic-v1`, independently validates its output, and records a versioned serializable PlannerRun input snapshot. Ordinary run reads omit the raw input.

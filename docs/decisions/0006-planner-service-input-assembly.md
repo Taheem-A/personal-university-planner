@@ -48,6 +48,18 @@ Unchanged persistent session IDs are retained. A newly computed slot with the sa
 
 Focused service tests use synthetic canonical repository state and a transaction-aware database double, while existing embedded PostgreSQL tests cover the revision and repository substrate. A live PostgreSQL end-to-end planner run remains for the later Milestone-4 acceptance gate.
 
+## Replan triggers and change summaries
+
+Application services classify a successful canonical mutation after its write transaction commits, then call the authenticated Planner Service once with the exact trigger and an explicit service clock. The factual mutation result remains successful even if the follow-up plan reports an input or execution failure; the result includes that structured planning outcome. The planner rereads one new repeatable-read snapshot, so it never plans from a transaction's intermediate state. Ordinary changes request `INCREMENTAL`; only an explicit manual full regeneration requests `FULL`. The existing core receives persisted previous sessions and its configured stability window. The service preserves unchanged durable IDs, reports moves and supersessions, and carries core stability warnings rather than recomputing stability itself.
+
+When a task becomes archived, completed or otherwise non-plannable, its unlocked old generated sessions no longer enter `PlannerInput`; the authoritative transaction still loads and supersedes them. Manual and locked sessions remain explicit retained intent and surface an input conflict if their task is no longer valid. This keeps factual history without asking core to schedule an inactive task.
+
+Planning-relevant mutation families are AUTO ready/in-progress task creation and scheduling-field changes (true due date uses `DEADLINE_CHANGED`); task archive and dependency changes; assessment release/due/target/archive changes; course meeting recurrence, attendance and archive; course default energy/archive and term archive; non-informational fixed calendar intervals/constraint/archive; active availability and hard/soft protected-time recurrences; planning preferences; and manual session creation/cancellation. These map to `TASK_CREATED`, `TASK_UPDATED`, `DEADLINE_CHANGED` or `CALENDAR_CHANGED` with an entity type and ID. Title, description, display, location text, grade and informational event edits do not request a replan. The database revision trigger remains the stale-result authority; trigger classification governs whether to initiate a new run.
+
+The service exposes `MANUAL` and `DAILY_REFRESH` calls without adding a scheduler. A future integration can commit many canonical writes in one database transaction and request one `INTEGRATION_SYNC` run with a stable batch key; no provider client or queue is present. `SESSION_COMPLETED` and `SESSION_SKIPPED` are callable only after a completion record, matching terminal WorkSession state, and explicit task remaining-work value agree. Existing completion recording does not itself satisfy those facts and therefore does not auto-replan. Full outcome accounting, undo and immediate UI behavior remain Milestone 7 work.
+
+Released windows are supplied explicitly by factual callers. A cancelled manual session supplies its released interval; committed outcome callers may supply theirs. Core remains authoritative for `KEEP_FREE`, `REPLAN_IF_USEFUL` and explicitly requested `ALWAYS_REPLAN` behavior. The persisted run summary now projects core pressure feasibility, slack and quantified infeasibility into structured task risk. Comparing consecutive successful projections yields new, worsened, improved, resolved and unchanged meaningful risk; the service adds no competing schedule-risk calculation.
+
 ## Next slice
 
-**replan triggers and incremental/minimal-change orchestration.** Milestone 4 remains in progress.
+**concurrency, stale-result and idempotency hardening.** Milestone 4 remains in progress.

@@ -315,7 +315,15 @@ export interface PlannerRunCompletionSummary {
   generatedSessionCount: number;
   retainedSessionCount: number;
   unscheduledMinutes: number;
+  risk: PlannerRunRisk[];
   delta: PlannerRunDelta;
+}
+
+export interface PlannerRunRisk {
+  taskId: string;
+  feasibility: "CONSTRAINED" | "CRITICAL" | "INFEASIBLE" | "HORIZON_LIMITED";
+  deficitMinutes: number;
+  slackMinutes: number | null;
 }
 
 export interface PlannerRunDelta {
@@ -330,7 +338,10 @@ export interface PlannerRunDelta {
   added: string[];
   removed: string[];
   newlyAtRisk: string[];
+  worsenedRisk: string[];
+  improvedRisk: string[];
   resolvedRisk: string[];
+  unchangedRisk: string[];
 }
 
 export interface PlannerRunStoredWarning {

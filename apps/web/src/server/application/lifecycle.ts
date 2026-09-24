@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { IntegrationAccountRecord, PlannerRunRecord } from "@university-planner/database";
 import { requireAssessment, requireCourse, requireTask } from "./authorization";
 import { ApplicationError } from "./errors";
+import { planAfterMutation } from "./planner-triggers";
 import { auditNow, newRecordId, requireUpdated, service } from "./service";
 import {
   expectedVersionSchema,
@@ -25,33 +26,38 @@ function safeIntegration({ credentialReference: _removed, ...metadata }: Integra
 /** This slice records manually created sessions; planner-generated sessions belong to Milestone 4. */
 export const workSessions = {
   create(input: unknown) {
-    return service(manualSession, input, async (data, actor, tx) => {
-      await requireTask(tx.repositories, actor, data.taskId);
-      const startAt = parseInstant(data.startAt)!,
-        endAt = parseInstant(data.endAt)!;
-      validateOrderedInstants(startAt, endAt);
-      const elapsed = (endAt.getTime() - startAt.getTime()) / 60_000;
-      if (!Number.isInteger(elapsed) || elapsed <= 0)
-        throw new ApplicationError(
-          "VALIDATION_ERROR",
-          "Session duration must be whole positive minutes.",
-        );
-      return tx.repositories.workSessions.create({
-        id: newRecordId(),
-        userId: actor.userId,
-        version: 0,
-        taskId: data.taskId,
-        plannerRunId: null,
-        startAt,
-        endAt,
-        plannedMinutes: elapsed,
-        state: "PLANNED",
-        generatedBy: "USER",
-        locked: data.locked,
-        supersededById: null,
-        ...auditNow(),
-      });
-    });
+    return planAfterMutation(
+      service(manualSession, input, async (data, actor, tx) => {
+        await requireTask(tx.repositories, actor, data.taskId);
+        const startAt = parseInstant(data.startAt)!,
+          endAt = parseInstant(data.endAt)!;
+        validateOrderedInstants(startAt, endAt);
+        const elapsed = (endAt.getTime() - startAt.getTime()) / 60_000;
+        if (!Number.isInteger(elapsed) || elapsed <= 0)
+          throw new ApplicationError(
+            "VALIDATION_ERROR",
+            "Session duration must be whole positive minutes.",
+          );
+        return tx.repositories.workSessions.create({
+          id: newRecordId(),
+          userId: actor.userId,
+          version: 0,
+          taskId: data.taskId,
+          plannerRunId: null,
+          startAt,
+          endAt,
+          plannedMinutes: elapsed,
+          state: "PLANNED",
+          generatedBy: "USER",
+          locked: data.locked,
+          supersededById: null,
+          ...auditNow(),
+        });
+      }),
+      (record) => ({
+        trigger: { type: "CALENDAR_CHANGED", entityType: "WORK_SESSION", entityId: record.id },
+      }),
+    );
   },
   get(input: unknown) {
     return service(id, input, async ({ id }, actor, tx) => {
@@ -86,17 +92,28 @@ export const workSessions = {
     );
   },
   cancel(input: unknown) {
-    return service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
-      const current = await tx.repositories.workSessions.getForUser(actor.userId, id);
-      if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
-      if (current.state !== "PLANNED" || current.generatedBy !== "USER" || current.locked)
-        throw new ApplicationError("CONFLICT", "This session cannot be cancelled here.");
-      return requireUpdated(
-        await tx.repositories.workSessions.updateIfCurrent(actor.userId, id, expectedVersion, {
-          state: "CANCELLED",
-        }),
-      );
-    });
+    return planAfterMutation(
+      service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
+        const current = await tx.repositories.workSessions.getForUser(actor.userId, id);
+        if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
+        if (current.state !== "PLANNED" || current.generatedBy !== "USER" || current.locked)
+          throw new ApplicationError("CONFLICT", "This session cannot be cancelled here.");
+        return requireUpdated(
+          await tx.repositories.workSessions.updateIfCurrent(actor.userId, id, expectedVersion, {
+            state: "CANCELLED",
+          }),
+        );
+      }),
+      (record) => ({
+        trigger: {
+          type: "CALENDAR_CHANGED",
+          entityType: "WORK_SESSION",
+          entityId: record.id,
+          releasedWindows: [{ id: record.id, startAt: record.startAt, endAt: record.endAt }],
+        },
+        releasedTimePolicy: "REPLAN_IF_USEFUL",
+      }),
+    );
   },
 };
 

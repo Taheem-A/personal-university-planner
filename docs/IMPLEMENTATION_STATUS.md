@@ -2,7 +2,7 @@
 
 ## Current milestone status
 
-**Milestone 4 — IN PROGRESS.** The first slice added the typed Planner Service and canonical-state to `PlannerInput` assembly under a repeatable-read snapshot. The second slice added a per-user planning revision, guarded claims, durable idempotency and transaction-oriented history primitives. The third slice now executes the explicit `heuristic-v1` core, validates its output at the service boundary, persists a versioned input snapshot and PlannerRun, and atomically inserts/retains/supersedes generated WorkSessions with a structured delta. Valid partial plans retain quantified infeasibility; invalid or stale results preserve the previous schedule. Ordinary run reads omit the raw snapshot. [ADR 0006](./decisions/0006-planner-service-input-assembly.md) records the lifecycle and policies. **Exact next slice: replan triggers and incremental/minimal-change orchestration.**
+**Milestone 4 — IN PROGRESS.** Canonical input assembly, the revision/idempotency substrate, and authoritative `heuristic-v1` execution with transactional PlannerRun/session history are implemented. This slice adds post-commit trigger classification for planning-relevant task, academic, calendar, availability, protected-time, preference and manual-session changes. Ordinary changes request incremental replans with accurate provenance; manual full regeneration, daily refresh, keyed integration batches and verified completed/skip factual paths are callable. Persisted deltas now distinguish new, worsened, improved, resolved and unchanged risk from core diagnostics. [ADR 0006](./decisions/0006-planner-service-input-assembly.md) records the policies. **Exact next slice: concurrency, stale-result and idempotency hardening.**
 
 Full local `pnpm verify`, `pnpm test:planner-scenarios` (13/13), `pnpm test:planner-properties` (2/2), and `pnpm check:dependencies` passed for this slice. The migration replay and repository tests pass in ordinary CI; a live PostgreSQL end-to-end planner run remains for the Milestone-4 acceptance gate.
 
@@ -96,4 +96,4 @@ No Milestone-2 exit blocker remains after the literal re-audit and PR #2 merge. 
 
 ## Exact next work item
 
-**replan triggers and incremental/minimal-change orchestration.** Milestone 4 remains **IN PROGRESS**.
+**concurrency, stale-result and idempotency hardening.** Milestone 4 remains **IN PROGRESS**.

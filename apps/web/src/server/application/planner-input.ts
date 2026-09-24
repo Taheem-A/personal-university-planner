@@ -154,18 +154,32 @@ export function assemblePlannerInput(
       row.startAt < horizon.endAt &&
       row.endAt > horizon.startAt,
   );
-  const sessionTaskIds = new Set(activeSessions.map((row) => row.taskId));
   const eligible = (task: TaskRecord) =>
     !task.archivedAt &&
     (!task.courseId || courses.has(task.courseId)) &&
     (!task.assessmentId || assessments.has(task.assessmentId));
+  const taskById = new Map(
+    state.tasks.filter((row) => row.userId === userId).map((row) => [row.id, row]),
+  );
+  // Obsolete unlocked generated sessions are historical candidates for supersession,
+  // not retained intent or valid core input after their task becomes non-plannable.
+  const planningSessions = activeSessions.filter((row) => {
+    if (row.generatedBy === "USER" || row.locked) return true;
+    const task = taskById.get(row.taskId);
+    return (
+      !!task &&
+      eligible(task) &&
+      task.planningMode === "AUTO" &&
+      (task.status === "READY" || task.status === "IN_PROGRESS")
+    );
+  });
+  const sessionTaskIds = new Set(planningSessions.map((row) => row.taskId));
   const selected = state.tasks.filter(
     (task) =>
       task.userId === userId &&
       eligible(task) &&
-      ((task.planningMode === "AUTO" &&
-        (task.status === "READY" || task.status === "IN_PROGRESS")) ||
-        sessionTaskIds.has(task.id)),
+      (task.status === "READY" || task.status === "IN_PROGRESS") &&
+      (task.planningMode === "AUTO" || sessionTaskIds.has(task.id)),
   );
   const selectedIds = new Set(selected.map((row) => row.id));
   const completedTaskIds = state.tasks
@@ -322,7 +336,7 @@ export function assemblePlannerInput(
       code: "MISSING_SLEEP_WINDOW",
       message: "At least one explicit sleep recurrence is required.",
     });
-  for (const row of activeSessions) {
+  for (const row of planningSessions) {
     if (!selectedIds.has(row.taskId) || row.plannedMinutes <= 0 || row.endAt <= row.startAt)
       issues.push({
         code: "INVALID_SESSION",
@@ -370,11 +384,11 @@ export function assemblePlannerInput(
     sleepWindows: [],
     recurringWindows,
     availability: [],
-    manualSessions: activeSessions.filter((row) => row.generatedBy === "USER").map(session),
-    lockedSessions: activeSessions
+    manualSessions: planningSessions.filter((row) => row.generatedBy === "USER").map(session),
+    lockedSessions: planningSessions
       .filter((row) => row.generatedBy === "PLANNER" && row.locked)
       .map(session),
-    previousSessions: activeSessions
+    previousSessions: planningSessions
       .filter((row) => row.generatedBy === "PLANNER" && !row.locked)
       .map(session),
     releasedWindows: request.trigger.releasedWindows ?? [],

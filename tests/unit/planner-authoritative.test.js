@@ -349,6 +349,94 @@ test("an identical full replan retains existing durable IDs despite new core IDs
   assert.deepEqual(result.delta.moved, []);
 });
 
+test("incremental task change keeps unaffected near-term sessions stable", async () => {
+  const s = state();
+  s.tasks.push({
+    ...task("task-2"),
+    availableFrom: d("2026-09-22T12:00:00-04:00"),
+    dueAt: d("2026-09-25T17:00:00-04:00"),
+  });
+  const db = database([s]);
+  const deps = dependencies();
+  assert.equal(
+    (await service.executePlannerForActor(db, userId, request(), deps)).status,
+    "SUCCEEDED",
+  );
+  const unaffected = active(db)
+    .filter((row) => row.taskId === "task-1")
+    .map((row) => row.id);
+  assert.ok(unaffected.length > 0);
+  db.data.states[userId].tasks[1].dueAt = d("2026-09-26T17:00:00-04:00");
+  db.data.states[userId].user.planningRevision++;
+  const result = await service.executePlannerForActor(
+    db,
+    userId,
+    request({ type: "DEADLINE_CHANGED", entityType: "TASK", entityId: "task-2" }),
+    deps,
+  );
+  assert.equal(result.status, "SUCCEEDED", JSON.stringify(result));
+  assert.ok(unaffected.every((id) => result.delta.retained.includes(id)));
+  assert.equal(db.data.runs.at(-1).triggerType, "DEADLINE_CHANGED");
+});
+
+test("released-time KEEP_FREE leaves the window empty while REPLAN_IF_USEFUL can refill it", async () => {
+  const s = state();
+  s.tasks[0].dueAt = d("2026-09-21T18:00:00Z");
+  const released = { id: "released", startAt: now, endAt: d("2026-09-21T18:00:00Z") };
+  const trigger = {
+    type: "SESSION_SKIPPED",
+    entityType: "WORK_SESSION",
+    entityId: "synthetic-skip",
+    releasedWindows: [released],
+  };
+  const free = database([structuredClone(s)]);
+  const keep = await service.executePlannerForActor(
+    free,
+    userId,
+    { ...request(trigger), releasedTimePolicy: "KEEP_FREE" },
+    dependencies(),
+  );
+  assert.equal(keep.status, "SUCCEEDED", JSON.stringify(keep));
+  assert.equal(active(free).length, 0);
+  assert.ok(keep.summary.unscheduledMinutes > 0);
+  const refill = database([structuredClone(s)]);
+  const useful = await service.executePlannerForActor(
+    refill,
+    userId,
+    { ...request(trigger), releasedTimePolicy: "REPLAN_IF_USEFUL" },
+    dependencies(),
+  );
+  assert.equal(useful.status, "SUCCEEDED", JSON.stringify(useful));
+  assert.ok(
+    active(refill).some((row) => row.startAt < released.endAt && row.endAt > released.startAt),
+  );
+});
+
+test("risk delta distinguishes new, worsened, unchanged and resolved core risk", async () => {
+  const db = database();
+  let feasibility = "CONSTRAINED";
+  const deps = dependencies((input) => {
+    const output = core.generatePlan(input);
+    output.pressures = [
+      { taskId: "task-1", feasibility, capacityDeficitMinutes: 0, slackMinutes: 30 },
+    ];
+    return output;
+  });
+  const first = await service.executePlannerForActor(db, userId, request(), deps);
+  assert.deepEqual(first.delta.newlyAtRisk, ["task-1"]);
+  feasibility = "CRITICAL";
+  const worse = await service.executePlannerForActor(db, userId, request(), deps);
+  assert.deepEqual(worse.delta.worsenedRisk, ["task-1"]);
+  const same = await service.executePlannerForActor(db, userId, request(), deps);
+  assert.deepEqual(same.delta.unchangedRisk, ["task-1"]);
+  feasibility = "CONSTRAINED";
+  const improved = await service.executePlannerForActor(db, userId, request(), deps);
+  assert.deepEqual(improved.delta.improvedRisk, ["task-1"]);
+  feasibility = "COMFORTABLE";
+  const resolved = await service.executePlannerForActor(db, userId, request(), deps);
+  assert.deepEqual(resolved.delta.resolvedRisk, ["task-1"]);
+});
+
 test("stable idempotency identity returns the prior outcome", async () => {
   const db = database();
   const deps = dependencies();
@@ -402,6 +490,28 @@ test("a disappeared task's old sessions are superseded without a fake replacemen
       .filter((row) => oldIds.includes(row.id))
       .every((row) => row.state === "SUPERSEDED" && row.supersededById === null),
   );
+});
+
+test("archived task releases obsolete generated sessions from planner input and supersedes them", async () => {
+  const db = database();
+  const deps = dependencies();
+  assert.equal(
+    (await service.executePlannerForActor(db, userId, request(), deps)).status,
+    "SUCCEEDED",
+  );
+  const oldIds = active(db).map((row) => row.id);
+  db.data.states[userId].tasks[0].archivedAt = now;
+  db.data.states[userId].user.planningRevision++;
+  const result = await service.executePlannerForActor(
+    db,
+    userId,
+    request({ type: "TASK_UPDATED", entityType: "TASK", entityId: "task-1" }),
+    deps,
+  );
+  assert.equal(result.status, "SUCCEEDED", JSON.stringify(result));
+  assert.deepEqual(result.delta.removed.sort(), oldIds.sort());
+  assert.equal(active(db).length, 0);
+  assert.deepEqual(db.data.runs.at(-1).inputSnapshot.input.tasks, []);
 });
 
 test("manual and locked sessions remain unchanged during authoritative generation", async () => {
