@@ -1,13 +1,13 @@
 # Roadmap progress
 
-## 2026-09-24 — Milestone 3: GATE PASSED locally
+## 2026-09-24 — Milestone 3: GATE PASSED
 
-- The [literal exit-gate audit](./milestone-3-exit-gate.md) maps all 14 pipeline steps, required behavior, 13 canonical scenarios, major invariants and five exit criteria to source and test evidence. The roadmap gate passes on local evidence; draft PR CI is tracked separately. Milestone 4 has **not started**.
+- The [literal exit-gate audit](./milestone-3-exit-gate.md) maps all 14 pipeline steps, required behavior, 13 canonical scenarios, major invariants and five exit criteria to source and test evidence. The roadmap gate passes on local and GitHub CI evidence. [CI run 36025989398](https://github.com/Taheem-A/personal-university-planner/actions/runs/36025989398) and [dependency review run 36025989365](https://github.com/Taheem-A/personal-university-planner/actions/runs/36025989365) both succeeded for implementation head `47f2bd87421b1d85453beb7d9df68990f40641b6`. Final-head checks follow this documentation update. Milestone 4 has **not started**.
 - A dependency-free seeded property generator exercises 1,000 valid explicit planner snapshots, including feasible and infeasible outcomes, variable workload/deadlines, hard/soft/protected/sleep time, capability and commute, dependency chains, locks/manual/previous sessions and preferences. It checks output validation, hard placement invariants, accounting, user intent, input purity and structured reasons. Failures carry a replay seed. A further 64 generated normalized snapshots each produced six deeply equal complete `heuristic-v1` outputs.
 - The sweep found a generated tiny-remainder validation defect and an empty reason on ordinary placements. Session construction now declines splits that would strand an unusable remainder; valid available capacity receives a structured reason. Retained hard conflicts now have a `RETAINED_CONFLICT` limiting factor even when all task minutes are nominally allocated.
 - Core isolation automation now rejects computed imports, ambient network/browser access, environment reads, implicit clock reads and randomness. Negative integration cases verify those rejection paths. The package manifest and source allowlist still permit only framework-independent domain/shared primitives.
 - Full local `pnpm verify` passed: format, lint, 73-file package boundaries, Prisma generation/validation, typecheck, **98/98** unit tests, **36/36** integration tests, core/database/Next.js builds and **2/2** Chromium E2E tests. Dedicated canonical and property suites passed **13/13** and **2/2**; `pnpm check:dependencies` reported no known vulnerabilities.
-- **Exact next roadmap item:** Milestone 4 — Planner Service, PlannerRuns, Persistence, and Incremental Replanning. Do not begin it in this branch; review the draft Milestone-3 PR first.
+- **Exact next roadmap item:** Milestone 4 — Planner Service, PlannerRuns, Persistence, and Incremental Replanning, after PR #3 review and merge.
 
 ## 2026-09-24 — Milestone 3 canonical scenario and regression suite: IN PROGRESS
 
