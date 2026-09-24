@@ -300,6 +300,19 @@ export function createHistoryRepositories(db: DatabaseExecutor): {
         });
         return row ? toPlainRecord<PlannerRunRecord>(row) : null;
       },
+      async failExpiredRunning(userId, startedBefore, completedAt) {
+        if (!Number.isFinite(startedBefore.getTime()) || !Number.isFinite(completedAt.getTime()))
+          throw new RangeError("Invalid planner recovery time");
+        const result = await db.plannerRun.updateMany({
+          where: { userId, status: "RUNNING", completedAt: null, startedAt: { lt: startedBefore } },
+          data: {
+            status: "FAILED",
+            completedAt,
+            warnings: [{ code: "ABANDONED", reasonCodes: [] }],
+          },
+        });
+        return result.count;
+      },
       async complete(userId, id, result) {
         if (result.status !== "SUCCEEDED" && result.status !== "FAILED")
           throw new RangeError("PlannerRun completion must be terminal");

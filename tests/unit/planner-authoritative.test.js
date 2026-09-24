@@ -156,6 +156,7 @@ function database(states = [state()]) {
   };
   let failBatch = false;
   let beforeClaim = null;
+  let transactionTail = Promise.resolve();
   const repos = (working) => ({
     planningState: {
       async snapshot(owner) {
@@ -185,6 +186,19 @@ function database(states = [state()]) {
       },
     },
     plannerRuns: {
+      async failExpiredRunning(owner, cutoff, completedAt) {
+        let count = 0;
+        for (const row of working.runs) {
+          if (row.userId !== owner || row.status !== "RUNNING" || row.startedAt >= cutoff) continue;
+          Object.assign(row, {
+            status: "FAILED",
+            completedAt,
+            warnings: [{ code: "ABANDONED", reasonCodes: [] }],
+          });
+          count++;
+        }
+        return count;
+      },
       async start(row) {
         const existing =
           row.idempotencyKey &&
@@ -266,10 +280,20 @@ function database(states = [state()]) {
       return operation({ repositories: repos(structuredClone(data)) });
     },
     async transaction(operation) {
+      const previous = transactionTail;
+      let release;
+      transactionTail = new Promise((resolve) => {
+        release = resolve;
+      });
+      await previous;
       const working = structuredClone(data);
-      const result = await operation({ repositories: repos(working) });
-      data = working;
-      return result;
+      try {
+        const result = await operation({ repositories: repos(working) });
+        data = working;
+        return result;
+      } finally {
+        release();
+      }
     },
   };
 }
@@ -623,4 +647,156 @@ test("invalid output, core throw, stale snapshot, and rollback retain the prior 
   assert.equal(failedWrite.code, "PERSISTENCE_FAILURE");
   assert.deepEqual(active(db), original);
   assert.ok(db.data.runs.slice(1).every((row) => row.status === "FAILED" && row.completedAt));
+});
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+test("overlapping same-user computations allow one authoritative commit", async () => {
+  const db = database();
+  const entered = deferred();
+  const release = deferred();
+  let waiting = 0;
+  const deps = dependencies(async (input) => {
+    if (++waiting === 2) entered.resolve();
+    await release.promise;
+    return core.generatePlan(input);
+  });
+  const first = service.executePlannerForActor(db, userId, request(), deps);
+  const second = service.executePlannerForActor(db, userId, request(), deps);
+  await entered.promise;
+  assert.equal(db.data.runs.filter((run) => run.status === "RUNNING").length, 2);
+  release.resolve();
+  const results = await Promise.all([first, second]);
+  assert.deepEqual(results.map((result) => result.status).sort(), ["FAILED", "SUCCEEDED"]);
+  assert.equal(results.find((result) => result.status === "FAILED").code, "STALE_SNAPSHOT");
+  assert.equal(db.data.runs.filter((run) => run.status === "SUCCEEDED").length, 1);
+  assert.equal(new Set(active(db).map((row) => row.id)).size, active(db).length);
+  assert.ok(db.data.sessions.every((row) => row.state !== "SUPERSEDED"));
+});
+
+test("a canonical edit during computation rejects the old snapshot; another user can finish", async () => {
+  const db = database([state(), state(otherId)]);
+  const entered = deferred();
+  const release = deferred();
+  const old = service.executePlannerForActor(
+    db,
+    userId,
+    request(),
+    dependencies(async (input) => {
+      entered.resolve();
+      await release.promise;
+      return core.generatePlan(input);
+    }),
+  );
+  await entered.promise;
+  db.data.states[userId].tasks[0].remainingMinutes += 30;
+  db.data.states[userId].user.planningRevision++;
+  const independent = await service.executePlannerForActor(db, otherId, request(), dependencies());
+  assert.equal(independent.status, "SUCCEEDED");
+  release.resolve();
+  const stale = await old;
+  assert.deepEqual(
+    { status: stale.status, code: stale.code },
+    { status: "FAILED", code: "STALE_SNAPSHOT" },
+  );
+  assert.equal(active(db).length, 0);
+  const fresh = await service.executePlannerForActor(db, userId, request(), dependencies());
+  assert.equal(fresh.status, "SUCCEEDED");
+  assert.equal(
+    db.data.runs.findLast((run) => run.userId === userId && run.status === "SUCCEEDED")
+      .inputSnapshot.input.tasks[0].remainingMinutes,
+    120,
+  );
+});
+
+test("keyed delivery reuses one run, distinct keys and unkeyed retries remain independent", async () => {
+  const db = database();
+  const keyed = (key) =>
+    request({
+      type: "INTEGRATION_SYNC",
+      idempotencyScope: "synthetic-provider",
+      idempotencyKey: key,
+    });
+  const deps = dependencies();
+  const first = await service.executePlannerForActor(db, userId, keyed("event-1"), deps);
+  assert.equal(first.status, "SUCCEEDED");
+  const count = active(db).length;
+  const duplicate = await service.executePlannerForActor(db, userId, keyed("event-1"), deps);
+  assert.deepEqual(duplicate, { status: "DUPLICATE", runId: first.runId, runStatus: "SUCCEEDED" });
+  assert.equal(db.data.runs.length, 1);
+  assert.equal(active(db).length, count);
+  assert.equal(
+    (await service.executePlannerForActor(db, userId, keyed("event-2"), deps)).status,
+    "SUCCEEDED",
+  );
+  assert.equal(
+    (await service.executePlannerForActor(db, userId, request(), deps)).status,
+    "SUCCEEDED",
+  );
+  assert.equal(db.data.runs.length, 3);
+});
+
+test("duplicate delivery during computation observes RUNNING without a second plan", async () => {
+  const db = database();
+  const entered = deferred();
+  const release = deferred();
+  const keyed = request({
+    type: "INTEGRATION_SYNC",
+    idempotencyScope: "synthetic-provider",
+    idempotencyKey: "concurrent-event",
+  });
+  const first = service.executePlannerForActor(db, userId, keyed, {
+    ...dependencies(),
+    generate: async (input) => {
+      entered.resolve();
+      await release.promise;
+      return core.generatePlan(input);
+    },
+  });
+  await entered.promise;
+  const duplicate = await service.executePlannerForActor(db, userId, keyed, dependencies());
+  assert.equal(duplicate.status, "DUPLICATE");
+  assert.equal(duplicate.runStatus, "RUNNING");
+  release.resolve();
+  const result = await first;
+  assert.equal(result.status, "SUCCEEDED");
+  assert.equal(duplicate.runId, result.runId);
+  assert.equal(db.data.runs.length, 1);
+  assert.ok(active(db).length > 0);
+});
+
+test("abandoned keyed run is failed on demand and cannot publish a late result", async () => {
+  const db = database();
+  const entered = deferred();
+  const release = deferred();
+  const keyed = request({
+    type: "INTEGRATION_SYNC",
+    idempotencyScope: "synthetic-provider",
+    idempotencyKey: "event-1",
+  });
+  const old = service.executePlannerForActor(db, userId, keyed, {
+    ...dependencies(),
+    generate: async (input) => {
+      entered.resolve();
+      await release.promise;
+      return core.generatePlan(input);
+    },
+  });
+  await entered.promise;
+  db.data.runs[0].startedAt = new Date(now.getTime() - 31 * 60_000);
+  const duplicate = await service.executePlannerForActor(db, userId, keyed, dependencies());
+  assert.equal(duplicate.status, "DUPLICATE");
+  assert.equal(duplicate.runStatus, "FAILED");
+  assert.equal(db.data.runs[0].warnings[0].code, "ABANDONED");
+  release.resolve();
+  const late = await old;
+  assert.equal(late.status, "FAILED");
+  assert.equal(active(db).length, 0);
+  assert.equal(db.data.runs[0].status, "FAILED");
 });

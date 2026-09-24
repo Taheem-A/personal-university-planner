@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 4 concurrency and idempotency hardening: IN PROGRESS
+
+- Overlapping same-user Planner Service computations now have deterministic CI race coverage: one succeeds and the other receives `STALE_SNAPSHOT`; a canonical edit during computation also rejects the old plan. Different-user progress is checked while one computation is paused.
+- Keyed duplicate deliveries reuse one run and schedule; distinct keys and unkeyed manual requests remain independent. A demand-driven 30-minute abandoned-run recovery marks stale `RUNNING` rows failed, and guarded terminal completion prevents a late computation from publishing sessions.
+- Added `pnpm db:planner:races:verify` for the Milestone-4 acceptance gate. It requires an explicitly confirmed direct disposable Neon database and exercises actual PostgreSQL per-user claims, a canonical-state race, event uniqueness and late-run rejection. No live database was available for this slice's local run.
+- Full local `pnpm verify` passed: 131 unit tests, 39 integration tests, production build and 2 Chromium E2E tests. Dedicated planner scenarios (13/13), planner properties (2/2) and dependency audit passed.
+- **Exact next slice: production Today/Week planner view models and plan-history read services.** Milestone 4 remains **IN PROGRESS**.
+
 ## 2026-09-24 — Milestone 4 replan triggers and incremental repair: IN PROGRESS
 
 - Centralized post-commit classification of planning-relevant task, deadline, calendar, academic, availability, protected-time, preference and manual-session mutations. Cosmetic edits do not request a plan. Ordinary factual changes use `INCREMENTAL` and retain exact trigger/entity provenance.

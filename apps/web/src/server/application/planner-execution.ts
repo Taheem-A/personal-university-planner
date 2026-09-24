@@ -38,10 +38,13 @@ export type AuthoritativePlannerResult =
     };
 
 export interface PlannerExecutionDependencies {
-  generate?: (input: PlannerInput) => PlannerOutput;
+  generate?: (input: PlannerInput) => PlannerOutput | Promise<PlannerOutput>;
   id?: () => string;
   clock?: () => Date;
 }
+
+/** Computations have no heartbeat. Recovery is demand driven and a late result cannot commit. */
+export const PLANNER_RUN_EXPIRY_MINUTES = 30;
 
 /** One repeatable-read boundary for every fact entering a planner computation. */
 export async function assembleSnapshotForActor(
@@ -424,11 +427,17 @@ export async function executePlannerForActor(
   if (assembled.status === "INPUT_FAILURE") return assembled;
   const { input, horizon, snapshotRevision } = assembled;
   const runId = id();
-  const started = await database.transaction(async (tx) =>
-    tx.repositories.plannerRuns.start({
+  const started = await database.transaction(async (tx) => {
+    const startedAt = clock();
+    await tx.repositories.plannerRuns.failExpiredRunning(
+      userId,
+      addMinutes(startedAt, -PLANNER_RUN_EXPIRY_MINUTES),
+      startedAt,
+    );
+    return tx.repositories.plannerRuns.start({
       id: runId,
       userId,
-      startedAt: clock(),
+      startedAt,
       completedAt: null,
       triggerType: request.trigger.type,
       triggerEntityType: request.trigger.entityType ?? null,
@@ -442,28 +451,31 @@ export async function executePlannerForActor(
       summary: null,
       warnings: null,
       status: "RUNNING",
-    }),
-  );
+    });
+  });
   if (started.status === "EXISTING")
     return { status: "DUPLICATE", runId: started.record.id, runStatus: started.record.status };
   const fail = async (
     code: Extract<AuthoritativePlannerResult, { status: "FAILED" }>["code"],
   ): Promise<AuthoritativePlannerResult> => {
-    await database.transaction(async (tx) => {
+    const result = await database.transaction(async (tx) => {
       const completed = await tx.repositories.plannerRuns.complete(userId, runId, {
         status: "FAILED",
         completedAt: clock(),
         summary: null,
         warnings: [{ code, reasonCodes: [] }],
       });
-      if (completed.status !== "UPDATED")
-        throw new Error("PlannerRun failure could not be recorded");
+      return completed;
     });
+    // A recovery or competing terminal transition already owns the run. Its
+    // guarded completion also prevents this computation from publishing sessions.
+    if (result.status !== "UPDATED" && result.status !== "STALE")
+      throw new Error("PlannerRun failure could not be recorded");
     return { status: "FAILED", runId, code };
   };
   let output: PlannerOutput;
   try {
-    output = (dependencies.generate ?? generatePlan)(input);
+    output = await (dependencies.generate ?? generatePlan)(input);
   } catch {
     return fail("CORE_FAILURE");
   }
@@ -473,50 +485,50 @@ export async function executePlannerForActor(
     return fail("INVALID_OUTPUT");
   }
   try {
-    return await database
-      .transaction(async (tx) => {
-        const claim = await tx.repositories.planningState.claimRevision(userId, snapshotRevision);
-        if (claim.status !== "CLAIMED")
-          return { status: "FAILED" as const, runId, code: "STALE_SNAPSHOT" as const };
-        const old = await tx.repositories.workSessions.listActiveGenerated(
-          userId,
-          horizon.startAt,
-          horizon.endAt,
-        );
-        const previousRun = await tx.repositories.plannerRuns.latestSuccessful(userId);
-        const changes = planChanges(userId, runId, output, old, previousRun, id, clock());
-        await tx.repositories.workSessions.createGeneratedBatch(userId, changes.created);
-        await tx.repositories.workSessions.supersedeGenerated(userId, changes.superseded);
-        const warnings = storedWarnings(output);
-        const summary: PlannerRunCompletionSummary = {
-          planStatus: output.status,
-          generatedSessionCount: changes.created.length,
-          retainedSessionCount: changes.delta.retained.length,
-          unscheduledMinutes: Object.values(output.unscheduledMinutesByTask).reduce(
-            (sum, value) => sum + value,
-            0,
-          ),
-          risk: riskFromOutput(output),
-          delta: changes.delta,
-        };
-        const completed = await tx.repositories.plannerRuns.complete(userId, runId, {
-          status: "SUCCEEDED",
-          completedAt: clock(),
-          summary,
-          warnings,
-        });
-        if (completed.status !== "UPDATED") throw new Error("PlannerRun changed before completion");
-        return {
-          status: "SUCCEEDED" as const,
-          runId,
-          plannerVersion: PLANNER_VERSION,
-          planStatus: output.status,
-          summary,
-          warnings,
-          delta: changes.delta,
-        };
-      })
-      .then(async (result) => (result.status === "FAILED" ? fail("STALE_SNAPSHOT") : result));
+    const result = await database.transaction(async (tx) => {
+      const claim = await tx.repositories.planningState.claimRevision(userId, snapshotRevision);
+      if (claim.status !== "CLAIMED")
+        return { status: "FAILED" as const, runId, code: "STALE_SNAPSHOT" as const };
+      const old = await tx.repositories.workSessions.listActiveGenerated(
+        userId,
+        horizon.startAt,
+        horizon.endAt,
+      );
+      const previousRun = await tx.repositories.plannerRuns.latestSuccessful(userId);
+      const changes = planChanges(userId, runId, output, old, previousRun, id, clock());
+      await tx.repositories.workSessions.createGeneratedBatch(userId, changes.created);
+      await tx.repositories.workSessions.supersedeGenerated(userId, changes.superseded);
+      const warnings = storedWarnings(output);
+      const summary: PlannerRunCompletionSummary = {
+        planStatus: output.status,
+        generatedSessionCount: changes.created.length,
+        retainedSessionCount: changes.delta.retained.length,
+        unscheduledMinutes: Object.values(output.unscheduledMinutesByTask).reduce(
+          (sum, value) => sum + value,
+          0,
+        ),
+        risk: riskFromOutput(output),
+        delta: changes.delta,
+      };
+      const completed = await tx.repositories.plannerRuns.complete(userId, runId, {
+        status: "SUCCEEDED",
+        completedAt: clock(),
+        summary,
+        warnings,
+      });
+      if (completed.status !== "UPDATED") throw new Error("PlannerRun changed before completion");
+      return {
+        status: "SUCCEEDED" as const,
+        runId,
+        plannerVersion: PLANNER_VERSION,
+        planStatus: output.status,
+        summary,
+        warnings,
+        delta: changes.delta,
+      };
+    });
+    if (result.status === "FAILED") return fail("STALE_SNAPSHOT");
+    return result;
   } catch {
     return fail("PERSISTENCE_FAILURE");
   }

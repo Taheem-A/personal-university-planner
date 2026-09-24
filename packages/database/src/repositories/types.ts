@@ -343,6 +343,8 @@ export interface PlannerRunRepository {
   ): Promise<PlannerRunRecord | null>;
   listRecent(userId: string, limit: number): Promise<PlannerRunRecord[]>;
   latestSuccessful(userId: string): Promise<PlannerRunRecord | null>;
+  /** Reap abandoned computations for this user; terminal runs retain their history and event key. */
+  failExpiredRunning(userId: string, startedBefore: Date, completedAt: Date): Promise<number>;
   /** Only RUNNING can transition to a terminal status. */
   complete(
     userId: string,
