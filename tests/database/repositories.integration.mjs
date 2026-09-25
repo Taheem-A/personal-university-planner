@@ -433,7 +433,7 @@ test("transaction context round-trips all canonical relationships and rolls back
         plannedMinutes: 30,
         state: "PLANNED",
         generatedBy: "PLANNER",
-        locked: true,
+        locked: false,
         supersededById: null,
         ...audit,
       });

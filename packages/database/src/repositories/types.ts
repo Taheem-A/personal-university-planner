@@ -14,7 +14,8 @@ import type {
   IntegrationAccountRecord,
   IntegrationAccountStatus,
   PlannerRunRecord,
-  PlannerRunStatus,
+  PlannerRunCompletionSummary,
+  PlannerRunStoredWarning,
   PlanningPreferenceRecord,
   ProtectedTimeRuleRecord,
   RecurringWorkRuleRecord,
@@ -27,7 +28,9 @@ import type {
 } from "../records.js";
 
 export interface UserRepository {
-  create(record: UserRecord): Promise<UserRecord>;
+  create(
+    record: Omit<UserRecord, "planningRevision"> & { planningRevision?: number },
+  ): Promise<UserRecord>;
   getById(id: string): Promise<UserRecord | null>;
   updateProfile(
     id: string,
@@ -287,10 +290,19 @@ export interface PlanningPreferenceRepository {
 
 export interface WorkSessionRepository {
   create(record: WorkSessionRecord): Promise<WorkSessionRecord>;
+  /** Caller supplies one transaction; all rows must be new, unlocked planner output. */
+  createGeneratedBatch(userId: string, records: WorkSessionRecord[]): Promise<WorkSessionRecord[]>;
   getForUser(userId: string, id: string): Promise<WorkSessionRecord | null>;
   listForRange(userId: string, startAt: Date, endAt: Date): Promise<WorkSessionRecord[]>;
+  listActiveGenerated(userId: string, startAt: Date, endAt: Date): Promise<WorkSessionRecord[]>;
+  listRetainedIntent(userId: string, startAt: Date, endAt: Date): Promise<WorkSessionRecord[]>;
   updateState(userId: string, id: string, state: WorkSessionState): Promise<WorkSessionRecord>;
-  supersede(userId: string, id: string, supersededById: string): Promise<WorkSessionRecord>;
+  /** Guarded: planner-owned, unlocked, active rows only. Null means no replacement. */
+  supersede(userId: string, id: string, supersededById: string | null): Promise<WorkSessionRecord>;
+  supersedeGenerated(
+    userId: string,
+    changes: { id: string; replacementId: string | null }[],
+  ): Promise<WorkSessionRecord[]>;
   updateIfCurrent(
     userId: string,
     id: string,
@@ -318,14 +330,32 @@ export interface EstimateProfileRepository {
 
 export interface PlannerRunRepository {
   create(record: PlannerRunRecord): Promise<PlannerRunRecord>;
+  /** Idempotent start, scoped by user, trigger, scope and key when supplied. */
+  start(
+    record: PlannerRunRecord,
+  ): Promise<{ status: "CREATED" | "EXISTING"; record: PlannerRunRecord }>;
   getForUser(userId: string, id: string): Promise<PlannerRunRecord | null>;
+  getByIdempotency(
+    userId: string,
+    trigger: PlannerRunRecord["triggerType"],
+    scope: string,
+    key: string,
+  ): Promise<PlannerRunRecord | null>;
   listRecent(userId: string, limit: number): Promise<PlannerRunRecord[]>;
-  updateStatus(
+  latestSuccessful(userId: string): Promise<PlannerRunRecord | null>;
+  /** Reap abandoned computations for this user; terminal runs retain their history and event key. */
+  failExpiredRunning(userId: string, startedBefore: Date, completedAt: Date): Promise<number>;
+  /** Only RUNNING can transition to a terminal status. */
+  complete(
     userId: string,
     id: string,
-    status: PlannerRunStatus,
-    completedAt: Date | null,
-  ): Promise<PlannerRunRecord>;
+    result: {
+      status: "SUCCEEDED" | "FAILED";
+      completedAt: Date;
+      summary: PlannerRunCompletionSummary | null;
+      warnings: PlannerRunStoredWarning[] | null;
+    },
+  ): Promise<ConditionalMutation<PlannerRunRecord>>;
 }
 
 export interface IntegrationAccountRepository {
@@ -388,6 +418,34 @@ export interface AccountSnapshot {
   externalObjectMaps: ExternalObjectMapRecord[];
 }
 
+/** Only canonical facts used for planner-input assembly. */
+export type PlanningStateSnapshot = Pick<
+  AccountSnapshot,
+  | "user"
+  | "academicTerms"
+  | "courses"
+  | "courseMeetings"
+  | "assessments"
+  | "tasks"
+  | "taskDependencies"
+  | "calendarEvents"
+  | "availabilityRules"
+  | "protectedTimeRules"
+  | "planningPreferences"
+  | "workSessions"
+>;
+
+export interface PlanningStateRepository {
+  snapshot(userId: string, startAt: Date, endAt: Date): Promise<PlanningStateSnapshot | null>;
+  /** Atomic row-level claim. Use inside the same write transaction as plan persistence. */
+  claimRevision(
+    userId: string,
+    expectedRevision: number,
+  ): Promise<
+    { status: "CLAIMED"; revision: number } | { status: "STALE" } | { status: "NOT_FOUND" }
+  >;
+}
+
 export interface AccountLifecycleRepository {
   snapshot(userId: string): Promise<AccountSnapshot | null>;
   deleteAccount(userId: string): Promise<boolean>;
@@ -414,6 +472,7 @@ export interface InboxItemRepository {
 }
 
 export interface CanonicalRepositories {
+  planningState: PlanningStateRepository;
   accountLifecycle: AccountLifecycleRepository;
   users: UserRepository;
   authIdentities: AuthIdentityRepository;

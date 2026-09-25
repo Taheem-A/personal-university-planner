@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { AssessmentRecord, TaskRecord } from "@university-planner/database";
+import type {
+  AssessmentRecord,
+  CourseMeetingRecord,
+  TaskRecord,
+} from "@university-planner/database";
 import {
   requireAssessment,
   requireCourse,
@@ -8,6 +12,11 @@ import {
 } from "./authorization";
 import { assertAcyclicDependency } from "./dependencies";
 import { ApplicationError } from "./errors";
+import {
+  classifyPlanningFields,
+  classifyTaskMutation,
+  planAfterMutation,
+} from "./planner-triggers";
 import { auditNow, newRecordId, requireActive, requireUpdated, service } from "./service";
 import {
   calendarDateSchema,
@@ -73,33 +82,46 @@ export const academicTerms = {
     );
   },
   update(input: unknown) {
-    return service(termUpdate, input, async ({ id, expectedVersion, ...patch }, actor, tx) => {
-      const current = await tx.repositories.academicTerms.getForUser(actor.userId, id);
-      if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
-      if (current.status === "ARCHIVED")
-        throw new ApplicationError("CONFLICT", "Archived term cannot be edited.");
-      if ((patch.startDate ?? current.startDate) > (patch.endDate ?? current.endDate))
-        throw new ApplicationError("VALIDATION_ERROR", "Term end precedes start.");
-      return requireUpdated(
-        await tx.repositories.academicTerms.updateIfCurrent(
-          actor.userId,
-          id,
-          expectedVersion,
-          patch,
-        ),
-      );
-    });
+    let wasArchived = false;
+    return planAfterMutation(
+      service(termUpdate, input, async ({ id, expectedVersion, ...patch }, actor, tx) => {
+        const current = await tx.repositories.academicTerms.getForUser(actor.userId, id);
+        if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
+        wasArchived = current.status === "ARCHIVED";
+        if (current.status === "ARCHIVED")
+          throw new ApplicationError("CONFLICT", "Archived term cannot be edited.");
+        if ((patch.startDate ?? current.startDate) > (patch.endDate ?? current.endDate))
+          throw new ApplicationError("VALIDATION_ERROR", "Term end precedes start.");
+        return requireUpdated(
+          await tx.repositories.academicTerms.updateIfCurrent(
+            actor.userId,
+            id,
+            expectedVersion,
+            patch,
+          ),
+        );
+      }),
+      (record) =>
+        !wasArchived && record.status === "ARCHIVED"
+          ? { trigger: { type: "TASK_UPDATED", entityType: "ACADEMIC_TERM", entityId: record.id } }
+          : null,
+    );
   },
   archive(input: unknown) {
-    return service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
-      const current = await tx.repositories.academicTerms.getForUser(actor.userId, id);
-      if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
-      return requireUpdated(
-        await tx.repositories.academicTerms.updateIfCurrent(actor.userId, id, expectedVersion, {
-          status: "ARCHIVED",
-        }),
-      );
-    });
+    return planAfterMutation(
+      service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
+        const current = await tx.repositories.academicTerms.getForUser(actor.userId, id);
+        if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
+        return requireUpdated(
+          await tx.repositories.academicTerms.updateIfCurrent(actor.userId, id, expectedVersion, {
+            status: "ARCHIVED",
+          }),
+        );
+      }),
+      (record) => ({
+        trigger: { type: "TASK_UPDATED", entityType: "ACADEMIC_TERM", entityId: record.id },
+      }),
+    );
   },
 };
 
@@ -154,22 +176,34 @@ export const courses = {
     });
   },
   update(input: unknown) {
-    return service(coursePatch, input, async ({ id, expectedVersion, ...patch }, actor, tx) => {
-      await requireCourse(tx.repositories, actor, id);
-      return requireUpdated(
-        await tx.repositories.courses.updateIfCurrent(actor.userId, id, expectedVersion, patch),
-      );
-    });
+    let previousEnergy: string | null = null;
+    return planAfterMutation(
+      service(coursePatch, input, async ({ id, expectedVersion, ...patch }, actor, tx) => {
+        previousEnergy = (await requireCourse(tx.repositories, actor, id)).defaultTaskEnergy;
+        return requireUpdated(
+          await tx.repositories.courses.updateIfCurrent(actor.userId, id, expectedVersion, patch),
+        );
+      }),
+      (record) =>
+        previousEnergy !== record.defaultTaskEnergy
+          ? { trigger: { type: "TASK_UPDATED", entityType: "COURSE", entityId: record.id } }
+          : null,
+    );
   },
   archive(input: unknown) {
-    return service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
-      await requireCourse(tx.repositories, actor, id);
-      return requireUpdated(
-        await tx.repositories.courses.updateIfCurrent(actor.userId, id, expectedVersion, {
-          archivedAt: new Date(),
-        }),
-      );
-    });
+    return planAfterMutation(
+      service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
+        await requireCourse(tx.repositories, actor, id);
+        return requireUpdated(
+          await tx.repositories.courses.updateIfCurrent(actor.userId, id, expectedVersion, {
+            archivedAt: new Date(),
+          }),
+        );
+      }),
+      (record) => ({
+        trigger: { type: "TASK_UPDATED", entityType: "COURSE", entityId: record.id },
+      }),
+    );
   },
 };
 
@@ -200,17 +234,20 @@ const meetingPatch = z
 
 export const courseMeetings = {
   create(input: unknown) {
-    return service(meetingCreate, input, async (data, actor, tx) => {
-      await requireCourse(tx.repositories, actor, data.courseId);
-      return tx.repositories.courseMeetings.create({
-        id: newRecordId(),
-        userId: actor.userId,
-        version: 0,
-        ...data,
-        archivedAt: null,
-        ...auditNow(),
-      });
-    });
+    return planAfterMutation(
+      service(meetingCreate, input, async (data, actor, tx) => {
+        await requireCourse(tx.repositories, actor, data.courseId);
+        return tx.repositories.courseMeetings.create({
+          id: newRecordId(),
+          userId: actor.userId,
+          version: 0,
+          ...data,
+          archivedAt: null,
+          ...auditNow(),
+        });
+      }),
+      (record) => classifyPlanningFields(null, record, [], "COURSE_MEETING"),
+    );
   },
   get(input: unknown) {
     return service(id, input, async ({ id }, actor, tx) => {
@@ -228,32 +265,58 @@ export const courseMeetings = {
     });
   },
   update(input: unknown) {
-    return service(meetingPatch, input, async ({ id, expectedVersion, ...patch }, actor, tx) => {
-      const current = requireActive(
-        await tx.repositories.courseMeetings.getForUser(actor.userId, id),
-      );
-      await requireCourse(tx.repositories, actor, current.courseId);
-      if (!localRecurrenceSchema.safeParse({ ...current, ...patch }).success)
-        throw new ApplicationError("VALIDATION_ERROR", "Invalid recurrence.");
-      return requireUpdated(
-        await tx.repositories.courseMeetings.updateIfCurrent(
-          actor.userId,
-          id,
-          expectedVersion,
-          patch,
+    let before: CourseMeetingRecord | null = null;
+    return planAfterMutation(
+      service(meetingPatch, input, async ({ id, expectedVersion, ...patch }, actor, tx) => {
+        const current = requireActive(
+          await tx.repositories.courseMeetings.getForUser(actor.userId, id),
+        );
+        before = { ...current };
+        await requireCourse(tx.repositories, actor, current.courseId);
+        if (!localRecurrenceSchema.safeParse({ ...current, ...patch }).success)
+          throw new ApplicationError("VALIDATION_ERROR", "Invalid recurrence.");
+        return requireUpdated(
+          await tx.repositories.courseMeetings.updateIfCurrent(
+            actor.userId,
+            id,
+            expectedVersion,
+            patch,
+          ),
+        );
+      }),
+      (record) =>
+        classifyPlanningFields(
+          before,
+          record,
+          [
+            "recurrenceRule",
+            "startTimeLocal",
+            "endTimeLocal",
+            "spansNextDay",
+            "timezone",
+            "effectiveFrom",
+            "effectiveUntil",
+            "attendanceRequired",
+          ],
+          "COURSE_MEETING",
         ),
-      );
-    });
+    );
   },
   archive(input: unknown) {
-    return service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
-      requireActive(await tx.repositories.courseMeetings.getForUser(actor.userId, id));
-      return requireUpdated(
-        await tx.repositories.courseMeetings.updateIfCurrent(actor.userId, id, expectedVersion, {
-          archivedAt: new Date(),
-        }),
-      );
-    });
+    let before: CourseMeetingRecord | null = null;
+    return planAfterMutation(
+      service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
+        before = {
+          ...requireActive(await tx.repositories.courseMeetings.getForUser(actor.userId, id)),
+        };
+        return requireUpdated(
+          await tx.repositories.courseMeetings.updateIfCurrent(actor.userId, id, expectedVersion, {
+            archivedAt: new Date(),
+          }),
+        );
+      }),
+      (record) => classifyPlanningFields(before, record, ["archivedAt"], "COURSE_MEETING"),
+    );
   },
 };
 
@@ -335,32 +398,58 @@ export const assessments = {
     });
   },
   update(input: unknown) {
-    return service(assessmentPatch, input, async ({ id, expectedVersion, ...data }, actor, tx) => {
-      const current = await requireAssessment(tx.repositories, actor, id);
-      const patch = {
-        ...data,
-        ...(data.releaseAt !== undefined ? { releaseAt: parseInstant(data.releaseAt) } : {}),
-        ...(data.dueAt !== undefined ? { dueAt: parseInstant(data.dueAt) } : {}),
-        ...(data.preferredCompletionAt !== undefined
-          ? { preferredCompletionAt: parseInstant(data.preferredCompletionAt) }
-          : {}),
-        ...(data.submittedAt !== undefined ? { submittedAt: parseInstant(data.submittedAt) } : {}),
-      } as Parameters<typeof tx.repositories.assessments.updateIfCurrent>[3];
-      checkAssessment({ ...current, ...patch });
-      return requireUpdated(
-        await tx.repositories.assessments.updateIfCurrent(actor.userId, id, expectedVersion, patch),
-      );
-    });
+    let before: AssessmentRecord | null = null;
+    return planAfterMutation(
+      service(assessmentPatch, input, async ({ id, expectedVersion, ...data }, actor, tx) => {
+        const current = await requireAssessment(tx.repositories, actor, id);
+        before = { ...current };
+        const patch = {
+          ...data,
+          ...(data.releaseAt !== undefined ? { releaseAt: parseInstant(data.releaseAt) } : {}),
+          ...(data.dueAt !== undefined ? { dueAt: parseInstant(data.dueAt) } : {}),
+          ...(data.preferredCompletionAt !== undefined
+            ? { preferredCompletionAt: parseInstant(data.preferredCompletionAt) }
+            : {}),
+          ...(data.submittedAt !== undefined
+            ? { submittedAt: parseInstant(data.submittedAt) }
+            : {}),
+        } as Parameters<typeof tx.repositories.assessments.updateIfCurrent>[3];
+        checkAssessment({ ...current, ...patch });
+        return requireUpdated(
+          await tx.repositories.assessments.updateIfCurrent(
+            actor.userId,
+            id,
+            expectedVersion,
+            patch,
+          ),
+        );
+      }),
+      (record) =>
+        before?.dueAt?.getTime() !== record.dueAt?.getTime()
+          ? { trigger: { type: "DEADLINE_CHANGED", entityType: "ASSESSMENT", entityId: record.id } }
+          : classifyPlanningFields(
+              before,
+              record,
+              ["releaseAt", "preferredCompletionAt", "archivedAt"],
+              "ASSESSMENT",
+              "TASK_UPDATED",
+            ),
+    );
   },
   archive(input: unknown) {
-    return service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
-      await requireAssessment(tx.repositories, actor, id);
-      return requireUpdated(
-        await tx.repositories.assessments.updateIfCurrent(actor.userId, id, expectedVersion, {
-          archivedAt: new Date(),
-        }),
-      );
-    });
+    let before: AssessmentRecord | null = null;
+    return planAfterMutation(
+      service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
+        before = { ...(await requireAssessment(tx.repositories, actor, id)) };
+        return requireUpdated(
+          await tx.repositories.assessments.updateIfCurrent(actor.userId, id, expectedVersion, {
+            archivedAt: new Date(),
+          }),
+        );
+      }),
+      (record) =>
+        classifyPlanningFields(before, record, ["archivedAt"], "ASSESSMENT", "TASK_UPDATED"),
+    );
   },
 };
 
@@ -452,29 +541,32 @@ function taskInstantPatch(data: Record<string, unknown>) {
 
 export const tasks = {
   create(input: unknown) {
-    return service(taskCreate, input, async (data, actor, tx) => {
-      await requireTaskRelationships(tx.repositories, actor, data);
-      if (data.parentTaskId) await tx.locks.userGraph(actor.userId);
-      const record: TaskRecord = {
-        ...data,
-        id: newRecordId(),
-        version: 0,
-        userId: actor.userId,
-        recurringWorkRuleId: null,
-        availableFrom: parseInstant(data.availableFrom),
-        dueAt: parseInstant(data.dueAt),
-        preferredCompletionAt: parseInstant(data.preferredCompletionAt),
-        originalEstimatedMinutes: data.originalEstimatedMinutes,
-        currentEstimatedMinutes: data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
-        remainingMinutes:
-          data.remainingMinutes ?? data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
-        completedAt: null,
-        archivedAt: null,
-        ...auditNow(),
-      };
-      checkTask(record);
-      return tx.repositories.tasks.create(record);
-    });
+    return planAfterMutation(
+      service(taskCreate, input, async (data, actor, tx) => {
+        await requireTaskRelationships(tx.repositories, actor, data);
+        if (data.parentTaskId) await tx.locks.userGraph(actor.userId);
+        const record: TaskRecord = {
+          ...data,
+          id: newRecordId(),
+          version: 0,
+          userId: actor.userId,
+          recurringWorkRuleId: null,
+          availableFrom: parseInstant(data.availableFrom),
+          dueAt: parseInstant(data.dueAt),
+          preferredCompletionAt: parseInstant(data.preferredCompletionAt),
+          originalEstimatedMinutes: data.originalEstimatedMinutes,
+          currentEstimatedMinutes: data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
+          remainingMinutes:
+            data.remainingMinutes ?? data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
+          completedAt: null,
+          archivedAt: null,
+          ...auditNow(),
+        };
+        checkTask(record);
+        return tx.repositories.tasks.create(record);
+      }),
+      (record) => classifyTaskMutation(null, record),
+    );
   },
   get(input: unknown) {
     return service(id, input, async ({ id }, actor, tx) => requireTask(tx.repositories, actor, id));
@@ -509,45 +601,54 @@ export const tasks = {
     });
   },
   update(input: unknown) {
-    return service(taskPatch, input, async ({ id, expectedVersion, ...data }, actor, tx) => {
-      if (data.parentTaskId !== undefined) await tx.locks.userGraph(actor.userId);
-      const current = await requireTask(tx.repositories, actor, id);
-      await requireTaskRelationships(tx.repositories, actor, {
-        courseId: data.courseId === undefined ? current.courseId : data.courseId,
-        assessmentId: data.assessmentId === undefined ? current.assessmentId : data.assessmentId,
-        parentTaskId: data.parentTaskId === undefined ? current.parentTaskId : data.parentTaskId,
-      });
-      if (data.parentTaskId) {
-        let ancestor: string | null = data.parentTaskId;
-        const visited = new Set<string>();
-        while (ancestor) {
-          if (ancestor === id || visited.has(ancestor))
-            throw new ApplicationError("CONFLICT", "Task parent would create a cycle.");
-          visited.add(ancestor);
-          ancestor = (await requireTask(tx.repositories, actor, ancestor)).parentTaskId;
+    let before: TaskRecord | null = null;
+    return planAfterMutation(
+      service(taskPatch, input, async ({ id, expectedVersion, ...data }, actor, tx) => {
+        if (data.parentTaskId !== undefined) await tx.locks.userGraph(actor.userId);
+        const current = await requireTask(tx.repositories, actor, id);
+        before = { ...current };
+        await requireTaskRelationships(tx.repositories, actor, {
+          courseId: data.courseId === undefined ? current.courseId : data.courseId,
+          assessmentId: data.assessmentId === undefined ? current.assessmentId : data.assessmentId,
+          parentTaskId: data.parentTaskId === undefined ? current.parentTaskId : data.parentTaskId,
+        });
+        if (data.parentTaskId) {
+          let ancestor: string | null = data.parentTaskId;
+          const visited = new Set<string>();
+          while (ancestor) {
+            if (ancestor === id || visited.has(ancestor))
+              throw new ApplicationError("CONFLICT", "Task parent would create a cycle.");
+            visited.add(ancestor);
+            ancestor = (await requireTask(tx.repositories, actor, ancestor)).parentTaskId;
+          }
         }
-      }
-      const patch = taskInstantPatch(data);
-      checkTask({ ...current, ...patch } as TaskRecord);
-      return requireUpdated(
-        await tx.repositories.tasks.updateIfCurrent(
-          actor.userId,
-          id,
-          expectedVersion,
-          patch as Parameters<typeof tx.repositories.tasks.updateIfCurrent>[3],
-        ),
-      );
-    });
+        const patch = taskInstantPatch(data);
+        checkTask({ ...current, ...patch } as TaskRecord);
+        return requireUpdated(
+          await tx.repositories.tasks.updateIfCurrent(
+            actor.userId,
+            id,
+            expectedVersion,
+            patch as Parameters<typeof tx.repositories.tasks.updateIfCurrent>[3],
+          ),
+        );
+      }),
+      (record) => classifyTaskMutation(before, record),
+    );
   },
   archive(input: unknown) {
-    return service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
-      await requireTask(tx.repositories, actor, id);
-      return requireUpdated(
-        await tx.repositories.tasks.updateIfCurrent(actor.userId, id, expectedVersion, {
-          archivedAt: new Date(),
-        }),
-      );
-    });
+    let before: TaskRecord | null = null;
+    return planAfterMutation(
+      service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
+        before = { ...(await requireTask(tx.repositories, actor, id)) };
+        return requireUpdated(
+          await tx.repositories.tasks.updateIfCurrent(actor.userId, id, expectedVersion, {
+            archivedAt: new Date(),
+          }),
+        );
+      }),
+      (record) => classifyTaskMutation(before, record),
+    );
   },
 };
 
@@ -566,60 +667,72 @@ export const taskDependencies = {
     });
   },
   add(input: unknown) {
-    return service(edge, input, async (data, actor, tx) => {
-      await tx.locks.userGraph(actor.userId);
-      await requireTask(tx.repositories, actor, data.prerequisiteTaskId);
-      await requireTask(tx.repositories, actor, data.dependentTaskId);
-      const existing = await tx.repositories.taskDependencies.listForUser(actor.userId);
-      assertAcyclicDependency(existing, data);
-      const dependent = requireUpdated(
-        await tx.repositories.tasks.updateIfCurrent(
-          actor.userId,
-          data.dependentTaskId,
-          data.expectedDependentVersion,
-          {},
-        ),
-      );
-      const created = await tx.repositories.taskDependencies.add({
-        userId: actor.userId,
-        prerequisiteTaskId: data.prerequisiteTaskId,
-        dependentTaskId: data.dependentTaskId,
-        dependencyType: "FINISH_TO_START",
-        createdAt: new Date(),
-      });
-      return { dependency: created, dependentVersion: dependent.version };
-    });
+    return planAfterMutation(
+      service(edge, input, async (data, actor, tx) => {
+        await tx.locks.userGraph(actor.userId);
+        await requireTask(tx.repositories, actor, data.prerequisiteTaskId);
+        await requireTask(tx.repositories, actor, data.dependentTaskId);
+        const existing = await tx.repositories.taskDependencies.listForUser(actor.userId);
+        assertAcyclicDependency(existing, data);
+        const dependent = requireUpdated(
+          await tx.repositories.tasks.updateIfCurrent(
+            actor.userId,
+            data.dependentTaskId,
+            data.expectedDependentVersion,
+            {},
+          ),
+        );
+        const created = await tx.repositories.taskDependencies.add({
+          userId: actor.userId,
+          prerequisiteTaskId: data.prerequisiteTaskId,
+          dependentTaskId: data.dependentTaskId,
+          dependencyType: "FINISH_TO_START",
+          createdAt: new Date(),
+        });
+        return { dependency: created, dependentVersion: dependent.version };
+      }),
+      (result) => ({
+        trigger: {
+          type: "TASK_UPDATED",
+          entityType: "TASK",
+          entityId: result.dependency.dependentTaskId,
+        },
+      }),
+    );
   },
   remove(input: unknown) {
-    return service(edge, input, async (data, actor, tx) => {
-      await tx.locks.userGraph(actor.userId);
-      await requireTask(tx.repositories, actor, data.prerequisiteTaskId);
-      await requireTask(tx.repositories, actor, data.dependentTaskId);
-      const edges = await tx.repositories.taskDependencies.listForTask(
-        actor.userId,
-        data.dependentTaskId,
-      );
-      if (
-        !edges.some(
-          (item) =>
-            item.prerequisiteTaskId === data.prerequisiteTaskId &&
-            item.dependentTaskId === data.dependentTaskId,
-        )
-      )
-        throw new ApplicationError("NOT_FOUND", "Record not found.");
-      await tx.repositories.taskDependencies.remove(
-        actor.userId,
-        data.prerequisiteTaskId,
-        data.dependentTaskId,
-      );
-      return requireUpdated(
-        await tx.repositories.tasks.updateIfCurrent(
+    return planAfterMutation(
+      service(edge, input, async (data, actor, tx) => {
+        await tx.locks.userGraph(actor.userId);
+        await requireTask(tx.repositories, actor, data.prerequisiteTaskId);
+        await requireTask(tx.repositories, actor, data.dependentTaskId);
+        const edges = await tx.repositories.taskDependencies.listForTask(
           actor.userId,
           data.dependentTaskId,
-          data.expectedDependentVersion,
-          {},
-        ),
-      );
-    });
+        );
+        if (
+          !edges.some(
+            (item) =>
+              item.prerequisiteTaskId === data.prerequisiteTaskId &&
+              item.dependentTaskId === data.dependentTaskId,
+          )
+        )
+          throw new ApplicationError("NOT_FOUND", "Record not found.");
+        await tx.repositories.taskDependencies.remove(
+          actor.userId,
+          data.prerequisiteTaskId,
+          data.dependentTaskId,
+        );
+        return requireUpdated(
+          await tx.repositories.tasks.updateIfCurrent(
+            actor.userId,
+            data.dependentTaskId,
+            data.expectedDependentVersion,
+            {},
+          ),
+        );
+      }),
+      (record) => ({ trigger: { type: "TASK_UPDATED", entityType: "TASK", entityId: record.id } }),
+    );
   },
 };

@@ -72,6 +72,7 @@ export interface UserRecord extends AuditFields {
   defaultDayStart: LocalTime | null;
   defaultDayEnd: LocalTime | null;
   locale: string | null;
+  planningRevision: number;
 }
 
 export interface AcademicTermRecord extends AuditFields {
@@ -228,6 +229,7 @@ export interface ProtectedTimeRuleRecord extends AuditFields, LocalRecurrenceFie
   userId: string;
   protectionLevel: ConstraintLevel;
   reason: string;
+  isSleep: boolean;
   active: boolean;
 }
 
@@ -244,6 +246,8 @@ export interface PlanningPreferenceRecord extends AuditFields {
   scheduleCommuteWork: boolean;
   weekendWorkBias: number;
   planStabilityWindowMinutes: number;
+  /** Null until the user explicitly supplies this non-negotiable boundary. */
+  minimumSleepMinutes: number | null;
 }
 
 export interface WorkSessionRecord extends AuditFields {
@@ -294,6 +298,8 @@ export interface PlannerRunRecord {
   triggerType: PlannerRunTrigger;
   triggerEntityType: string | null;
   triggerEntityId: string | null;
+  idempotencyScope: string | null;
+  idempotencyKey: string | null;
   planningHorizonStart: Date;
   planningHorizonEnd: Date;
   plannerVersion: string;
@@ -301,6 +307,50 @@ export interface PlannerRunRecord {
   summary: JsonValue | null;
   warnings: JsonValue | null;
   status: PlannerRunStatus;
+}
+
+/** Bounded diagnostic payloads; raw task titles or provider data stay out of summaries. */
+export interface PlannerRunCompletionSummary {
+  planStatus: "VALID" | "INFEASIBLE";
+  generatedSessionCount: number;
+  retainedSessionCount: number;
+  unscheduledMinutes: number;
+  risk: PlannerRunRisk[];
+  delta: PlannerRunDelta;
+  /** Core placement codes keyed by durable WorkSession ID; older runs may omit this. */
+  sessionReasons?: Record<string, string[]>;
+}
+
+export interface PlannerRunRisk {
+  taskId: string;
+  feasibility: "CONSTRAINED" | "CRITICAL" | "INFEASIBLE" | "HORIZON_LIMITED";
+  deficitMinutes: number;
+  slackMinutes: number | null;
+}
+
+export interface PlannerRunDelta {
+  retained: string[];
+  moved: {
+    fromSessionId: string;
+    toSessionId: string;
+    taskId: string;
+    fromStartAt: string;
+    toStartAt: string;
+  }[];
+  added: string[];
+  removed: string[];
+  newlyAtRisk: string[];
+  worsenedRisk: string[];
+  improvedRisk: string[];
+  resolvedRisk: string[];
+  unchangedRisk: string[];
+}
+
+export interface PlannerRunStoredWarning {
+  code: string;
+  taskId?: string;
+  deficitMinutes?: number;
+  reasonCodes: string[];
 }
 
 export interface IntegrationAccountRecord extends AuditFields {

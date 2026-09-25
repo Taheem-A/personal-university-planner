@@ -283,17 +283,25 @@ const serviceUtils = load("service", {
   "../database": { applicationDatabase: () => ({ transaction: (fn) => fn(tx) }) },
   "node:crypto": { randomUUID: () => `record-${Math.random()}` },
 });
+const plannerTriggerStub = {
+  planAfterMutation: (mutation) => mutation,
+  classifyTaskMutation: () => null,
+  classifyCalendarMutation: () => null,
+  classifyPlanningFields: () => null,
+};
 const academic = load("academic", {
   "./authorization": auth,
   "./dependencies": dependencies,
   "./errors": errors,
   "./service": serviceUtils,
+  "./planner-triggers": plannerTriggerStub,
   "./validation": validation,
 });
 const schedule = load("schedule", {
   "./authorization": auth,
   "./errors": errors,
   "./service": serviceUtils,
+  "./planner-triggers": plannerTriggerStub,
   "./validation": validation,
 });
 const inbox = load("inbox", {
@@ -324,9 +332,11 @@ const transactionalService = load("service", {
   "node:crypto": { randomUUID: () => `record-${Math.random()}` },
 });
 const lifecycle = load("lifecycle", {
+  "./planner-reads": { planHistoryItem: (run) => run },
   "./authorization": auth,
   "./errors": errors,
   "./service": transactionalService,
+  "./planner-triggers": plannerTriggerStub,
   "./validation": validation,
 });
 

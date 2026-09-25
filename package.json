@@ -36,10 +36,13 @@
     "db:bootstrap:verify": "pnpm --filter @university-planner/database db:bootstrap:verify",
     "db:repositories:verify": "pnpm --filter @university-planner/database build && node --test tests/database/repositories.integration.mjs",
     "db:services:verify": "pnpm --filter @university-planner/database build && node --test tests/database/services.integration.mjs",
+    "db:planner:races:verify": "pnpm --filter @university-planner/database build && node --test tests/database/planner-races.integration.mjs",
+    "db:planner:live:verify": "pnpm build:core && pnpm --filter @university-planner/database build && node --test tests/database/planner-live.integration.mjs",
     "db:validate": "pnpm --filter @university-planner/database db:validate",
     "verify": "pnpm format:check && pnpm lint && pnpm check:boundaries && pnpm db:generate && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm db:validate && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@playwright/test": "1.63.0",
     "@types/node": "24.13.6",
     "eslint": "9.39.5",

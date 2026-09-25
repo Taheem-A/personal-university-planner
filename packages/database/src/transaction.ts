@@ -1,10 +1,11 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { createRepositories } from "./repositories/index.js";
 import type { TransactionContext } from "./repositories/types.js";
 
 export async function runInTransaction<T>(
   client: PrismaClient,
   operation: (context: TransactionContext) => Promise<T>,
+  isolationLevel: Prisma.TransactionIsolationLevel = "ReadCommitted",
 ): Promise<T> {
   return client.$transaction(
     async (transactionClient) =>
@@ -16,6 +17,6 @@ export async function runInTransaction<T>(
           },
         },
       }),
-    { maxWait: 10_000, timeout: 30_000 },
+    { maxWait: 10_000, timeout: 30_000, isolationLevel },
   );
 }

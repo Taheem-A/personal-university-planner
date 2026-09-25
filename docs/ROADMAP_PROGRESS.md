@@ -1,5 +1,65 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 4 final acceptance: GATE PASSED
+
+- Audited the Planner Service, all nine trigger paths, incremental policy, revision/idempotency/supersession semantics, Today/Week reads, history and package boundaries against the literal Milestone-4 requirements. The evidence matrix is [Milestone-4 exit gate](./milestone-4-exit-gate.md).
+- Replayed migrations 0001–0009 from zero on an expiring disposable Neon branch in project `purple-tooth-70442528`. Migration status is current and Prisma schema drift is zero. Forward-only migration 0009 corrects PostgreSQL's truncated 0008 idempotency index name.
+- Guarded live PostgreSQL race and full Planner Service acceptance commands passed with synthetic users: generation/reload, incremental supersession, preserved manual/locked work, quantified infeasibility, safe failure, overlapping same-user plans, independent users, canonical edit race and duplicate event delivery.
+- Fixed keyed redelivery to retrieve the existing run before attempting to assemble newly changed canonical input; added a regression test. Full local `pnpm verify` passed with 140 unit, 39 integration and 2 browser tests. Planner scenarios passed 13/13, properties 2/2, and dependency audit found no known high-severity vulnerabilities.
+- GitHub [CI run 36081951021](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081951021) and [dependency review run 36081950998](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081950998) both passed on acceptance implementation head `b4ba27248e5ef68d254b8eead30e9b3adc2b9c20`. Draft [PR #5](https://github.com/Taheem-A/personal-university-planner/pull/5) supplies the pull-request check context and remains unmerged. Documentation-head checks are verified before it is marked ready.
+- **Milestone 4 — GATE PASSED.** Exact next roadmap item: **Milestone 5 — Production Next.js UI and Real-State Migration**. It has not started.
+
+## 2026-09-24 — Milestone 4 production planner read contracts: IN PROGRESS
+
+- Added typed Today and Week application read models backed by one authenticated, repeatable-read canonical snapshot. They include active manual/locked/generated work, fixed and recurring commitments, sleep/protected/commute windows, known deadlines, remaining work, risk and current PlannerRun state. Local day and week bounds use shared timezone and recurrence utilities.
+- Persisted planner-core placement reason codes under durable session IDs in safe PlannerRun summaries. Run-history reads expose provenance, version, horizon, warnings, delta and risk changes while omitting raw input snapshots and provider event identities.
+- Added thin authenticated Today, Week and run-history GET routes. The visual UI and demo fixtures remain untouched.
+- Full local `pnpm verify` passed, including unit/integration tests, schema validation, production build with the three new routes and 2 Chromium E2E checks. Planner scenarios (13/13), properties (2/2) and dependency audit passed.
+- **Exact next step: Milestone-4 final acceptance, live PostgreSQL proof, CI and exit-gate audit.** Milestone 4 remains **IN PROGRESS**.
+
+## 2026-09-24 — Milestone 4 concurrency and idempotency hardening: IN PROGRESS
+
+- Overlapping same-user Planner Service computations now have deterministic CI race coverage: one succeeds and the other receives `STALE_SNAPSHOT`; a canonical edit during computation also rejects the old plan. Different-user progress is checked while one computation is paused.
+- Keyed duplicate deliveries reuse one run and schedule; distinct keys and unkeyed manual requests remain independent. A demand-driven 30-minute abandoned-run recovery marks stale `RUNNING` rows failed, and guarded terminal completion prevents a late computation from publishing sessions.
+- Added `pnpm db:planner:races:verify` for the Milestone-4 acceptance gate. It requires an explicitly confirmed direct disposable Neon database and exercises actual PostgreSQL per-user claims, a canonical-state race, event uniqueness and late-run rejection. No live database was available for this slice's local run.
+- Full local `pnpm verify` passed: 131 unit tests, 39 integration tests, production build and 2 Chromium E2E tests. Dedicated planner scenarios (13/13), planner properties (2/2) and dependency audit passed.
+- **Exact next slice: production Today/Week planner view models and plan-history read services.** Milestone 4 remains **IN PROGRESS**.
+
+## 2026-09-24 — Milestone 4 replan triggers and incremental repair: IN PROGRESS
+
+- Centralized post-commit classification of planning-relevant task, deadline, calendar, academic, availability, protected-time, preference and manual-session mutations. Cosmetic edits do not request a plan. Ordinary factual changes use `INCREMENTAL` and retain exact trigger/entity provenance.
+- Added explicit manual and callable daily refresh operations; a keyed integration-batch boundary commits many future canonical writes before one replan. Completed/skip trigger paths require matching already-committed session, completion and remaining-work facts. The Milestone-7 outcome loop and provider sync remain deferred.
+- Previous generated sessions and the stability preference flow into core; structured deltas retain unchanged IDs and record moved/added/superseded sessions. Explicit released windows respect core policy. Risk comparisons now use persisted core pressure/infeasibility projections and report newly at-risk, worse, improved, resolved and unchanged risk.
+- Full local `pnpm verify` passed, including package boundaries, unit/integration tests, schema validation, production build and Chromium E2E. Dedicated planner scenarios (13/13), properties (2/2) and dependency audit passed.
+- **Exact next slice: concurrency, stale-result and idempotency hardening.** Milestone 4 remains **IN PROGRESS**.
+
+## 2026-09-24 — Milestone 4 authoritative planner execution: IN PROGRESS
+
+- The authenticated Planner Service now loads one revisioned canonical snapshot, invokes explicit `heuristic-v1`, independently validates its output, and records a versioned serializable PlannerRun input snapshot. Ordinary run reads omit the raw input.
+- The guarded authoritative transaction claims the expected revision, creates genuinely new durable generated sessions, retains unchanged IDs, supersedes obsolete generated history, and finalizes a successful run with safe warnings and an inspectable structured delta. Core failure, invalid output, stale state and persistence rollback preserve the preceding schedule and complete a failed run where the database permits.
+- Synthetic service tests cover real core invocation from canonical records, repeat stability, idempotency, moved/removed deltas, manual/locked preservation, quantified infeasibility, ownership, stale claims and transactional rollback. The live PostgreSQL end-to-end planner acceptance remains for the Milestone-4 gate.
+- Full local `pnpm verify` passed, including unit and integration tests, package boundaries, schema validation, production build and Chromium E2E. Dedicated planner scenarios (13/13), planner properties (2/2) and dependency audit passed.
+- **Exact next slice: replan triggers and incremental/minimal-change orchestration.** Milestone 4 remains **IN PROGRESS**.
+
+## 2026-09-24 — Milestone 4 persistence/concurrency substrate: IN PROGRESS
+
+- Added `User.planningRevision` with database triggers for planning-relevant canonical writes. The Planner Service now carries the snapshot revision, and the repository exposes an atomic expected-revision claim for the next authoritative transaction.
+- Added scoped durable PlannerRun idempotency, guarded RUNNING-to-terminal completion, safe structured summary/warning projection, and latest-successful lookup. Unkeyed manual runs remain possible.
+- Added generated-session batch creation, active generated/retained-intent reads, and guarded supersession with or without a replacement. Manual and locked sessions are protected, and history is never deleted.
+- Migration `0008_planner_authority_substrate` was replayed from zero and after the Milestone-3 migration set in embedded PostgreSQL tests. Focused tests cover revision guards, isolation, idempotency, lifecycle, rollback and session history.
+- Full local `pnpm verify` passed, including 39 integration tests, schema validation, production build and Chromium E2E. Dedicated planner scenarios (13/13), planner properties (2/2) and dependency audit passed.
+- **Exact next slice: authoritative planner execution and transactional plan persistence.** Milestone 4 remains **IN PROGRESS**.
+
+## 2026-09-24 — Milestone 4 Planner Service/input assembly: IN PROGRESS
+
+- Added typed authoritative-generation, incremental-replan and full-replan request/result vocabulary, the complete roadmap trigger vocabulary, explicit planner version and released-time policy, and structured input/precondition failures.
+- Added user-scoped planning-state reads under a repeatable-read snapshot. The application layer maps canonical facts into pure `PlannerInput` and can invoke `heuristic-v1` without persisting output.
+- Added a nullable, explicitly configured minimum-sleep preference and a durable sleep marker on protected-time recurrence, with migration `0007_planner_sleep_policy`. Missing policy or sleep windows fail assembly.
+- Exact planning ends at the seventh upcoming local midnight; the first 24 hours are identified as immediate. Shared timezone/recurrence utilities preserve wall-clock DST behavior.
+- Focused synthetic tests cover state mapping, isolation, inactivity, dependencies, session classes, recurrence/DST, horizon determinism, unknown deadlines, precondition failures and planner-core entry. See [ADR 0006](./decisions/0006-planner-service-input-assembly.md).
+- Full local `pnpm verify` passed, including package boundaries, Prisma generation/validation, typecheck, unit/integration tests, production build and Chromium E2E. Dedicated scenario (13/13), property (2/2), and dependency audit commands passed.
+- **Exact next slice: Planner persistence/concurrency substrate.** Milestone 4 remains **IN PROGRESS**.
+
 ## 2026-09-24 — Milestone 3 merged and closed
 
 - [PR #3](https://github.com/Taheem-A/personal-university-planner/pull/3) is merged into `master` at `e8b5e846e72a4269d304213adbf81ba22416a915`. The final PR head `da2345813a325ae7f5e8bf19743776fb3328d13a` is an ancestor of `master`.
