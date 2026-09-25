@@ -43,6 +43,11 @@ function renderShell(pathname, query = "") {
         useReducedMotion: () => false,
       };
     if (name === "lucide-react") return new Proxy({}, { get: () => icon });
+    if (name === "./appearance-control")
+      return {
+        AppearanceControl: () =>
+          React.createElement("button", { "aria-label": "Use dark appearance" }),
+      };
     return webRequire(name);
   };
   vm.runInNewContext(javascript, { exports, require, URLSearchParams });

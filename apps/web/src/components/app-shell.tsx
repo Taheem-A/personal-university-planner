@@ -13,17 +13,16 @@ import {
   Inbox,
   Layers3,
   Menu,
-  Moon,
   Plus,
   Plug,
   Search,
   Settings,
-  Sun,
   X,
   BookOpen,
   List,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { AppearanceControl } from "./appearance-control";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 const primary: NavItem[] = [
@@ -64,37 +63,6 @@ function NavLink({
   );
 }
 
-function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  useEffect(() => {
-    const frame = requestAnimationFrame(() =>
-      setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light"),
-    );
-    return () => cancelAnimationFrame(frame);
-  }, []);
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem("up-theme", next);
-    setTheme(next);
-  }
-  return (
-    <button
-      className="icon-button"
-      type="button"
-      onClick={toggle}
-      aria-label={theme === "dark" ? "Use light appearance" : "Use dark appearance"}
-      title={theme === "dark" ? "Light appearance" : "Dark appearance"}
-    >
-      {theme === "dark" ? (
-        <Sun size={18} aria-hidden="true" />
-      ) : (
-        <Moon size={18} aria-hidden="true" />
-      )}
-    </button>
-  );
-}
-
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const search = useSearchParams();
@@ -106,7 +74,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const triggerRef = useRef<HTMLAnchorElement>(null);
   const panel = search.get("panel");
   const detail =
-    (pathname === "/upcoming" ? null : search.get("assessment")) ?? search.get("course");
+    (pathname === "/upcoming" ? null : search.get("assessment")) ??
+    (pathname === "/courses" ? null : search.get("course"));
   const scenario = search.get("scenario");
   const conflict = search.get("conflict");
   const activePanel = panel || detail || scenario || conflict;
@@ -179,7 +148,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Plus size={18} aria-hidden="true" />
             Add
           </Link>
-          <ThemeToggle />
+          <AppearanceControl compact />
           <div className="account-control">
             <button
               className="icon-button"

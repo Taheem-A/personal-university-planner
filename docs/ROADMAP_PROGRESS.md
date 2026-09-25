@@ -1,5 +1,15 @@
 # Roadmap progress
 
+## 2026-09-25 — Milestone 5 secondary information surfaces
+
+- Replaced Courses, Availability, Settings and Integrations placeholders with authenticated, canonical-state screens. `secondaryViews` assembles owner-scoped presentation models inside repeatable-read snapshots; the UI never imports repositories or preview fixtures.
+- Courses now lists real course/term context and opens an authorized course detail through `course=<id>`. Desktop uses the approved side-list/detail hierarchy, while mobile transforms list to detail. Detail shows known metadata, meetings, assessments, active tasks, recurring work, near-term sessions, remaining work and last-successful-plan risk. Unknown/unauthorized IDs disclose no course facts; edit/add remains deferred.
+- Calendar & Availability shows real fixed events, course meetings, availability, hard/soft protected time, sleep and work sessions. Shared recurrence/timezone utilities expand rules in the application read model across local days and DST. The desktop category matrix has an ordered day agenda for screen readers, tablet and phone; week navigation is URL-backed.
+- Settings displays recorded account, active term and planning preferences in a restrained section layout. The appearance control shares the existing browser-persisted theme state with the shell. Integrations displays only canonical account metadata/status; no provider connection, synchronization, publishing, Quercus or ingestion call was added.
+- Added projection, owner-isolation, unknown-ID, DST/overnight, status/credential-redaction, fixture-isolation and provider-boundary tests plus desktop/tablet/mobile/200%-equivalent browser checks. `pnpm verify` passed formatting, lint, package boundaries, Prisma validation, typecheck, unit/integration tests, production build and all 16 Chromium browser tests. The existing approved-preview regression remains separate.
+- **Deferred:** Milestone 6 manual course/assessment/calendar/availability/preference management and Inbox resolution; Milestone 9 Google Calendar OAuth/sync/publishing; Milestone 14 Quercus/LMS import. Email and Drive ingestion remain later scope.
+- **Exact next slice:** Planner panel + Scenario/Conflict surfaces + Onboarding presentation. Milestone 5 remains in progress; this branch is unmerged.
+
 ## 2026-09-25 — Milestone 5 Upcoming, Assessment Detail, Inbox and Quick Capture slice
 
 - Replaced `/upcoming` and `/inbox` placeholders with authenticated server-rendered production surfaces. `informationViews.upcoming` projects canonical assessments, independent active tasks, owner courses, remaining work, submission state and last-successful-plan risk from one scoped snapshot. The user's timezone determines due-date horizons, and unknown dates or estimates remain explicit. `informationViews.inbox` projects real InboxItems, canonical proposal fields and status counts.
