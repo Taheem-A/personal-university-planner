@@ -1,5 +1,12 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 4 merged and closed
+
+- [PR #5](https://github.com/Taheem-A/personal-university-planner/pull/5) merged into `master` at `6c4b70dab04ab1d55179be8963f8c7492e2a81a5`. Final PR head `1a86fe34603c97f2c2354360a18eb53877f72836` is now part of the default branch.
+- Acceptance implementation head `b4ba27248e5ef68d254b8eead30e9b3adc2b9c20` passed [CI run 36081951021](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081951021) and [dependency review 36081950998](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081950998). Final PR head passed [CI run 36082238373](https://github.com/Taheem-A/personal-university-planner/actions/runs/36082238373) and [dependency review 36082238238](https://github.com/Taheem-A/personal-university-planner/actions/runs/36082238238).
+- The [Milestone-4 exit gate](./milestone-4-exit-gate.md) is **PASSED**. Planner Service, authoritative persistence, incremental replanning, concurrency/idempotency guarantees and real Today/Week read contracts are now merged.
+- **Exact next roadmap item:** Milestone 5 — Production Next.js UI and Real-State Migration. It has **not started**.
+
 ## 2026-09-24 — Milestone 4 final acceptance: GATE PASSED
 
 - Audited the Planner Service, all nine trigger paths, incremental policy, revision/idempotency/supersession semantics, Today/Week reads, history and package boundaries against the literal Milestone-4 requirements. The evidence matrix is [Milestone-4 exit gate](./milestone-4-exit-gate.md).
