@@ -48,12 +48,13 @@ export function WorkSessionBlock({
   return (
     <div
       className={`time-object work-session course-${color}`}
+      role="group"
       aria-label={`${courseCode}, ${title}, ${time}${locked ? ", locked" : ""}`}
     >
       <CourseIdentity code={courseCode} color={color} />
       <span className="time-object-title">{title}</span>
       {manual && <span className="time-object-meta">Manual</span>}
-      {locked && <LockKeyhole size={14} aria-label="Locked" />}
+      {locked && <LockKeyhole size={14} aria-hidden="true" />}
       <time>{time}</time>
     </div>
   );
@@ -73,6 +74,7 @@ export function FixedEventBlock({
   return (
     <div
       className={`time-object fixed-event course-${color}`}
+      role="group"
       aria-label={`${courseCode ? courseCode + ", " : ""}${title}, ${time}, fixed commitment`}
     >
       {courseCode && <CourseIdentity code={courseCode} color={color} />}
