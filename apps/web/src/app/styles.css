@@ -559,6 +559,22 @@ a {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
+.skip-link {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: var(--z-command);
+  transform: translateY(calc(-100% - var(--space-4)));
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--color-focus);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-weight: var(--weight-semibold);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
@@ -1017,7 +1033,9 @@ a {
     width: min(320px, 90vw);
     height: 100%;
     overflow: auto;
-    padding: 16px;
+    overscroll-behavior: contain;
+    padding: max(16px, env(safe-area-inset-top)) 16px
+      max(16px, env(safe-area-inset-bottom));
     background: var(--color-bg-surface);
     box-shadow: var(--shadow-popover);
   }
@@ -1101,11 +1119,28 @@ a {
     padding: max(20px, env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
   }
   .button,
-  .icon-button {
+  .icon-button,
+  .account-menu a,
+  .account-menu button {
     min-height: 44px;
   }
   .icon-button {
     width: 44px;
+  }
+}
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+  .nav-link.active,
+  .today-task-row.selected,
+  .today-timeline-link.selected .time-object {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .status-indicator,
+  .course-identity {
+    border: 1px solid CanvasText;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1789,7 +1824,9 @@ a {
 .week-deadlines a {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 12px;
+  min-height: 44px;
   padding: 8px 0;
   font-size: var(--text-sm);
 }
