@@ -80,4 +80,10 @@ The successful PlannerRun summary now stores core `reasonsBySession` under durab
 
 ## Next slice
 
-**Milestone-4 final acceptance, live PostgreSQL proof, CI and exit-gate audit.** Milestone 4 remains in progress.
+The final acceptance audit found that PostgreSQL truncated the long idempotency index name created by migration 0008, while Prisma expected a shorter generated name. Forward-only migration `0009_planner_idempotency_index_name` renames that existing index to the Prisma schema's name. Fresh zero-to-current deployment now has no schema drift. The application also checks a scoped keyed PlannerRun before input assembly: redelivery retrieves the prior outcome even if canonical input has since become unplannable. The transactional `start` uniqueness guard remains authoritative when two deliveries race.
+
+`pnpm db:planner:live:verify` is a separate guarded end-to-end command for a direct, explicitly confirmed disposable Neon database. It exercises the real application/database path with synthetic users and cleans its records afterward. The race command remains a narrower PostgreSQL locking and revision probe. Neither command accepts an ambient production URL.
+
+## Next roadmap item
+
+**Milestone 5 — Production Next.js UI and Real-State Migration**, only after the literal Milestone-4 exit gate passes. This ADR does not claim Milestone 5 work.

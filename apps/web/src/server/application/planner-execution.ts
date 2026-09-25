@@ -452,6 +452,25 @@ export async function executePlannerForActor(
 ): Promise<AuthoritativePlannerResult> {
   const id = dependencies.id ?? randomUUID;
   const clock = dependencies.clock ?? (() => new Date());
+  // A stable event identity owns its original outcome even if canonical input
+  // has since changed or become temporarily unplannable.
+  if (request.trigger.idempotencyScope && request.trigger.idempotencyKey) {
+    const existing = await database.transaction(async (tx) => {
+      const checkedAt = clock();
+      await tx.repositories.plannerRuns.failExpiredRunning(
+        userId,
+        addMinutes(checkedAt, -PLANNER_RUN_EXPIRY_MINUTES),
+        checkedAt,
+      );
+      return tx.repositories.plannerRuns.getByIdempotency(
+        userId,
+        request.trigger.type,
+        request.trigger.idempotencyScope!,
+        request.trigger.idempotencyKey!,
+      );
+    });
+    if (existing) return { status: "DUPLICATE", runId: existing.id, runStatus: existing.status };
+  }
   const assembled = await assembleSnapshotForActor(database, userId, request);
   if (assembled.status === "INPUT_FAILURE") return assembled;
   const { input, horizon, snapshotRevision } = assembled;

@@ -186,6 +186,17 @@ function database(states = [state()]) {
       },
     },
     plannerRuns: {
+      async getByIdempotency(owner, trigger, scope, key) {
+        return (
+          working.runs.find(
+            (row) =>
+              row.userId === owner &&
+              row.triggerType === trigger &&
+              row.idempotencyScope === scope &&
+              row.idempotencyKey === key,
+          ) ?? null
+        );
+      },
       async failExpiredRunning(owner, cutoff, completedAt) {
         let count = 0;
         for (const row of working.runs) {
@@ -741,6 +752,23 @@ test("keyed delivery reuses one run, distinct keys and unkeyed retries remain in
     "SUCCEEDED",
   );
   assert.equal(db.data.runs.length, 3);
+});
+
+test("keyed redelivery retrieves its prior outcome even after inputs become unplannable", async () => {
+  const db = database();
+  const keyed = request({
+    type: "INTEGRATION_SYNC",
+    idempotencyScope: "synthetic-provider",
+    idempotencyKey: "event-after-change",
+  });
+  const deps = dependencies();
+  const first = await service.executePlannerForActor(db, userId, keyed, deps);
+  assert.equal(first.status, "SUCCEEDED");
+  db.data.states[userId].planningPreferences[0].minimumSleepMinutes = null;
+  db.data.states[userId].user.planningRevision++;
+  const repeated = await service.executePlannerForActor(db, userId, keyed, deps);
+  assert.deepEqual(repeated, { status: "DUPLICATE", runId: first.runId, runStatus: "SUCCEEDED" });
+  assert.equal(db.data.runs.length, 1);
 });
 
 test("duplicate delivery during computation observes RUNNING without a second plan", async () => {
