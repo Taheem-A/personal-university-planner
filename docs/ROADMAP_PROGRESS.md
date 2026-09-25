@@ -1,5 +1,15 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 5 production Today slice
+
+- Replaced the `/today` placeholder with a server-rendered Today screen using authenticated `plannerViews.today({ date })`; no Prisma, repository or preview fixture enters the page.
+- Extended the application read model with bounded presentation facts from the same canonical snapshot: course identity, associated assessment due date, remaining planned work, next planned work, and titled risk. No planning score or schedule is recomputed in React.
+- Rendered current/next, chronological fixed and adaptable work, remaining tasks, meaningful risks/warnings and honest CURRENT/RUNNING/FAILED/UNPLANNED states. Unknown deadlines and estimates remain explicit; an empty day retains the same structure.
+- Added URL-backed work-session/task selection and responsive detail, with keyboard focus and Escape close. Complete/Adjust remain visibly deferred; no completion persistence or fake replan was added.
+- Added projection, component, route query, signed-out, desktop/mobile browser and 200%-equivalent viewport tests. The approved-preview regression remains separate.
+- Full `pnpm verify` passed: formatting, lint, 98-file boundaries, schema generation/validation, typecheck, 141 unit tests, 46 integration tests, production build and 5 Chromium E2E tests. Authenticated visual browser coverage awaits a database-backed sign-in harness; the production Today component is exercised with synthetic data without any production auth bypass.
+- **Exact next slice:** production Week migration from the authenticated Week read model. Milestone 5 remains in progress; Milestone 6, Google Calendar and natural-language Planner execution remain deferred.
+
 ## 2026-09-24 — Milestone 5 UI foundation slice
 
 - Created `web/milestone-5-production-ui` from merged `master`. Milestone 5 remains open and the branch remains unmerged.

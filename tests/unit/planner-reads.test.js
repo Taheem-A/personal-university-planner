@@ -40,7 +40,14 @@ function state() {
     user: { id: owner, timezone: "America/Toronto", planningRevision: 7 },
     academicTerms: [{ id: "term", userId: owner, status: "ACTIVE" }],
     courses: [
-      { id: "course", userId: owner, academicTermId: "term", code: "SYN101", archivedAt: null },
+      {
+        id: "course",
+        userId: owner,
+        academicTermId: "term",
+        code: "SYN101",
+        colorReference: "indigo",
+        archivedAt: null,
+      },
     ],
     courseMeetings: [
       {
@@ -55,6 +62,7 @@ function state() {
       {
         id: "assessment",
         userId: owner,
+        courseId: "course",
         title: "Synthetic exam",
         dueAt: d("2026-03-10T20:00:00Z"),
         archivedAt: null,
@@ -64,6 +72,7 @@ function state() {
       {
         id: "task",
         userId: owner,
+        courseId: "course",
         title: "Synthetic study",
         status: "READY",
         remainingMinutes: 90,
@@ -249,6 +258,7 @@ test("Today projects real active work, commitments, sleep, commute and durable r
   const today = read.buildToday(state(), run(), run(), "2026-03-09", d("2026-03-09T18:15:00Z"));
   assert.equal(today.date, "2026-03-09");
   assert.equal(today.plannedWorkMinutes, 90);
+  assert.equal(today.remainingPlannedWorkMinutes, 75);
   assert.equal(today.currentItem.id, "generated");
   assert.equal(today.nextItem.id, "manual");
   assert.deepEqual(
@@ -260,6 +270,13 @@ test("Today projects real active work, commitments, sleep, commute and durable r
     "ENERGY_MATCH",
   ]);
   assert.equal(today.timeline.find((item) => item.id === "manual").locked, true);
+  assert.equal(today.timeline.find((item) => item.id === "generated").courseCode, "SYN101");
+  assert.equal(
+    today.timeline.find((item) => item.id === "generated").courseColorReference,
+    "indigo",
+  );
+  assert.equal(today.timeline.find((item) => item.id === "generated").remainingMinutes, 90);
+  assert.equal(today.nextWorkItem.id, "manual");
   assert.ok(today.timeline.some((item) => item.kind === "COURSE_MEETING"));
   assert.ok(today.timeline.some((item) => item.kind === "EVENT"));
   assert.ok(today.timeline.some((item) => item.kind === "SLEEP"));
@@ -269,7 +286,39 @@ test("Today projects real active work, commitments, sleep, commute and durable r
     ["task"],
   );
   assert.equal(today.risks[0].taskId, "task");
+  assert.equal(today.risks[0].title, "Synthetic study");
+  assert.equal(today.remainingTasks[0].courseCode, "SYN101");
   assert.equal(today.planner.authoritativeRun.plannerVersion, "heuristic-v1");
+});
+
+test("Today keeps unknown task facts unknown and distinguishes running and empty states", () => {
+  const persisted = state();
+  persisted.tasks[0].dueAt = null;
+  persisted.tasks[0].remainingMinutes = null;
+  persisted.assessments[0].dueAt = null;
+  const running = read.buildToday(
+    persisted,
+    run("RUNNING", "running"),
+    run(),
+    "2026-03-09",
+    d("2026-03-09T18:15:00Z"),
+  );
+  assert.equal(running.planner.status, "RUNNING");
+  assert.equal(running.planner.authoritativeRun.id, "run-1");
+  assert.equal(running.remainingTasks[0].dueAt, null);
+  assert.equal(running.remainingTasks[0].remainingMinutes, null);
+  persisted.tasks = [];
+  persisted.workSessions = [];
+  persisted.courseMeetings = [];
+  persisted.calendarEvents = [];
+  persisted.protectedTimeRules = [];
+  persisted.availabilityRules = [];
+  const empty = read.buildToday(persisted, null, null, "2026-03-09", d("2026-03-09T18:15:00Z"));
+  assert.equal(empty.planner.status, "UNPLANNED");
+  assert.equal(empty.currentItem, null);
+  assert.equal(empty.nextItem, null);
+  assert.equal(empty.nextWorkItem, null);
+  assert.equal(empty.remainingTasks.length, 0);
 });
 
 test("Week is local Monday through next Monday across Toronto DST and keeps risk and deadlines", () => {
