@@ -94,6 +94,14 @@ for (const filePath of sourceFiles) {
   const isTransport =
     owner === "web" &&
     (relativeFile.startsWith("apps/web/src/app/") || /^\s*["']use server["']/.test(source));
+  const isClient = owner === "web" && /^\s*["']use client["']/.test(source);
+  const isProductionUi =
+    owner === "web" &&
+    (relativeFile.startsWith("apps/web/src/app/") ||
+      relativeFile.startsWith("apps/web/src/components/"));
+  if (isClient && /\b(?:import|require)\s*\(\s*(?!["'])/.test(source)) {
+    violations.push(`${relativeFile}: client imports must use literal specifiers`);
+  }
   if (
     isTransport &&
     /\b(?:applicationDatabase|createDatabase|getDatabase)\s*\(|\.(?:repositories|\$queryRaw|\$executeRaw)\b/.test(
@@ -105,6 +113,14 @@ for (const filePath of sourceFiles) {
   for (const match of source.matchAll(importPattern)) {
     const specifier = match[1];
     const target = targetOf(filePath, specifier);
+    if (
+      isProductionUi &&
+      /(?:^|\/)(?:prototypes\/approved-preview|tests\/fixtures)(?:\/|$)/.test(
+        path.resolve(path.dirname(filePath), specifier).replaceAll("\\", "/"),
+      )
+    ) {
+      violations.push(`${relativeFile}: production UI cannot import preview or test fixtures`);
+    }
     if (
       isTransport &&
       (target === "database" ||
@@ -119,7 +135,7 @@ for (const filePath of sourceFiles) {
     }
     if (
       owner === "web" &&
-      /^\s*["']use client["']/.test(source) &&
+      isClient &&
       specifier.startsWith(".") &&
       path
         .resolve(path.dirname(filePath), specifier)
@@ -138,6 +154,7 @@ for (const filePath of sourceFiles) {
     if (
       owner === "web" &&
       /^(?:next-auth|@auth)(?:\/|$)/.test(specifier) &&
+      !(isClient && specifier === "next-auth/react") &&
       !relativeFile.startsWith("apps/web/src/server/") &&
       !relativeFile.startsWith("apps/web/src/app/api/auth/")
     ) {

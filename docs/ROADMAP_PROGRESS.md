@@ -1,5 +1,17 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 5 UI foundation slice
+
+- Created `web/milestone-5-production-ui` from merged `master`. Milestone 5 remains open and the branch remains unmerged.
+- Replaced the Milestone-0 home with `/today` routing; protected all eight production routes behind server-side Auth.js identity checking, with a restrained Google sign-in page for signed-out users.
+- Added the responsive production AppShell: 228 px desktop sidebar, 64 px laptop rail, 56 px top bar, tablet menu, mobile bottom navigation, Quick Add link, Planner trigger, selected navigation state and right-panel host.
+- Established one frozen semantic CSS token source for light/dark surfaces, typography, spacing, radii, status, course colors, elevation, focus, motion, layers, controls and layout. Added IBM Plex Sans/Mono, Lucide and Motion; avoided shadcn styling defaults and Anime.js.
+- Scaffolded Today, Week, Upcoming, Inbox, Courses, Availability, Integrations and Settings with truthful placeholders. Added reusable course identity, status, work-session and fixed-event visual primitives plus basic empty/error/loading states.
+- Added URL query state for object detail, Planner, scenario and conflict contexts and documented mobile transformation in ADR 0007. No route reads preview fixtures or client-provided identity.
+- Updated signed-out E2E and preserved the separate approved-preview regression. Added shell rendering, mobile navigation, theme/reduced-motion and negative import-boundary tests.
+- Full `pnpm verify` passed: formatting, lint, 96-file boundaries, schema generation/validation, typecheck, 140 unit tests, 42 integration tests, production build and 2 Chromium E2E tests. Dependency audit found no known vulnerabilities.
+- **Exact next slice:** production Today migration from the authenticated Today application read model. Then follow the remaining Milestone-5 screen order. Google Calendar, natural-language Planner backend and Milestone 6+ remain deferred.
+
 ## 2026-09-24 — Milestone 4 merged and closed
 
 - [PR #5](https://github.com/Taheem-A/personal-university-planner/pull/5) merged into `master` at `6c4b70dab04ab1d55179be8963f8c7492e2a81a5`. Final PR head `1a86fe34603c97f2c2354360a18eb53877f72836` is now part of the default branch.
