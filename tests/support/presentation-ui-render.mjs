@@ -9,7 +9,6 @@ const React = webRequire("react");
 const { renderToStaticMarkup } = webRequire("react-dom/server");
 const Link = ({ href, children, ...props }) =>
   React.createElement("a", { ...props, href }, children);
-const icon = () => React.createElement("svg", { "aria-hidden": "true" });
 function load(file) {
   const source = readFileSync(path.resolve("apps/web/src/components", file), "utf8");
   const javascript = typescript.transpileModule(source, {
@@ -25,7 +24,7 @@ function load(file) {
     name === "next/link"
       ? { __esModule: true, default: Link }
       : name === "lucide-react"
-        ? new Proxy({}, { get: () => icon })
+        ? webRequire(name)
         : webRequire(name);
   vm.runInNewContext(
     javascript,

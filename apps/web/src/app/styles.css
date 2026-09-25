@@ -61,7 +61,7 @@
   --color-bg-hover: #eceff3;
   --color-text-primary: #161a1f;
   --color-text-secondary: #616a75;
-  --color-text-muted: #858d97;
+  --color-text-muted: #616b76;
   --color-border-default: #dee2e7;
   --color-border-strong: #c9cfd7;
   --color-action-primary: #3f5fc4;
@@ -509,7 +509,7 @@
   --color-bg-hover: #232932;
   --color-text-primary: #edf0f3;
   --color-text-secondary: #a9b0b9;
-  --color-text-muted: #7d8691;
+  --color-text-muted: #89939f;
   --color-border-default: #2b323b;
   --color-border-strong: #3a424d;
   --color-action-primary: #8298f2;
@@ -565,6 +565,7 @@ a {
   left: var(--space-2);
   z-index: var(--z-command);
   transform: translateY(calc(-100% - var(--space-4)));
+  min-height: 44px;
   padding: var(--space-2) var(--space-3);
   border: 2px solid var(--color-focus);
   border-radius: var(--radius-sm);
@@ -661,9 +662,11 @@ a {
 }
 .command-trigger {
   display: flex;
+  flex: 1 1 0;
   align-items: center;
   gap: 10px;
   width: min(100%, 780px);
+  min-width: 0;
   height: 38px;
   padding: 0 12px;
   border: 1px solid var(--color-border-default);
@@ -685,6 +688,7 @@ a {
 }
 .topbar-actions {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 10px;
   margin-left: auto;
@@ -772,6 +776,22 @@ a {
 .route-content {
   max-width: var(--list-max-width);
   margin: 0 auto;
+}
+.route-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding-block: var(--space-6);
+}
+.route-state h1,
+.route-state p {
+  margin: 0;
+}
+.route-state h1 {
+  font-size: var(--text-section);
+}
+.route-state p {
+  color: var(--color-text-secondary);
 }
 .page-header {
   margin-bottom: 24px;
@@ -1034,8 +1054,7 @@ a {
     height: 100%;
     overflow: auto;
     overscroll-behavior: contain;
-    padding: max(16px, env(safe-area-inset-top)) 16px
-      max(16px, env(safe-area-inset-bottom));
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
     background: var(--color-bg-surface);
     box-shadow: var(--shadow-popover);
   }
@@ -1058,6 +1077,7 @@ a {
     width: auto;
     flex: 1;
     min-width: 0;
+    min-height: 44px;
     border: 0;
     background: transparent;
   }
@@ -1207,6 +1227,85 @@ a {
   margin: 4px 0 0;
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
+}
+.today-main {
+  grid-column: 1;
+  display: grid;
+  align-content: start;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.today-rail {
+  grid-column: 2;
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.today-rail-section {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+}
+.today-rail-section h2 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-ui);
+}
+.today-rail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.today-rail-head a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: var(--text-sm);
+  color: var(--color-action-primary);
+}
+.today-rail-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.today-rail-list li + li {
+  border-top: 1px solid var(--color-border-default);
+}
+.today-rail-list a {
+  display: grid;
+  align-content: center;
+  gap: var(--space-1);
+  min-height: 54px;
+  padding: var(--space-2) 0;
+  overflow-wrap: anywhere;
+}
+.today-rail-list strong {
+  font-size: var(--text-sm);
+}
+.today-rail-list span,
+.today-rail-section p,
+.today-rail nav span {
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+.today-rail nav {
+  display: grid;
+  gap: var(--space-2);
+}
+.today-rail nav a {
+  display: grid;
+  align-content: center;
+  gap: var(--space-1);
+  min-height: 54px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  font-size: var(--text-ui-sm);
+  font-weight: var(--weight-semibold);
+}
+.today-rail nav a:hover {
+  background: var(--color-bg-hover);
 }
 .today-feature,
 .today-section,
@@ -1483,7 +1582,9 @@ a {
     grid-template-columns: minmax(0, 1fr);
   }
   .today-header,
-  .today-plan-state {
+  .today-plan-state,
+  .today-main,
+  .today-rail {
     grid-column: 1;
   }
   .today-detail {
@@ -1823,6 +1924,7 @@ a {
 }
 .week-deadlines a {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
@@ -1865,6 +1967,11 @@ a {
 }
 .week-accessible li {
   padding: 3px 0;
+}
+.week-accessible li a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 .week-detail {
   position: fixed;

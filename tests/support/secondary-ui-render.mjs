@@ -12,8 +12,6 @@ const Link = React.forwardRef(({ href, children, ...props }, ref) =>
   React.createElement("a", { ...props, href, ref }, children),
 );
 Link.displayName = "TestLink";
-const icon = ({ size, ...props }) =>
-  React.createElement("svg", { ...props, width: size ?? 16, height: size ?? 16 });
 function load(file, dependencies = {}) {
   const javascript = typescript.transpileModule(readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: {
@@ -26,7 +24,7 @@ function load(file, dependencies = {}) {
   const exports = {};
   const require = (name) => {
     if (name === "next/link") return { __esModule: true, default: Link };
-    if (name === "lucide-react") return new Proxy({}, { get: () => icon });
+    if (name === "lucide-react") return webRequire(name);
     if (name === "./planner-primitives") return dependencies.primitives;
     if (name === "./course-color") return dependencies.courseColor;
     if (name === "./course-close")

@@ -24,8 +24,6 @@ const Link = React.forwardRef(({ href, children, ...props }, ref) =>
   React.createElement("a", { ...props, href, ref }, children),
 );
 Link.displayName = "TestLink";
-const icon = ({ size, ...props }) =>
-  React.createElement("svg", { ...props, width: size ?? 16, height: size ?? 16 });
 
 function load(file, overrides = {}) {
   const source = readFileSync(path.join(root, file), "utf8");
@@ -40,7 +38,7 @@ function load(file, overrides = {}) {
   const exports = {};
   const require = (name) => {
     if (name === "next/link") return { __esModule: true, default: Link };
-    if (name === "lucide-react") return new Proxy({}, { get: () => icon });
+    if (name === "lucide-react") return webRequire(name);
     if (name === "./planner-primitives") return overrides.primitives;
     if (name === "./course-color") return overrides.courseColor;
     if (name === "./week-layout") return overrides.layout;

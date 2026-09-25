@@ -295,166 +295,212 @@ export function TodayView({
         <StatusIndicator tone={plan.tone}>{plan.title}</StatusIndicator>
         <p>{plan.detail}</p>
       </section>
-      {(totalRisk > 0 || model.warnings.length > 0) && (
-        <section className="today-exception" aria-labelledby="today-exception-title">
-          <h2 id="today-exception-title">Needs attention</h2>
-          {model.risks.length > 0 && (
-            <ul>
-              {model.risks.map((risk) => (
-                <li key={risk.taskId}>
-                  <strong>
-                    {risk.courseCode ? risk.courseCode + " · " : ""}
-                    {risk.title}
-                  </strong>
-                  <span>
-                    {risk.feasibility === "INFEASIBLE"
-                      ? "Doesn’t currently fit"
-                      : risk.feasibility === "CRITICAL"
-                        ? "At risk"
-                        : risk.feasibility === "CONSTRAINED"
-                          ? "Low flexibility"
-                          : "Beyond the current plan horizon"}
-                    {risk.deficitMinutes > 0 ? ` · ${duration(risk.deficitMinutes)} short` : ""}
+      <div className="today-main">
+        {(totalRisk > 0 || model.warnings.length > 0) && (
+          <section className="today-exception" aria-labelledby="today-exception-title">
+            <h2 id="today-exception-title">Needs attention</h2>
+            {model.risks.length > 0 && (
+              <ul>
+                {model.risks.map((risk) => (
+                  <li key={risk.taskId}>
+                    <strong>
+                      {risk.courseCode ? risk.courseCode + " · " : ""}
+                      {risk.title}
+                    </strong>
+                    <span>
+                      {risk.feasibility === "INFEASIBLE"
+                        ? "Doesn’t currently fit"
+                        : risk.feasibility === "CRITICAL"
+                          ? "At risk"
+                          : risk.feasibility === "CONSTRAINED"
+                            ? "Low flexibility"
+                            : "Beyond the current plan horizon"}
+                      {risk.deficitMinutes > 0 ? ` · ${duration(risk.deficitMinutes)} short` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {model.warnings.length > 0 && (
+              <ul>
+                {model.warnings.slice(0, 4).map((warning, index) => (
+                  <li key={`${warning.code}-${index}`}>{warningLabel(warning.code)}</li>
+                ))}
+                {model.warnings.length > 4 && (
+                  <li>{model.warnings.length - 4} more planner warnings</li>
+                )}
+              </ul>
+            )}
+          </section>
+        )}
+        <section className="today-feature" aria-labelledby="today-feature-title">
+          <p className="today-eyebrow">
+            {model.currentItem ? "Now" : featured ? "Next" : "Schedule"}
+          </p>
+          {featured ? (
+            <>
+              <div className="today-feature-body">
+                {featured.courseCode && (
+                  <CourseIdentity
+                    code={featured.courseCode}
+                    color={courseColor(featured.courseColorReference)}
+                  />
+                )}
+                <div>
+                  <h2 id="today-feature-title">{featured.title}</h2>
+                  <p className="today-feature-type">
+                    {itemLabel(featured)}
+                    {featured.locked ? " · Locked" : ""}
+                  </p>
+                  <p className="today-feature-meta">
+                    <Clock3 size={15} aria-hidden="true" />{" "}
+                    {clock(featured.startAt, model.timezone)}–
+                    {clock(featured.endAt, model.timezone)}
+                    {featured.kind === "WORK"
+                      ? ` · ${remainingLabel(featured.remainingMinutes ?? null)}`
+                      : ""}
+                  </p>
+                  {featured.kind === "WORK" && (
+                    <p className="today-feature-meta">{dueLabel(featured.dueAt, model.timezone)}</p>
+                  )}
+                </div>
+              </div>
+              {featured.kind === "WORK" && (
+                <div className="today-feature-actions">
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    disabled
+                    title="Completion is not available yet"
+                  >
+                    Mark complete
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    disabled
+                    title="Adjustment is not available yet"
+                  >
+                    Adjust
+                  </button>
+                  <Link
+                    className="button button-ghost"
+                    href={selectionHref(model.date, "session", featured.id)}
+                  >
+                    View session
+                  </Link>
+                  <span className="today-deferred">
+                    Completion and adjustment are coming later.
                   </span>
+                </div>
+              )}
+              {featured.kind !== "WORK" && model.nextWorkItem && (
+                <p className="today-next-work">
+                  Next planned work:{" "}
+                  <Link href={selectionHref(model.date, "session", model.nextWorkItem.id)}>
+                    {model.nextWorkItem.courseCode ? model.nextWorkItem.courseCode + " · " : ""}
+                    {model.nextWorkItem.title} at{" "}
+                    {clock(model.nextWorkItem.startAt, model.timezone)}
+                  </Link>
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <h2 id="today-feature-title">Nothing else is scheduled today</h2>
+              <p className="today-feature-type">
+                There is no current or next commitment in this day’s plan.
+              </p>
+            </>
+          )}
+        </section>
+        <section className="today-section" aria-labelledby="today-schedule-title">
+          <div className="today-section-head">
+            <h2 id="today-schedule-title">Today’s schedule</h2>
+            <Link href="/week" className="button button-secondary">
+              Open Week
+            </Link>
+          </div>
+          {model.timeline.length ? (
+            <ol className="today-timeline" aria-label="Today's schedule">
+              {model.timeline.map((item) => (
+                <TodayTimelineItem
+                  key={item.id}
+                  item={item}
+                  model={model}
+                  selected={selectedSession === item.id}
+                />
+              ))}
+            </ol>
+          ) : (
+            <p className="today-empty-copy">No commitments are scheduled for this day.</p>
+          )}
+        </section>
+        <section className="today-section" aria-labelledby="today-tasks-title">
+          <div className="today-section-head">
+            <h2 id="today-tasks-title">
+              Still to do
+              {model.remainingTasks.length > 0 ? ` · ${model.remainingTasks.length}` : ""}
+            </h2>
+            <Link href="/upcoming" className="button button-ghost">
+              View all
+            </Link>
+          </div>
+          {model.remainingTasks.length ? (
+            <ul className="today-task-list">
+              {model.remainingTasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  model={model}
+                  selected={selectedTask === task.id}
+                />
+              ))}
+            </ul>
+          ) : (
+            <p className="today-empty-copy">Nothing else needs your attention today.</p>
+          )}
+        </section>
+      </div>
+      <aside className="today-rail" aria-label="Today context and actions">
+        <section className="today-rail-section" aria-labelledby="today-upcoming-title">
+          <div className="today-rail-head">
+            <h2 id="today-upcoming-title">Upcoming work</h2>
+            <Link href="/upcoming">View all</Link>
+          </div>
+          {model.remainingTasks.length ? (
+            <ul className="today-rail-list">
+              {model.remainingTasks.slice(0, 3).map((task) => (
+                <li key={task.id}>
+                  <Link href={selectionHref(model.date, "task", task.id)}>
+                    <strong>
+                      {task.courseCode ? `${task.courseCode} · ` : ""}
+                      {task.title}
+                    </strong>
+                    <span>{dueLabel(task.dueAt, model.timezone)}</span>
+                  </Link>
                 </li>
               ))}
             </ul>
-          )}
-          {model.warnings.length > 0 && (
-            <ul>
-              {model.warnings.slice(0, 4).map((warning, index) => (
-                <li key={`${warning.code}-${index}`}>{warningLabel(warning.code)}</li>
-              ))}
-              {model.warnings.length > 4 && (
-                <li>{model.warnings.length - 4} more planner warnings</li>
-              )}
-            </ul>
+          ) : (
+            <p>No remaining work in this view.</p>
           )}
         </section>
-      )}
-      <section className="today-feature" aria-labelledby="today-feature-title">
-        <p className="today-eyebrow">
-          {model.currentItem ? "Now" : featured ? "Next" : "Schedule"}
-        </p>
-        {featured ? (
-          <>
-            <div className="today-feature-body">
-              {featured.courseCode && (
-                <CourseIdentity
-                  code={featured.courseCode}
-                  color={courseColor(featured.courseColorReference)}
-                />
-              )}
-              <div>
-                <h2 id="today-feature-title">{featured.title}</h2>
-                <p className="today-feature-type">
-                  {itemLabel(featured)}
-                  {featured.locked ? " · Locked" : ""}
-                </p>
-                <p className="today-feature-meta">
-                  <Clock3 size={15} aria-hidden="true" /> {clock(featured.startAt, model.timezone)}–
-                  {clock(featured.endAt, model.timezone)}
-                  {featured.kind === "WORK"
-                    ? ` · ${remainingLabel(featured.remainingMinutes ?? null)}`
-                    : ""}
-                </p>
-                {featured.kind === "WORK" && (
-                  <p className="today-feature-meta">{dueLabel(featured.dueAt, model.timezone)}</p>
-                )}
-              </div>
-            </div>
-            {featured.kind === "WORK" && (
-              <div className="today-feature-actions">
-                <button
-                  type="button"
-                  className="button button-primary"
-                  disabled
-                  title="Completion is not available yet"
-                >
-                  Mark complete
-                </button>
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  disabled
-                  title="Adjustment is not available yet"
-                >
-                  Adjust
-                </button>
-                <Link
-                  className="button button-ghost"
-                  href={selectionHref(model.date, "session", featured.id)}
-                >
-                  View session
-                </Link>
-                <span className="today-deferred">Completion and adjustment are coming later.</span>
-              </div>
-            )}
-            {featured.kind !== "WORK" && model.nextWorkItem && (
-              <p className="today-next-work">
-                Next planned work:{" "}
-                <Link href={selectionHref(model.date, "session", model.nextWorkItem.id)}>
-                  {model.nextWorkItem.courseCode ? model.nextWorkItem.courseCode + " · " : ""}
-                  {model.nextWorkItem.title} at {clock(model.nextWorkItem.startAt, model.timezone)}
-                </Link>
-              </p>
-            )}
-          </>
-        ) : (
-          <>
-            <h2 id="today-feature-title">Nothing else is scheduled today</h2>
-            <p className="today-feature-type">
-              There is no current or next commitment in this day’s plan.
-            </p>
-          </>
-        )}
-      </section>
-      <section className="today-section" aria-labelledby="today-schedule-title">
-        <div className="today-section-head">
-          <h2 id="today-schedule-title">Today’s schedule</h2>
-          <Link href="/week" className="button button-secondary">
-            Open Week
-          </Link>
-        </div>
-        {model.timeline.length ? (
-          <ol className="today-timeline" aria-label="Today's schedule">
-            {model.timeline.map((item) => (
-              <TodayTimelineItem
-                key={item.id}
-                item={item}
-                model={model}
-                selected={selectedSession === item.id}
-              />
-            ))}
-          </ol>
-        ) : (
-          <p className="today-empty-copy">No commitments are scheduled for this day.</p>
-        )}
-      </section>
-      <section className="today-section" aria-labelledby="today-tasks-title">
-        <div className="today-section-head">
-          <h2 id="today-tasks-title">
-            Still to do{model.remainingTasks.length > 0 ? ` · ${model.remainingTasks.length}` : ""}
-          </h2>
-          <Link href="/upcoming" className="button button-ghost">
-            View all
-          </Link>
-        </div>
-        {model.remainingTasks.length ? (
-          <ul className="today-task-list">
-            {model.remainingTasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                model={model}
-                selected={selectedTask === task.id}
-              />
-            ))}
-          </ul>
-        ) : (
-          <p className="today-empty-copy">Nothing else needs your attention today.</p>
-        )}
-      </section>
+        <section className="today-rail-section" aria-labelledby="today-actions-title">
+          <h2 id="today-actions-title">Quick actions</h2>
+          <nav aria-label="Today quick actions">
+            <Link href="/inbox?capture=1">
+              Add something <span>Capture raw text</span>
+            </Link>
+            <Link href="/today?panel=planner">
+              Open Planner <span>Review plan context</span>
+            </Link>
+            <Link href="/availability">
+              Review availability <span>See your time rules</span>
+            </Link>
+          </nav>
+        </section>
+      </aside>
       <TodayDetail model={model} session={selectedWork} task={selectedRemaining} />
     </div>
   );

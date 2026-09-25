@@ -72,6 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const reduced = useReducedMotion();
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const shortcutStart = useRef<number>(0);
   const closeRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const restoreTrigger = useRef(false);
@@ -203,20 +204,43 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [accountOpen]);
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "") ||
+        menuOpen ||
+        accountOpen ||
+        activePanel
+      )
+        return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        const target = event.target as HTMLElement | null;
-        if (
-          target?.isContentEditable ||
-          ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")
-        )
-          return;
         event.preventDefault();
         router.push(plannerHref, { scroll: false });
+        return;
       }
+      if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+      const key = event.key.toLowerCase();
+      if (key === "n") {
+        event.preventDefault();
+        router.push("/inbox?capture=1", { scroll: false });
+        return;
+      }
+      if (shortcutStart.current && Date.now() - shortcutStart.current < 1200) {
+        shortcutStart.current = 0;
+        const destination = { t: "/today", w: "/week", u: "/upcoming", i: "/inbox" }[
+          key as "t" | "w" | "u" | "i"
+        ];
+        if (destination) {
+          event.preventDefault();
+          router.push(destination, { scroll: false });
+        }
+        return;
+      }
+      shortcutStart.current = key === "g" ? Date.now() : 0;
     }
     document.addEventListener("keydown", keydown);
     return () => document.removeEventListener("keydown", keydown);
-  }, [plannerHref, router]);
+  }, [plannerHref, router, menuOpen, accountOpen, activePanel]);
 
   return (
     <div className="app-shell">
@@ -393,22 +417,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <nav aria-label="Primary navigation">
               {primary.map((item) => (
-                <NavLink
-                  key={item.href}
-                  item={item}
-                  current={pathname}
-                  onSelect={closeMenu}
-                />
+                <NavLink key={item.href} item={item} current={pathname} onSelect={closeMenu} />
               ))}
             </nav>
             <nav aria-label="Secondary navigation" className="nav-group secondary">
               {secondary.map((item) => (
-                <NavLink
-                  key={item.href}
-                  item={item}
-                  current={pathname}
-                  onSelect={closeMenu}
-                />
+                <NavLink key={item.href} item={item} current={pathname} onSelect={closeMenu} />
               ))}
             </nav>
           </aside>

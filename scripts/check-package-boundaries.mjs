@@ -95,14 +95,13 @@ for (const filePath of sourceFiles) {
     owner === "web" &&
     (relativeFile.startsWith("apps/web/src/app/") || /^\s*["']use server["']/.test(source));
   const isClient = owner === "web" && /^\s*["']use client["']/.test(source);
-  const isProductionUi =
-    owner === "web" &&
-    (relativeFile.startsWith("apps/web/src/app/") ||
-      relativeFile.startsWith("apps/web/src/components/"));
+  const isProductionWebSource = owner === "web" && relativeFile.startsWith("apps/web/src/");
   const previewFixtureSignature =
     /\b(?:CIV100|MAT186|MAT188|APS100|APS110|APS111)\b|Robarts Library|BA 1170|SF 1101|GB 248|September 16, 2025/;
-  if (isProductionUi && previewFixtureSignature.test(source)) {
-    violations.push(`${relativeFile}: production UI contains an approved-preview fixture signature`);
+  if (isProductionWebSource && previewFixtureSignature.test(source)) {
+    violations.push(
+      `${relativeFile}: production UI contains an approved-preview fixture signature`,
+    );
   }
   if (isClient && /\b(?:import|require)\s*\(\s*(?!["'])/.test(source)) {
     violations.push(`${relativeFile}: client imports must use literal specifiers`);
@@ -118,14 +117,16 @@ for (const filePath of sourceFiles) {
   for (const match of source.matchAll(importPattern)) {
     const specifier = match[1];
     const target = targetOf(filePath, specifier);
+    const resolvedSpecifier = path.resolve(path.dirname(filePath), specifier).replaceAll("\\", "/");
+    const fixtureSource =
+      /(?:^|\/)(?:prototypes\/approved-preview|docs\/regression-reference|tests)(?:\/|$)/;
     if (
-      isProductionUi &&
-      /(?:^|\/)(?:prototypes\/approved-preview|docs\/regression-reference|tests)(?:\/|$)/.test(
-        path.resolve(path.dirname(filePath), specifier).replaceAll("\\", "/"),
-      )
-    ) {
-      violations.push(`${relativeFile}: production UI cannot import preview or test fixtures`);
-    }
+      isProductionWebSource &&
+      (fixtureSource.test(specifier.replaceAll("\\", "/")) || fixtureSource.test(resolvedSpecifier))
+    )
+      violations.push(
+        `${relativeFile}: production web source cannot import preview or test fixtures`,
+      );
     if (
       isTransport &&
       (target === "database" ||

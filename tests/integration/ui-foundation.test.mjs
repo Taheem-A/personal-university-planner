@@ -127,7 +127,15 @@ test("client/server and preview fixture imports fail the package boundary", () =
       ],
       [
         'import x from "prototypes/approved-preview/app.js";',
-        /cannot import preview or test fixtures/,
+        /production web source cannot import preview or test fixtures/,
+      ],
+      [
+        'import x from "../../../../../docs/regression-reference/approved-designs/today.png";',
+        /production web source cannot import preview or test fixtures/,
+      ],
+      [
+        'import x from "../../../../../tests/fixtures/planner/semester.js";',
+        /production web source cannot import preview or test fixtures/,
       ],
       [
         'import x from "../../../../tests/support/today-ui-render.mjs";',

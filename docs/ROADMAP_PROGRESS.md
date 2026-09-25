@@ -1,5 +1,14 @@
 # Roadmap progress
 
+## 2026-09-25 — Milestone 5 responsive, accessibility, visual and fixture hardening
+
+- Audited the production route families against the frozen visual, responsive and accessibility contract and the complete approved-preview references. Fixed laptop/tablet top-bar overflow, mobile touch targets in the command trigger and Week list/deadlines, small muted-text contrast in both themes, and Today's desktop context rail. Added explicit loading/error states, mobile navigation focus containment/restoration, Escape handling and the documented navigation/Quick Add shortcuts.
+- Added a 12-family × 5-viewport × 2-theme Chromium shell matrix, keyboard focus and Week semantic-list checks, mobile 44 px target checks, reduced-motion and contrast checks, and a 200%-equivalent layout check. Captured 12 controlled production-component screenshots with fixed synthetic test models and local IBM Plex fonts. The [visual QA procedure](./milestone-5-visual-qa.md) names each approved comparison and the limits of sparse test data.
+- Expanded the package checker from route/component-only fixture detection to every production web source. It rejects preview, regression-reference and test imports; negative tests exercise each path. An architecture search found no production preview fixture values, direct Prisma/repository access, client user ID trust or planner generation in screen code.
+- `pnpm verify` passed formatting, lint, 123-file package boundaries, Prisma generation/validation, strict typecheck, all unit tests, 66 integration tests, production builds and **27/28 Chromium E2E tests**, including the separate approved-preview regression. Dedicated planner scenarios **13/13**, properties **2/2**, and the high-severity dependency audit passed with no known vulnerabilities.
+- **Status:** implementation ready for the separate literal exit-gate audit, **NOT GATE PASSED**. The audit must inspect populated authenticated state and visual/focus behavior against approved references; synthetic screen captures cannot prove that live path. The branch remains unmerged, and all Milestone 6+ mutation/provider/assistant boundaries remain deferred.
+- **Exact next work item:** Milestone-5 exit-gate audit and PR. Do not begin Milestone 6 or merge during this slice.
+
 ## 2026-09-25 — Milestone 5 Planner, Scenario, Conflict and Onboarding presentation
 
 - Replaced the shell's placeholder panel with the approved Planner navigation/search composition and responsive right-panel/full-screen transformation. A narrow authenticated read projection from the existing Today planner view supplies recorded status, next work, remaining planned work, last successful plan, risks and warnings. The command field never executes or sends natural language; unrecognized input reports that boundary.
