@@ -105,7 +105,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLAnchorElement>(null);
   const panel = search.get("panel");
-  const detail = search.get("assessment") ?? search.get("course");
+  const detail =
+    (pathname === "/upcoming" ? null : search.get("assessment")) ?? search.get("course");
   const scenario = search.get("scenario");
   const conflict = search.get("conflict");
   const activePanel = panel || detail || scenario || conflict;

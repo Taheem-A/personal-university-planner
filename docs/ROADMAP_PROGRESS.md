@@ -1,5 +1,14 @@
 # Roadmap progress
 
+## 2026-09-25 — Milestone 5 Upcoming, Assessment Detail, Inbox and Quick Capture slice
+
+- Replaced `/upcoming` and `/inbox` placeholders with authenticated server-rendered production surfaces. `informationViews.upcoming` projects canonical assessments, independent active tasks, owner courses, remaining work, submission state and last-successful-plan risk from one scoped snapshot. The user's timezone determines due-date horizons, and unknown dates or estimates remain explicit. `informationViews.inbox` projects real InboxItems, canonical proposal fields and status counts.
+- Added Assessment Detail on the established `assessment` query state. Desktop presents a right detail panel; narrow screens use a full-width detail. Range, sort and detail section persist in the URL; Back/Forward returns to the prior parent context. Unknown, archived and unauthorized selections share one unavailable response. Tabs expose only recorded overview, tasks, near-term sessions, notes and resources; no unavailable fact is invented.
+- Added Quick Capture as a labelled, validated raw-text form wired to the existing `inboxItems.capture` service through the same-origin JSON transport. A successful UI state requires a persisted ID. Proposal parsing, Inbox resolution and structured task/assessment creation remain Milestone 6. No new dependencies, preview fixture data, client identity or production auth bypass were added. ADR 0008 records the boundary.
+- Focused tests cover canonical projections, unknown values, owner isolation, retained risk after failed/running plans, invalid selection, signed-out route behavior, truthful raw capture, history URLs, desktop/phone/200%-equivalent layout and preview-fixture isolation. The separate approved-preview browser regression remains.
+- Full `pnpm verify` passed: formatting, lint, 108-source-file package boundaries, Prisma generation/validation, typecheck, 145 unit tests, 57 integration tests, production build and 12 Chromium E2E tests.
+- **Exact next slice:** Course Detail + Calendar/Availability + Settings/Integrations. Milestone 5 remains in progress; no merge, Milestone 6, Google Calendar or natural-language Planner execution.
+
 ## 2026-09-24 — Milestone 5 production Week slice
 
 - Replaced the `/week` placeholder with an authenticated `plannerViews.week({ date })` Server Component; the application read model adds canonical course identity for deadlines and risk plus active-term bounds.
