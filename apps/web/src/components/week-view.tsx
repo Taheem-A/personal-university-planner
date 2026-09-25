@@ -277,7 +277,7 @@ export function WeekView({
           </ul>
         </section>
       )}
-      <div className="week-calendar" aria-label="Seven-day planning calendar">
+      <div className="week-calendar" role="region" aria-label="Seven-day planning calendar">
         <div className="week-grid-head">
           <div aria-hidden="true" />
           {days.map((day) => (
@@ -290,6 +290,7 @@ export function WeekView({
               <small>{duration(day.plannedWorkMinutes)} work</small>
               <span
                 className="week-capacity"
+                role="img"
                 aria-label={`${duration(day.availabilityWindowMinutes)} available`}
               >
                 <span
@@ -400,6 +401,7 @@ export function WeekView({
                 <span
                   className={`week-work-bar${day.plannedWorkMinutes === 0 ? " is-empty" : day.riskTaskIds.length ? " has-risk" : ""}`}
                   style={{ height: `${Math.max(4, Math.min(50, day.plannedWorkMinutes / 6))}px` }}
+                  aria-hidden="true"
                 />
                 <small>
                   {day.availabilityWindowMinutes
