@@ -76,6 +76,8 @@ test("authenticated shell renders primary and mobile navigation with selected st
     assert.match(html, new RegExp(label));
   assert.match(html, /aria-label="Quick Add"/);
   assert.match(html, /Search or ask planner/);
+  assert.match(html, /class="skip-link" href="#main-content"/);
+  assert.match(html, /id="main-content" tabindex="-1"/);
 });
 
 test("URL-driven Planner panel and theme, reduced-motion tokens are present", () => {
@@ -90,6 +92,11 @@ test("URL-driven Planner panel and theme, reduced-motion tokens are present", ()
   assert.match(shellSource, /event\.key === "Escape"\) closePanel\(\)/);
   assert.match(shellSource, /event\.key === "Tab" && panelRef\.current/);
   assert.match(shellSource, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(shellSource, /menuCloseRef\.current\?\.focus\(\)/);
+  assert.match(shellSource, /menuTriggerRef\.current\?\.focus\(\)/);
+  assert.match(shellSource, /accountTriggerRef\.current\?\.focus\(\)/);
+  assert.match(shellSource, /role="dialog"/);
+  assert.match(shellSource, /aria-modal="true"/);
   assert.match(shellSource, /next\.delete\("scenario"\)/);
   const css = readFileSync("apps/web/src/app/styles.css", "utf8");
   assert.match(css, /:root\[data-theme="dark"\]/);
@@ -98,6 +105,8 @@ test("URL-driven Planner panel and theme, reduced-motion tokens are present", ()
   assert.match(css, /--sidebar-rail-width: 64px/);
   assert.match(css, /--topbar-height: 56px/);
   assert.match(css, /max-width: 639px/);
+  assert.match(css, /forced-colors: active/);
+  assert.match(css, /\.skip-link:focus/);
 });
 
 test("client/server and preview fixture imports fail the package boundary", () => {
@@ -119,6 +128,14 @@ test("client/server and preview fixture imports fail the package boundary", () =
       [
         'import x from "prototypes/approved-preview/app.js";',
         /cannot import preview or test fixtures/,
+      ],
+      [
+        'import x from "../../../../tests/support/today-ui-render.mjs";',
+        /cannot import preview or test fixtures/,
+      ],
+      [
+        'export const copiedDemo = "CIV100 at Robarts Library";',
+        /approved-preview fixture signature/,
       ],
     ]) {
       writeFileSync(source, code);
