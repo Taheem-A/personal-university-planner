@@ -99,6 +99,11 @@ for (const filePath of sourceFiles) {
     owner === "web" &&
     (relativeFile.startsWith("apps/web/src/app/") ||
       relativeFile.startsWith("apps/web/src/components/"));
+  const previewFixtureSignature =
+    /\b(?:CIV100|MAT186|MAT188|APS100|APS110|APS111)\b|Robarts Library|BA 1170|SF 1101|GB 248|September 16, 2025/;
+  if (isProductionUi && previewFixtureSignature.test(source)) {
+    violations.push(`${relativeFile}: production UI contains an approved-preview fixture signature`);
+  }
   if (isClient && /\b(?:import|require)\s*\(\s*(?!["'])/.test(source)) {
     violations.push(`${relativeFile}: client imports must use literal specifiers`);
   }
@@ -115,7 +120,7 @@ for (const filePath of sourceFiles) {
     const target = targetOf(filePath, specifier);
     if (
       isProductionUi &&
-      /(?:^|\/)(?:prototypes\/approved-preview|tests\/fixtures)(?:\/|$)/.test(
+      /(?:^|\/)(?:prototypes\/approved-preview|docs\/regression-reference|tests)(?:\/|$)/.test(
         path.resolve(path.dirname(filePath), specifier).replaceAll("\\", "/"),
       )
     ) {
