@@ -239,11 +239,19 @@ export interface WeekViewModel {
     riskTaskIds: string[];
   }[];
   schedule: ScheduleItem[];
-  deadlines: { id: string; kind: "TASK" | "ASSESSMENT"; title: string; dueAt: Date }[];
-  risks: PlannerRunRisk[];
+  deadlines: {
+    id: string;
+    kind: "TASK" | "ASSESSMENT";
+    title: string;
+    dueAt: Date;
+    courseCode: string | null;
+    courseColorReference: string | null;
+  }[];
+  risks: TodayRiskItem[];
   warnings: PlannerRunStoredWarning[];
   planner: PlannerReadState;
   latestChange: PlannerRunDelta | null;
+  activeTermRange: { startDate: string; endDate: string } | null;
 }
 
 function bounds(date: string, timezone: string, days: number) {
@@ -526,6 +534,11 @@ export function buildWeek(
   const { startAt, endAt } = bounds(weekStart, state.user.timezone, 7);
   const scheduleItems = schedule(state, weekStart, 7, successful);
   const risks = summaryOf(successful)?.risk ?? [];
+  const taskById = new Map(state.tasks.map((task) => [task.id, task]));
+  const assessmentById = new Map(state.assessments.map((item) => [item.id, item]));
+  const courseById = new Map(state.courses.map((course) => [course.id, course]));
+  const courseForTask = (task: (typeof state.tasks)[number]) =>
+    courseById.get(task.courseId ?? assessmentById.get(task.assessmentId ?? "")?.courseId ?? "");
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = addLocalDays(weekStart, index);
     const day = bounds(date, state.user.timezone, 1);
@@ -587,6 +600,8 @@ export function buildWeek(
         kind: "TASK" as const,
         title: task.title,
         dueAt: task.dueAt!,
+        courseCode: courseForTask(task)?.code ?? null,
+        courseColorReference: courseForTask(task)?.colorReference ?? null,
       })),
     ...state.assessments
       .filter(
@@ -602,6 +617,8 @@ export function buildWeek(
         kind: "ASSESSMENT" as const,
         title: assessment.title,
         dueAt: assessment.dueAt!,
+        courseCode: courseById.get(assessment.courseId)?.code ?? null,
+        courseColorReference: courseById.get(assessment.courseId)?.colorReference ?? null,
       })),
   ].sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime() || a.id.localeCompare(b.id));
   return {
@@ -611,10 +628,23 @@ export function buildWeek(
     days,
     schedule: scheduleItems,
     deadlines,
-    risks,
+    risks: risks.map((risk) => {
+      const task = taskById.get(risk.taskId);
+      return {
+        ...risk,
+        title: task?.title ?? "Work item",
+        courseCode: task ? (courseForTask(task)?.code ?? null) : null,
+      };
+    }),
     warnings: warningsOf(latest?.status === "FAILED" ? latest : successful),
     planner: planState(state, latest, successful),
     latestChange: summaryOf(successful)?.delta ?? null,
+    activeTermRange: (() => {
+      const term = state.academicTerms.find(
+        (candidate) => candidate.userId === state.user.id && candidate.status === "ACTIVE",
+      );
+      return term ? { startDate: term.startDate, endDate: term.endDate } : null;
+    })(),
   };
 }
 

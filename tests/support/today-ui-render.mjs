@@ -30,6 +30,7 @@ function load(file, overrides = {}) {
     if (name === "next/link") return { __esModule: true, default: Link };
     if (name === "lucide-react") return new Proxy({}, { get: () => icon });
     if (name === "./planner-primitives") return overrides.primitives;
+    if (name === "./course-color") return { courseColor: () => "violet" };
     if (name === "./today-selection-close")
       return {
         TodaySelectionClose: () =>

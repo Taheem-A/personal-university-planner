@@ -10,28 +10,10 @@ import {
   FixedEventBlock,
   StatusIndicator,
   WorkSessionBlock,
-  type CourseColor,
 } from "./planner-primitives";
 import { TodaySelectionClose } from "./today-selection-close";
+import { courseColor } from "./course-color";
 
-function courseColor(reference: string | null | undefined): CourseColor {
-  const colors: Record<string, CourseColor> = {
-    blue: "blue",
-    sky: "blue",
-    indigo: "violet",
-    teal: "teal",
-    green: "green",
-    emerald: "green",
-    amber: "amber",
-    orange: "orange",
-    rose: "rose",
-    red: "rose",
-    violet: "violet",
-    purple: "violet",
-    slate: "slate",
-  };
-  return colors[reference?.toLowerCase() ?? ""] ?? "slate";
-}
 function clock(date: Date, timezone: string) {
   return new Intl.DateTimeFormat("en", {
     timeZone: timezone,

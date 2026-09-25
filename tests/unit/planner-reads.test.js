@@ -38,7 +38,15 @@ const recurrence = (id, startTimeLocal, endTimeLocal, spansNextDay = false) => (
 function state() {
   return {
     user: { id: owner, timezone: "America/Toronto", planningRevision: 7 },
-    academicTerms: [{ id: "term", userId: owner, status: "ACTIVE" }],
+    academicTerms: [
+      {
+        id: "term",
+        userId: owner,
+        status: "ACTIVE",
+        startDate: "2026-01-05",
+        endDate: "2026-04-30",
+      },
+    ],
     courses: [
       {
         id: "course",
@@ -332,6 +340,10 @@ test("Week is local Monday through next Monday across Toronto DST and keeps risk
     week.deadlines.map((item) => item.kind),
     ["TASK", "ASSESSMENT"],
   );
+  assert.equal(week.deadlines[0].courseCode, "SYN101");
+  assert.equal(week.risks[0].title, "Synthetic study");
+  assert.equal(week.risks[0].courseCode, "SYN101");
+  assert.deepEqual(week.activeTermRange, { startDate: "2026-01-05", endDate: "2026-04-30" });
   assert.deepEqual(week.latestChange.added, ["generated"]);
   assert.deepEqual(week.planner.authoritativeRun.riskChanges.newlyAtRisk, ["task"]);
   assert.equal(

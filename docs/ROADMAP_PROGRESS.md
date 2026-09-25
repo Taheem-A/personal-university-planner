@@ -1,5 +1,15 @@
 # Roadmap progress
 
+## 2026-09-24 — Milestone 5 production Week slice
+
+- Replaced the `/week` placeholder with an authenticated `plannerViews.week({ date })` Server Component; the application read model adds canonical course identity for deadlines and risk plus active-term bounds.
+- Ported the approved seven-day calendar composition using fixed, planner, manual and protected objects, daily workload/capacity, risk, deadlines and latest successful plan changes. A pure layout projection clips actual instants at local midnight, assigns deterministic overlap lanes, and uses shared timezone conversion across DST.
+- Transformed Week into a mobile day strip and agenda driven by the same Week model. Week/day/detail state is URL-backed, including previous/next week and swipe between days; the accessible ordered day list provides a non-spatial reading path.
+- Preserved honest CURRENT, RUNNING, FAILED and UNPLANNED language, empty/no-deadline/no-availability/out-of-term cases and a retained authoritative plan after failed updates. Detail is read-only; no drag persistence, completion, scenario Apply or replan was fabricated.
+- Added read-model, route, visual layout, DST, overlap, state and desktop/mobile/200%-equivalent browser tests. Browser visual coverage uses synthetic data without a production identity bypass; the existing Today and approved-preview regressions remain.
+- Full `pnpm verify` passed: formatting, lint, 102-file boundaries, Prisma generation/validation, typecheck, 141 unit tests, 51 integration tests, production build and 8 Chromium E2E tests.
+- **Exact next slice:** Upcoming + Assessment Detail + Inbox. Milestone 5 remains in progress; no merge, Milestone 6, Google Calendar or natural-language Planner execution.
+
 ## 2026-09-24 — Milestone 5 production Today slice
 
 - Replaced the `/today` placeholder with a server-rendered Today screen using authenticated `plannerViews.today({ date })`; no Prisma, repository or preview fixture enters the page.
