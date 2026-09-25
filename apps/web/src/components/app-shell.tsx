@@ -20,6 +20,7 @@ import {
   X,
   BookOpen,
   List,
+  GraduationCap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppearanceControl } from "./appearance-control";
@@ -75,6 +76,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const panelRef = useRef<HTMLElement>(null);
   const restoreTrigger = useRef(false);
   const triggerRef = useRef<HTMLAnchorElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLElement>(null);
+  const menuCloseRef = useRef<HTMLButtonElement>(null);
+  const accountTriggerRef = useRef<HTMLButtonElement>(null);
+  const accountMenuRef = useRef<HTMLElement>(null);
   const panel = search.get("panel");
   const detail =
     (pathname === "/upcoming" ? null : search.get("assessment")) ??
@@ -110,7 +116,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (event.key === "Tab" && panelRef.current) {
         const focusable = Array.from(
           panelRef.current.querySelectorAll<HTMLElement>(
-            "a[href], button:not([disabled]), input:not([disabled])",
+            "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
           ),
         );
         if (!focusable.length) return;
@@ -134,6 +140,67 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("keydown", keydown);
     // Panel focus and Escape follow URL state.
   }, [activePanel, closePanel]);
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
+    requestAnimationFrame(() => menuTriggerRef.current?.focus());
+  }, []);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    menuCloseRef.current?.focus();
+    function keydown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu();
+        return;
+      }
+      if (event.key !== "Tab" || !menuRef.current) return;
+      const focusable = Array.from(
+        menuRef.current.querySelectorAll<HTMLElement>(
+          "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])",
+        ),
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", keydown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", keydown);
+    };
+  }, [closeMenu, menuOpen]);
+  useEffect(() => {
+    if (!accountOpen) return;
+    function dismiss(event: PointerEvent) {
+      if (
+        accountMenuRef.current?.contains(event.target as Node) ||
+        accountTriggerRef.current?.contains(event.target as Node)
+      )
+        return;
+      setAccountOpen(false);
+    }
+    function keydown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setAccountOpen(false);
+      accountTriggerRef.current?.focus();
+    }
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", keydown);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", keydown);
+    };
+  }, [accountOpen]);
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -153,10 +220,13 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <aside className="sidebar" aria-label="Application sidebar">
         <Link className="brand" href="/today">
           <span className="brand-mark" aria-hidden="true">
-            U
+            <GraduationCap size={20} strokeWidth={2} />
           </span>
           <span className="brand-name">University Planner</span>
         </Link>
@@ -173,8 +243,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
       <header className="topbar">
         <button
+          ref={menuTriggerRef}
           className="icon-button tablet-menu"
           aria-label="Open navigation"
+          aria-haspopup="dialog"
+          aria-expanded={menuOpen}
+          aria-controls="mobile-navigation-sheet"
           onClick={() => setMenuOpen(true)}
         >
           <Menu size={20} />
@@ -192,16 +266,23 @@ export function AppShell({ children }: { children: ReactNode }) {
           <AppearanceControl compact />
           <div className="account-control">
             <button
+              ref={accountTriggerRef}
               className="icon-button"
               type="button"
               aria-label="Account menu"
               aria-expanded={accountOpen}
+              aria-controls="account-options"
               onClick={() => setAccountOpen((open) => !open)}
             >
               <CircleUserRound size={19} aria-hidden="true" />
             </button>
             {accountOpen && (
-              <nav className="account-menu" aria-label="Account options">
+              <nav
+                ref={accountMenuRef}
+                id="account-options"
+                className="account-menu"
+                aria-label="Account options"
+              >
                 <Link href="/settings" onClick={() => setAccountOpen(false)}>
                   Settings
                 </Link>
@@ -213,7 +294,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="main-content" id="main-content">
+      <main className="main-content" id="main-content" tabIndex={-1}>
         {children}
       </main>
       <AnimatePresence>
@@ -289,18 +370,23 @@ export function AppShell({ children }: { children: ReactNode }) {
         ))}
       </nav>
       {menuOpen && (
-        <div className="menu-backdrop" onClick={() => setMenuOpen(false)}>
+        <div className="menu-backdrop" onClick={closeMenu}>
           <aside
+            ref={menuRef}
+            id="mobile-navigation-sheet"
             className="mobile-menu"
             onClick={(event) => event.stopPropagation()}
-            aria-label="Navigation menu"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-navigation-title"
           >
             <div className="mobile-menu-head">
-              <strong>University Planner</strong>
+              <strong id="mobile-navigation-title">University Planner</strong>
               <button
+                ref={menuCloseRef}
                 className="icon-button"
                 aria-label="Close navigation"
-                onClick={() => setMenuOpen(false)}
+                onClick={closeMenu}
               >
                 <X size={18} />
               </button>
@@ -311,7 +397,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   key={item.href}
                   item={item}
                   current={pathname}
-                  onSelect={() => setMenuOpen(false)}
+                  onSelect={closeMenu}
                 />
               ))}
             </nav>
@@ -321,7 +407,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   key={item.href}
                   item={item}
                   current={pathname}
-                  onSelect={() => setMenuOpen(false)}
+                  onSelect={closeMenu}
                 />
               ))}
             </nav>
