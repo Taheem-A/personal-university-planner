@@ -48,6 +48,8 @@ function renderShell(pathname, query = "") {
         AppearanceControl: () =>
           React.createElement("button", { "aria-label": "Use dark appearance" }),
       };
+    if (name === "./planner-surface")
+      return { PlannerSurface: ({ kind }) => React.createElement("div", null, `${kind} context`) };
     return webRequire(name);
   };
   vm.runInNewContext(javascript, { exports, require, URLSearchParams });
@@ -78,8 +80,17 @@ test("authenticated shell renders primary and mobile navigation with selected st
 
 test("URL-driven Planner panel and theme, reduced-motion tokens are present", () => {
   const html = renderShell("/week", "panel=planner");
-  assert.match(html, /aria-label="Detail panel"/);
+  assert.match(html, /aria-label="Planner panel"/);
   assert.match(html, /<h2>Planner<\/h2>/);
+  assert.match(html, /aria-modal="true"/);
+  assert.doesNotMatch(renderShell("/week"), /aria-label="Planner panel"/);
+  assert.match(renderShell("/week", "scenario=preview"), /aria-label="Scenario preview"/);
+  assert.match(renderShell("/week", "conflict=overview"), /aria-label="Conflict resolution"/);
+  const shellSource = readFileSync("apps/web/src/components/app-shell.tsx", "utf8");
+  assert.match(shellSource, /event\.key === "Escape"\) closePanel\(\)/);
+  assert.match(shellSource, /event\.key === "Tab" && panelRef\.current/);
+  assert.match(shellSource, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(shellSource, /next\.delete\("scenario"\)/);
   const css = readFileSync("apps/web/src/app/styles.css", "utf8");
   assert.match(css, /:root\[data-theme="dark"\]/);
   assert.match(css, /prefers-reduced-motion: reduce/);

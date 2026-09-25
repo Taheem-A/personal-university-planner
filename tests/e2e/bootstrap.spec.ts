@@ -15,6 +15,8 @@ test("root and protected planner routes require sign-in", async ({ page, request
     status: "ok",
     service: "university-planner-web",
   });
+  const presentation = await request.get("/api/v1/planner/presentation");
+  expect(presentation.status()).toBe(401);
 });
 
 test("approved preview remains interactive and isolated", async ({ page }) => {

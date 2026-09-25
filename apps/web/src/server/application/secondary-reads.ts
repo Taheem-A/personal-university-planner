@@ -133,6 +133,55 @@ export interface IntegrationsViewModel {
     disconnectedAt: Date | null;
   }[];
 }
+export interface OnboardingViewModel {
+  timezone: string;
+  term: { name: string; status: string } | null;
+  courseCount: number;
+  meetingCount: number;
+  availabilityCount: number;
+  protectedCount: number;
+  assessmentCount: number;
+  taskCount: number;
+  hasSuccessfulPlan: boolean;
+  needsSetup: boolean;
+}
+
+export function buildOnboarding(
+  state: PlanningStateSnapshot,
+  successful: PlannerRunRecord | null,
+): OnboardingViewModel {
+  const userId = state.user.id;
+  const term =
+    state.academicTerms.find((item) => item.userId === userId && item.status === "ACTIVE") ?? null;
+  const courses = state.courses.filter(
+    (item) => item.userId === userId && !item.archivedAt && item.academicTermId === term?.id,
+  );
+  const courseIds = new Set(courses.map((item) => item.id));
+  return {
+    timezone: state.user.timezone,
+    term: term ? { name: term.name, status: term.status } : null,
+    courseCount: courses.length,
+    meetingCount: state.courseMeetings.filter(
+      (item) => item.userId === userId && !item.archivedAt && courseIds.has(item.courseId),
+    ).length,
+    availabilityCount: state.availabilityRules.filter(
+      (item) => item.userId === userId && item.active,
+    ).length,
+    protectedCount: state.protectedTimeRules.filter((item) => item.userId === userId && item.active)
+      .length,
+    assessmentCount: state.assessments.filter(
+      (item) => item.userId === userId && !item.archivedAt && courseIds.has(item.courseId),
+    ).length,
+    taskCount: state.tasks.filter(
+      (item) =>
+        item.userId === userId &&
+        !item.archivedAt &&
+        (item.courseId === null || courseIds.has(item.courseId)),
+    ).length,
+    hasSuccessfulPlan: Boolean(successful),
+    needsSetup: !term || courses.length === 0 || !successful,
+  };
+}
 
 function activeTasks(state: PlanningStateSnapshot) {
   return state.tasks.filter(
@@ -619,6 +668,22 @@ export const secondaryViews = {
           await tx.repositories.integrationAccounts.listForUser(actor.userId),
           user.timezone,
         );
+      });
+    });
+  },
+  onboarding() {
+    return resultOf(async () => {
+      const actor = await requireActor();
+      return applicationDatabase().readSnapshot(async (tx) => {
+        const user = await tx.repositories.users.getById(actor.userId);
+        if (!user) throw new ApplicationError("NOT_FOUND", "Record not found.");
+        const range = windowFor(new Date(), user.timezone);
+        const [state, successful] = await Promise.all([
+          tx.repositories.planningState.snapshot(actor.userId, range.start, range.end),
+          tx.repositories.plannerRuns.latestSuccessful(actor.userId),
+        ]);
+        if (!state) throw new ApplicationError("NOT_FOUND", "Record not found.");
+        return buildOnboarding(state, successful);
       });
     });
   },

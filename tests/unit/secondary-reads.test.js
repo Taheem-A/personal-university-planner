@@ -298,3 +298,19 @@ test("Settings exposes recorded facts and integrations use only metadata state",
   assert.equal(integrations.accounts[1].status, "DISCONNECTED");
   assert.equal("credentialReference" in integrations.accounts[0], false);
 });
+test("Onboarding progress derives only from recorded account facts", () => {
+  const recorded = reads.buildOnboarding(state(), { id: "successful-run" });
+  assert.equal(recorded.term.name, "Synthetic Spring");
+  assert.equal(recorded.courseCount, 1);
+  assert.equal(recorded.meetingCount, 1);
+  assert.equal(recorded.hasSuccessfulPlan, true);
+  assert.equal(recorded.needsSetup, false);
+  const empty = state();
+  empty.academicTerms = [];
+  empty.courses = [];
+  empty.courseMeetings = [];
+  const newAccount = reads.buildOnboarding(empty, null);
+  assert.equal(newAccount.term, null);
+  assert.equal(newAccount.courseCount, 0);
+  assert.equal(newAccount.needsSetup, true);
+});

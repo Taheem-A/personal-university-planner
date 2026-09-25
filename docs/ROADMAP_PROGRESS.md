@@ -1,5 +1,14 @@
 # Roadmap progress
 
+## 2026-09-25 — Milestone 5 Planner, Scenario, Conflict and Onboarding presentation
+
+- Replaced the shell's placeholder panel with the approved Planner navigation/search composition and responsive right-panel/full-screen transformation. A narrow authenticated read projection from the existing Today planner view supplies recorded status, next work, remaining planned work, last successful plan, risks and warnings. The command field never executes or sends natural language; unrecognized input reports that boundary.
+- Scenario Preview now has a production surface for the current authoritative baseline and an explicit unprepared comparison state. Apply is disabled, Cancel only closes URL state, and no simulated or canonical sessions are invented. Conflict Resolution displays recorded risk, deficit, slack and warning reason codes without calculating or applying tradeoffs.
+- Added `/onboarding?step=1..6` for the approved term, courses, weekly schedule, availability/protection, workload and first-plan sequence. It reads real user-scoped account facts, supports Back/Forward and mobile step navigation, and never claims that viewing a step has persisted academic setup. Settings links to the setup overview.
+- ADR 0009 records the read-only presentation boundary and URL/focus behavior. Added projection, account-state, no-execution/no-Apply, responsive and browser-history tests. `pnpm verify` passed formatting, lint, 121-file package boundaries, Prisma validation, typecheck, unit tests, 66 integration tests, production build and all 20 Chromium browser tests; the existing preview regression remains isolated.
+- **Deferred:** onboarding/manual CRUD → Milestone 6; execution outcomes → Milestone 7; trusted scenario Apply/conflict resolution/explainability → Milestone 8; natural-language Planner execution → Milestone 10.
+- **Exact next slice:** full responsive, accessibility, visual-regression and fixture-removal pass. Milestone 5 remains in progress and the branch remains unmerged.
+
 ## 2026-09-25 — Milestone 5 secondary information surfaces
 
 - Replaced Courses, Availability, Settings and Integrations placeholders with authenticated, canonical-state screens. `secondaryViews` assembles owner-scoped presentation models inside repeatable-read snapshots; the UI never imports repositories or preview fixtures.

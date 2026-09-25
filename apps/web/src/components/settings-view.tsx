@@ -54,6 +54,7 @@ export function SettingsView({ model, section }: { model: SettingsViewModel; sec
             </Link>
           ))}
           <Link href="/integrations">Integrations</Link>
+          <Link href="/onboarding">Setup overview</Link>
         </nav>
         <section className="settings-panel" aria-labelledby="settings-section-title">
           <h2 id="settings-section-title">

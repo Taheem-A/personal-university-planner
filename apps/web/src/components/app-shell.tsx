@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppearanceControl } from "./appearance-control";
+import { PlannerSurface } from "./planner-surface";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 const primary: NavItem[] = [
@@ -71,6 +72,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const restoreTrigger = useRef(false);
   const triggerRef = useRef<HTMLAnchorElement>(null);
   const panel = search.get("panel");
   const detail =
@@ -78,22 +81,54 @@ export function AppShell({ children }: { children: ReactNode }) {
     (pathname === "/courses" ? null : search.get("course"));
   const scenario = search.get("scenario");
   const conflict = search.get("conflict");
-  const activePanel = panel || detail || scenario || conflict;
+  const activePanel = scenario ? "scenario" : conflict ? "conflict" : panel || detail;
   const params = new URLSearchParams(search.toString());
   params.set("panel", "planner");
   const plannerHref = `${pathname}?${params.toString()}`;
 
   const closePanel = useCallback(() => {
     const next = new URLSearchParams(search.toString());
-    for (const key of ["panel", "assessment", "course", "scenario", "conflict"]) next.delete(key);
+    if (scenario) next.delete("scenario");
+    else if (conflict) next.delete("conflict");
+    else if (panel) next.delete("panel");
+    else for (const key of ["assessment", "course"]) next.delete(key);
+    restoreTrigger.current = true;
     router.replace(next.size ? `${pathname}?${next}` : pathname, { scroll: false });
-    requestAnimationFrame(() => triggerRef.current?.focus());
-  }, [pathname, router, search]);
+  }, [pathname, router, search, scenario, conflict, panel]);
+  useEffect(() => {
+    if (!activePanel && restoreTrigger.current) {
+      restoreTrigger.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [activePanel]);
   useEffect(() => {
     if (!activePanel) return;
+    restoreTrigger.current = false;
     closeRef.current?.focus();
     function keydown(event: KeyboardEvent) {
       if (event.key === "Escape") closePanel();
+      if (event.key === "Tab" && panelRef.current) {
+        const focusable = Array.from(
+          panelRef.current.querySelectorAll<HTMLElement>(
+            "a[href], button:not([disabled]), input:not([disabled])",
+          ),
+        );
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!panelRef.current.contains(document.activeElement)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+          return;
+        }
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
     }
     document.addEventListener("keydown", keydown);
     return () => document.removeEventListener("keydown", keydown);
@@ -102,6 +137,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        const target = event.target as HTMLElement | null;
+        if (
+          target?.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")
+        )
+          return;
         event.preventDefault();
         router.push(plannerHref, { scroll: false });
       }
@@ -178,11 +219,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       <AnimatePresence>
         {activePanel && (
           <motion.aside
+            ref={panelRef}
             key="right-panel"
             className="right-panel"
-            aria-label="Detail panel"
+            aria-label={
+              activePanel === "planner"
+                ? "Planner panel"
+                : activePanel === "scenario"
+                  ? "Scenario preview"
+                  : activePanel === "conflict"
+                    ? "Conflict resolution"
+                    : "Detail panel"
+            }
             role="dialog"
-            aria-modal="false"
+            aria-modal="true"
             initial={reduced ? false : { x: 28, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={reduced ? { opacity: 0 } : { x: 28, opacity: 0 }}
@@ -192,13 +242,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div>
                 <p className="panel-kicker">University Planner</p>
                 <h2>
-                  {panel === "planner"
+                  {activePanel === "planner"
                     ? "Planner"
-                    : detail
-                      ? "Detail"
-                      : scenario
-                        ? "Scenario"
-                        : "Conflict"}
+                    : activePanel === "scenario"
+                      ? "Scenario preview"
+                      : activePanel === "conflict"
+                        ? "Conflict resolution"
+                        : "Detail"}
                 </h2>
               </div>
               <button
@@ -210,11 +260,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <X size={18} />
               </button>
             </div>
-            <p className="panel-message">
-              {panel === "planner"
-                ? "Planner commands will be available in a later Milestone 5 slice."
-                : "This detail view will be connected in a later Milestone 5 slice."}
-            </p>
+            {activePanel === "planner" ||
+            activePanel === "scenario" ||
+            activePanel === "conflict" ? (
+              <PlannerSurface
+                key={activePanel}
+                kind={activePanel}
+                pathname={pathname}
+                search={search.toString()}
+                onClose={closePanel}
+              />
+            ) : (
+              <p className="panel-message">This detail is available from its owning screen.</p>
+            )}
           </motion.aside>
         )}
       </AnimatePresence>
