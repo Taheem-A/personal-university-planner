@@ -96,7 +96,7 @@ test("zero-to-current migrations enforce per-user revision, idempotency and roll
   }
 });
 
-test("Milestone-3 schema upgrades through both Milestone-4 migrations without losing records", async () => {
+test("Milestone-3 schema upgrades through all Milestone-4 migrations without losing records", async () => {
   const db = new PGlite();
   try {
     for (const name of names.filter((name) => name < "0007_")) await apply(db, name);
@@ -108,6 +108,14 @@ test("Milestone-3 schema upgrades through both Milestone-4 migrations without lo
       WHERE table_name = 'PlannerRun' AND column_name IN ('idempotencyScope','idempotencyKey')`)
     ).rows;
     assert.equal(columns.length, 2);
+    assert.equal(
+      (
+        await db.query(`SELECT count(*)::int AS count FROM pg_indexes
+        WHERE tablename = 'PlannerRun'
+          AND indexname = 'PlannerRun_userId_triggerType_idempotencyScope_idempotencyK_key'`)
+      ).rows[0].count,
+      1,
+    );
     await db.query(runSql, ["upgrade-run", "existing-user", "MANUAL", null, null]);
     assert.equal(
       (await db.query(`SELECT "status" FROM "PlannerRun" WHERE "id" = 'upgrade-run'`)).rows[0]

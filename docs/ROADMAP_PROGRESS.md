@@ -1,12 +1,13 @@
 # Roadmap progress
 
-## 2026-09-24 — Milestone 4 final acceptance: GITHUB CHECKS PENDING
+## 2026-09-24 — Milestone 4 final acceptance: GATE PASSED
 
 - Audited the Planner Service, all nine trigger paths, incremental policy, revision/idempotency/supersession semantics, Today/Week reads, history and package boundaries against the literal Milestone-4 requirements. The evidence matrix is [Milestone-4 exit gate](./milestone-4-exit-gate.md).
 - Replayed migrations 0001–0009 from zero on an expiring disposable Neon branch in project `purple-tooth-70442528`. Migration status is current and Prisma schema drift is zero. Forward-only migration 0009 corrects PostgreSQL's truncated 0008 idempotency index name.
 - Guarded live PostgreSQL race and full Planner Service acceptance commands passed with synthetic users: generation/reload, incremental supersession, preserved manual/locked work, quantified infeasibility, safe failure, overlapping same-user plans, independent users, canonical edit race and duplicate event delivery.
 - Fixed keyed redelivery to retrieve the existing run before attempting to assemble newly changed canonical input; added a regression test. Full local `pnpm verify` passed with 140 unit, 39 integration and 2 browser tests. Planner scenarios passed 13/13, properties 2/2, and dependency audit found no known high-severity vulnerabilities.
-- **Final-head GitHub CI and dependency review are pending.** Milestone 4 remains **IN PROGRESS**. Exact next action: obtain both check results, record their run IDs in the exit gate, and only then mark the gate passed. Milestone 5 has not started.
+- GitHub [CI run 36081951021](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081951021) and [dependency review run 36081950998](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081950998) both passed on acceptance implementation head `b4ba27248e5ef68d254b8eead30e9b3adc2b9c20`. Draft [PR #5](https://github.com/Taheem-A/personal-university-planner/pull/5) supplies the pull-request check context and remains unmerged. Documentation-head checks are verified before it is marked ready.
+- **Milestone 4 — GATE PASSED.** Exact next roadmap item: **Milestone 5 — Production Next.js UI and Real-State Migration**. It has not started.
 
 ## 2026-09-24 — Milestone 4 production planner read contracts: IN PROGRESS
 

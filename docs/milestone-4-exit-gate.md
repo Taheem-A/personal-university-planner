@@ -4,7 +4,7 @@ Date: 2026-09-24. Branch: `plan/milestone-4-planner-service` against `master`.
 
 ## Evidence scope and verdict
 
-**Acceptance pending final-head GitHub CI and dependency review.** The local and disposable PostgreSQL proof below passed. The final gate will be marked passed only after both required GitHub checks succeed on the final implementation/documentation head. Milestone 5 has not started.
+**Verdict: GATE PASSED.** Local, disposable PostgreSQL and GitHub CI/dependency-review evidence passed on implementation head `b4ba27248e5ef68d254b8eead30e9b3adc2b9c20`. The documentation-head checks are verified separately before the draft PR is marked ready. Milestone 5 has not started.
 
 The source checkout contains the Milestone-4 instructions and roadmap progress, but no separate master specification or implementation-roadmap source file. This audit uses the literal Milestone-4 requirements supplied for this project, ADRs 0005/0006, the current implementation, and the Milestone-3 exit-gate evidence standard. It does not infer requirements from visual fixtures.
 
@@ -69,8 +69,8 @@ The dedicated database started empty. Source-controlled migrations `0001` throug
 
 Local `pnpm verify` passed: format, lint, 82-source-file package boundaries, Prisma generation/validation, strict typecheck, **140/140 unit tests**, **39/39 integration tests**, core/database/Next.js production build and **2/2 Chromium E2E tests**. Dedicated planner scenarios passed **13/13**. Planner properties passed **2/2**, covering the fixed-seed randomized invariant sweep and deterministic repeated output. `pnpm check:dependencies` found no known high-severity vulnerabilities.
 
-GitHub Actions final-head CI: **pending**. GitHub dependency review: **pending**. These workflows are pull-request triggered, so an explicitly draft acceptance PR is used solely to obtain their final-head evidence before declaring this gate passed. The branch must remain unmerged.
+[GitHub CI run 36081951021](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081951021) passed on implementation head `b4ba27248e5ef68d254b8eead30e9b3adc2b9c20`: its `verify` job ran the complete repository verification on Node 24.21.0 and pnpm 12.5.1 with Chromium. [Dependency review run 36081950998](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081950998) also passed on that head. These workflows are pull-request triggered, so [draft PR #5](https://github.com/Taheem-A/personal-university-planner/pull/5) supplied the check context. Documentation-head checks are additionally verified before the PR is marked ready. The branch remains unmerged.
 
 ## Final verdict
 
-**PENDING** final-head GitHub CI and dependency review. After both succeed, record exact run IDs, mark Milestone 4 **GATE PASSED**, and name the next roadmap item **Milestone 5 — Production Next.js UI and Real-State Migration**. Do not implement that milestone in this branch.
+**Milestone 4 — GATE PASSED.** Every literal requirement above has implementation, automated and live evidence as applicable. The exact next roadmap item is **Milestone 5 — Production Next.js UI and Real-State Migration**. It has not started. PR #5 is for review only and must not be merged by this acceptance task.
