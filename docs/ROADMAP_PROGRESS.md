@@ -1,13 +1,14 @@
 # Roadmap progress
 
-## 2026-09-25 — Milestone 5 literal exit-gate audit in progress
+## 2026-09-25 — Milestone 5 literal exit-gate audit blocked on final-head proof
 
 - Audited the literal roadmap and frozen UI/interface/accessibility requirements against all production routes, ADRs 0007–0009, package boundaries, approved preview and design captures. The [Milestone-5 exit-gate matrix](./milestone-5-exit-gate.md) names each implementation and its proof. Milestone 4's merged planner contracts and tests remain intact.
 - Created an expiring schema-only disposable Neon branch and `up_test_m5_ui_gate_20260925` database. Migrations 0001–0009, guarded synthetic seed and seed assertion passed. A new guarded test reads nine production screen families through the real application services and renders their actual components. A separate synthetic actor produces a real successful PlannerRun and generated sessions through the Milestone-4 service.
 - Guarded Chromium browser proof used a test-only signed Auth.js session, the unchanged protected Next.js routes and the disposable database. Nine real-state routes rendered; signed-out access redirected; CURRENT, FAILED, light/dark persistence and mobile Today were observed. No test identity route or runtime bypass was added to production.
 - The populated capture revealed an overnight Today item labelled with the preceding day's start time. Today now projects a clipped visible segment for its selected local day while retaining canonical instants; the live test guards it. The Today capture helper now uses the real course-colour mapper. Approved preview code remains unchanged.
 - Local `pnpm verify` passed after the production fixes: format, lint, 123-source-file boundaries, Prisma generation/validation, strict typecheck, 150 unit, 66 integration, optimized build and 28 Chromium E2E tests. Guarded real-state service/component and authenticated browser tests passed 1/1 each. Direct dedicated reruns passed 13/13 planner scenarios and 2/2 properties. The local dependency audit and final-head CI/dependency review remain the exact gate work.
-- **Status: IN PROGRESS, not GATE PASSED.** No completion PR or merge. Milestones 6+ remain deferred.
+- The attached runtime changed from pinned Node 24.21.0/pnpm 12.5.1 to Node 24.19.0/pnpm 11.19.0; final `pnpm verify` and dependency-audit retries refused to run rather than replace `node_modules`. Direct format/lint/boundary/typecheck and dedicated unit/integration/planner suites still passed. A local audit implementation commit was made, but `git push` could not reach GitHub. The GitHub write connector rejected the upload under approval policy `never`, and a network permission request returned no grant. No final-head CI/dependency review or completion PR exists.
+- **Status: BLOCKED, not GATE PASSED.** Restore pinned runtime and GitHub access, rerun the final checks, then obtain green CI/dependency review on the final PR head. No merge; Milestones 6+ remain deferred.
 
 ## 2026-09-25 — Milestone 5 responsive, accessibility, visual and fixture hardening
 
