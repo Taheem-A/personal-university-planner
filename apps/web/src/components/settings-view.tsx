@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { SettingsViewModel } from "../server/application/secondary-reads";
 import { AppearanceControl } from "./appearance-control";
+import { TimezoneForm } from "./timezone-form";
 
 const sections = [
   ["general", "General"],
@@ -70,7 +71,12 @@ export function SettingsView({ model, section }: { model: SettingsViewModel; sec
               <SettingRow
                 label="Time zone"
                 description="Deadlines and recurring rules use this time zone."
-                value={model.user.timezone}
+                value={
+                  <>
+                    {model.user.timezone}
+                    <TimezoneForm initialTimezone={model.user.timezone} />
+                  </>
+                }
               />
               <SettingRow
                 label="Active term"

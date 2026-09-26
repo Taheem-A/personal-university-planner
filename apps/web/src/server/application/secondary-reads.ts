@@ -30,6 +30,11 @@ export interface CourseListItem {
 }
 export interface CourseDetailModel {
   id: string;
+  version: number;
+  academicTermId: string;
+  termVersion: number;
+  source: string;
+  sourceAuthority: string;
   code: string;
   name: string;
   colorReference: string | null;
@@ -43,12 +48,16 @@ export interface CourseDetailModel {
   defaultTaskLocation: string[];
   meetings: {
     id: string;
+    version: number;
     type: string;
     location: string | null;
     recurrenceRule: string;
     startTimeLocal: string;
     endTimeLocal: string;
     timezone: string;
+    spansNextDay: boolean;
+    effectiveFrom: string;
+    effectiveUntil: string | null;
     attendanceRequired: boolean;
   }[];
   assessments: {
@@ -109,6 +118,7 @@ export interface SettingsViewModel {
   };
   activeTerm: { name: string; startDate: string; endDate: string } | null;
   preferences: {
+    version: number;
     preferredDailyStudyLimitMinutes: number;
     minimumFreeTimeMinutes: number;
     preferredDeadlineBufferHours: number;
@@ -265,6 +275,11 @@ export function buildCourses(
     const taskIds = new Set(ownTasks.map((task) => task.id));
     selectedCourse = {
       id: selected.id,
+      version: selected.version,
+      academicTermId: selected.academicTermId,
+      termVersion: term.version,
+      source: selected.source,
+      sourceAuthority: selected.sourceAuthority,
       code: selected.code,
       name: selected.name,
       colorReference: selected.colorReference,
@@ -285,12 +300,16 @@ export function buildCourses(
         )
         .map((meeting) => ({
           id: meeting.id,
+          version: meeting.version,
           type: meeting.meetingType,
           location: meeting.location,
           recurrenceRule: meeting.recurrenceRule,
           startTimeLocal: meeting.startTimeLocal,
           endTimeLocal: meeting.endTimeLocal,
           timezone: meeting.timezone,
+          spansNextDay: meeting.spansNextDay,
+          effectiveFrom: meeting.effectiveFrom,
+          effectiveUntil: meeting.effectiveUntil,
           attendanceRequired: meeting.attendanceRequired,
         })),
       assessments: ownAssessments
@@ -538,6 +557,7 @@ export function buildSettings(state: PlanningStateSnapshot): SettingsViewModel {
       : null,
     preferences: preference
       ? {
+          version: preference.version,
           preferredDailyStudyLimitMinutes: preference.preferredDailyStudyLimitMinutes,
           minimumFreeTimeMinutes: preference.minimumFreeTimeMinutes,
           preferredDeadlineBufferHours: preference.preferredDeadlineBufferHours,

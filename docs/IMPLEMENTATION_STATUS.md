@@ -1,5 +1,9 @@
 # Implementation status
 
+## Milestone 6 — IN PROGRESS
+
+The first slice establishes the trusted UI write boundary: shared guarded JSON transport and client result semantics, reusable accessible form controls, conditional authenticated timezone mutation, narrow editor values in existing projections, and a literal [Milestone-6 gate scaffold](./milestone-6-exit-gate.md). A saved timezone and its post-commit planner result are reported separately. Local `pnpm verify` passed 150 unit, 71 integration and 28 Chromium tests; live Milestone-6 acceptance remains open. Verification details and blockers are recorded in [roadmap progress](./ROADMAP_PROGRESS.md). **Exact next item: Milestone 6 Step 2 — Academic Structure and Timetable Manual Management.**
+
 ## Current milestone status
 
 **Milestone 5 — COMPLETE / GATE PASSED and merged.** [PR #7](https://github.com/Taheem-A/personal-university-planner/pull/7) merged into `master` at `53591b57f897171bc52a1b8266dbcb25b4ee0990`. Final implementation head `d26f065a0aab5cd6b5a6d651bbd94dbe638a2411` passed pinned-runtime [GitHub CI](https://github.com/Taheem-A/personal-university-planner/actions/runs/36214498969) and [dependency review](https://github.com/Taheem-A/personal-university-planner/actions/runs/36214498924). The [requirement-by-requirement exit-gate matrix](./milestone-5-exit-gate.md) maps production screens, architecture, accessibility and responsive behavior to code and proof. Guarded synthetic PostgreSQL and authenticated browser runs rendered canonical state through real read services. Local `pnpm verify` passed 150 unit, 66 integration and 28 Chromium tests. Milestones 6+ remain deferred.

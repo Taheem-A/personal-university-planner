@@ -107,12 +107,12 @@ for (const filePath of sourceFiles) {
     violations.push(`${relativeFile}: client imports must use literal specifiers`);
   }
   if (
-    isTransport &&
+    (isTransport || isClient) &&
     /\b(?:applicationDatabase|createDatabase|getDatabase)\s*\(|\.(?:repositories|\$queryRaw|\$executeRaw)\b/.test(
       source,
     )
   ) {
-    violations.push(`${relativeFile}: transport cannot query the database or repositories`);
+    violations.push(`${relativeFile}: transport/client cannot query the database or repositories`);
   }
   for (const match of source.matchAll(importPattern)) {
     const specifier = match[1];

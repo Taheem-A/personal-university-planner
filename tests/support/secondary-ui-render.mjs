@@ -41,6 +41,15 @@ function load(file, dependencies = {}) {
         AppearanceControl: () =>
           React.createElement("button", { "aria-label": "Use dark appearance" }, "Appearance"),
       };
+    if (name === "./timezone-form")
+      return {
+        TimezoneForm: () =>
+          React.createElement(
+            "button",
+            { type: "button", className: "button button-secondary" },
+            "Change time zone",
+          ),
+      };
     if (name === "@university-planner/shared")
       return {
         addLocalDays: (date, days) =>

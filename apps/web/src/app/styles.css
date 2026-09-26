@@ -2379,6 +2379,76 @@ a {
 .capture-result.error {
   color: var(--color-danger);
 }
+.mutation-field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: var(--space-3) 0;
+}
+.mutation-field label,
+.mutation-days legend {
+  font-weight: var(--weight-medium);
+}
+.mutation-field input:not([type="checkbox"]),
+.mutation-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+.mutation-field [aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+.mutation-field p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+.mutation-field .mutation-field-error,
+.mutation-status.error {
+  color: var(--color-danger);
+}
+.mutation-check label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+.mutation-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-action-primary);
+}
+.mutation-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+}
+.mutation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.mutation-actions .button,
+.timezone-form > .button {
+  min-height: 44px;
+}
+.mutation-summary {
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+}
+.mutation-status {
+  margin: var(--space-2) 0;
+  color: var(--color-success);
+}
 .inbox-tabs {
   display: flex;
   gap: 8px;

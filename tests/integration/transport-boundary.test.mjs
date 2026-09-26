@@ -395,9 +395,13 @@ test("package policy rejects transport imports and direct repository use", () =>
     writeFileSync(routeFile, 'import { getDatabase } from "@university-planner/database";\n');
     assert.match(check().stderr, /transport may import services/);
     writeFileSync(routeFile, "const row = tx.repositories.tasks.getForUser(id, id);\n");
-    assert.match(check().stderr, /transport cannot query/);
+    assert.match(check().stderr, /transport\/client cannot query/);
     writeFileSync(routeFile, 'import { tasks } from "../../../../server/application/academic";\n');
     assert.equal(check().status, 0);
+    const clientFile = path.join(root, "apps/web/src/components/unsafe.tsx");
+    mkdirSync(path.dirname(clientFile), { recursive: true });
+    writeFileSync(clientFile, '"use client";\nconst row = tx.repositories.users.getById(id);\n');
+    assert.match(check().stderr, /transport\/client cannot query/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

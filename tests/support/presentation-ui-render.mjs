@@ -23,9 +23,18 @@ function load(file) {
   const require = (name) =>
     name === "next/link"
       ? { __esModule: true, default: Link }
-      : name === "lucide-react"
-        ? webRequire(name)
-        : webRequire(name);
+      : name === "./timezone-form"
+        ? {
+            TimezoneForm: () =>
+              React.createElement(
+                "button",
+                { type: "button", className: "button button-secondary" },
+                "Change time zone",
+              ),
+          }
+        : name === "lucide-react"
+          ? webRequire(name)
+          : webRequire(name);
   vm.runInNewContext(
     javascript,
     { exports, require, Date, Intl, URLSearchParams },

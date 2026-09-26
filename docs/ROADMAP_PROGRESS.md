@@ -1,5 +1,12 @@
 # Roadmap progress
 
+## 2026-09-26 — Milestone 6 mutation/UI-write foundation IN PROGRESS
+
+- Created `flow/milestone-6-manual-management` from current `master`. Added the literal [Milestone-6 exit-gate scaffold](./milestone-6-exit-gate.md); all end-to-end requirements remain NOT YET PROVEN.
+- Added a reusable client result vocabulary and form controls, adapted raw Quick Capture to it, and exposed an authenticated, conditional timezone mutation in Settings/onboarding. The timezone operation returns only the saved timezone and a safe planner outcome. Canonical UTC instants remain unchanged.
+- Added selected-course/meeting and preference edit values and versions to authorized read projections; no credentials or planner snapshots are exposed.
+- Local `pnpm verify` passed: formatting, lint, 128-source-file package boundaries, Prisma generation/validation, strict typecheck, 150/150 unit tests, 71/71 integration tests, optimized build and 28/28 Chromium tests. Focused route/form tests cover actor derivation, same origin, rollback, stale writes, safe persisted response, keyboard semantics and explicit DST-safe deadline conversion. The local host used Node 26.7.0; the repository CI toolchain is pinned to Node 24.21.0. No live Milestone-6 account/database acceptance was run in this foundation slice. Blockers: none for Step 2. **Exact next item: Milestone 6 Step 2 — Academic Structure and Timetable Manual Management.**
+
 ## 2026-09-25 — Milestone 5 merged and complete
 
 - [Implementation PR #7](https://github.com/Taheem-A/personal-university-planner/pull/7) merged into `master` as `53591b57f897171bc52a1b8266dbcb25b4ee0990`. Final implementation head `d26f065a0aab5cd6b5a6d651bbd94dbe638a2411` is included in that merge and passed pinned-runtime [CI run 36214498969](https://github.com/Taheem-A/personal-university-planner/actions/runs/36214498969) and [dependency review run 36214498924](https://github.com/Taheem-A/personal-university-planner/actions/runs/36214498924).

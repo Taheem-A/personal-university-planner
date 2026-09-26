@@ -2,6 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { submitMutation } from "./mutation-client";
+
+function savedCapture(value: unknown): value is { id: string; status: "ACTIVE" } {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    typeof (value as { id?: unknown }).id === "string" &&
+    (value as { status?: unknown }).status === "ACTIVE",
+  );
+}
 
 export function QuickCapture({ focusOnMount }: { focusOnMount: boolean }) {
   const router = useRouter();
@@ -23,16 +33,16 @@ export function QuickCapture({ focusOnMount }: { focusOnMount: boolean }) {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/v1/inbox/capture", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText }),
-      });
-      const result = await response.json();
-      if (!response.ok || !result.data?.id) {
+      const result = await submitMutation(
+        "/api/v1/inbox/capture",
+        "POST",
+        { rawText },
+        savedCapture,
+      );
+      if (!result.ok) {
         setMessage({
           type: "error",
-          text: result.error?.message ?? "Capture could not be saved. Try again.",
+          text: result.message,
         });
         return;
       }

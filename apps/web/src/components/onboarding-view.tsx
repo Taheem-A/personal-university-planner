@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { OnboardingViewModel } from "../server/application/secondary-reads";
+import { TimezoneForm } from "./timezone-form";
 
 const steps = [
   { name: "Academic term", description: "The semester that anchors your plan." },
@@ -55,10 +56,13 @@ export function OnboardingView({ model, step }: { model: OnboardingViewModel; st
             <p>{evidence[index]}</p>
           </div>
           {step === 1 && (
-            <p className="onboarding-note">
-              Your timezone is {model.timezone}. The next release will let you enter and update
-              these facts here.
-            </p>
+            <div className="onboarding-note">
+              <p>
+                Your time zone is {model.timezone}. Confirm or change it before entering dated
+                facts.
+              </p>
+              <TimezoneForm initialTimezone={model.timezone} />
+            </div>
           )}
           {step === 6 && (
             <p className="onboarding-note">
