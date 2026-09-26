@@ -1,5 +1,12 @@
 # Roadmap progress
 
+## 2026-09-25 — Milestone 5 literal exit gate passed; awaiting merge
+
+- The [requirement-by-requirement exit gate](./milestone-5-exit-gate.md) now identifies production implementation and repeatable proof for every literal Milestone-5 requirement. The production UI reads authenticated canonical view models, keeps preview fixtures isolated, and preserves the Milestone-4 Planner Service and trust boundaries.
+- Local `pnpm verify` passed on `0a988d99ee11cec0cff8b2a8f29435879cad5f52`: 150/150 unit, 66/66 integration, 28/28 Chromium E2E, formatting, lint, 123-source-file boundaries, Prisma generation/validation, strict typecheck and optimized build. Planner scenarios passed 13/13, properties 2/2, and `pnpm check:dependencies` found no known vulnerabilities. Guarded synthetic PostgreSQL service/component and authenticated browser proofs had passed 1/1 each on the unchanged production implementation.
+- Draft [PR #7](https://github.com/Taheem-A/personal-university-planner/pull/7) triggered pinned-runtime [CI run 36214277788](https://github.com/Taheem-A/personal-university-planner/actions/runs/36214277788) and [dependency review run 36214277825](https://github.com/Taheem-A/personal-university-planner/actions/runs/36214277825); both passed on implementation head `0a988d99ee11cec0cff8b2a8f29435879cad5f52`. Final documentation-head checks must pass before the PR is made ready.
+- **Milestone 5 — GATE PASSED, awaiting merge.** This task does not merge. Milestone 6 manual management, Milestone 7 execution outcomes, Milestone 8 trusted scenarios/conflict resolution, Milestone 9 Google Calendar, Milestone 10 natural-language Planner execution and Milestone 14 LMS remain deferred.
+
 ## 2026-09-25 — Milestone 5 literal exit-gate audit blocked on final-head proof
 
 - Audited the literal roadmap and frozen UI/interface/accessibility requirements against all production routes, ADRs 0007–0009, package boundaries, approved preview and design captures. The [Milestone-5 exit-gate matrix](./milestone-5-exit-gate.md) names each implementation and its proof. Milestone 4's merged planner contracts and tests remain intact.
