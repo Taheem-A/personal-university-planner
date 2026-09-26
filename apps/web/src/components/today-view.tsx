@@ -132,7 +132,9 @@ function TodayTimelineItem({
   model: TodayViewModel;
   selected: boolean;
 }) {
-  const span = `${clock(item.startAt, model.timezone)}–${clock(item.endAt, model.timezone)}`;
+  const displayStart = item.visibleStartAt ?? item.startAt;
+  const displayEnd = item.visibleEndAt ?? item.endAt;
+  const span = `${clock(displayStart, model.timezone)}–${clock(displayEnd, model.timezone)}`;
   const color = courseColor(item.courseColorReference);
   let content;
   if (item.kind === "WORK") {
@@ -161,8 +163,8 @@ function TodayTimelineItem({
   }
   return (
     <li className="today-timeline-row">
-      <time className="today-time" dateTime={item.startAt.toISOString()}>
-        {clock(item.startAt, model.timezone)}
+      <time className="today-time" dateTime={displayStart.toISOString()}>
+        {clock(displayStart, model.timezone)}
       </time>
       {item.kind === "WORK" ? (
         <Link

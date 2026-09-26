@@ -288,6 +288,9 @@ test("Today projects real active work, commitments, sleep, commute and durable r
   assert.ok(today.timeline.some((item) => item.kind === "COURSE_MEETING"));
   assert.ok(today.timeline.some((item) => item.kind === "EVENT"));
   assert.ok(today.timeline.some((item) => item.kind === "SLEEP"));
+  const previousNight = today.timeline.find((item) => item.startAt < item.visibleStartAt);
+  assert.equal(previousNight.visibleStartAt.toISOString(), "2026-03-09T04:00:00.000Z");
+  assert.ok(today.timeline.every((item) => item.visibleStartAt < item.visibleEndAt));
   assert.ok(today.timeline.some((item) => item.kind === "COMMUTE_WINDOW"));
   assert.deepEqual(
     today.remainingTasks.map((task) => task.id),

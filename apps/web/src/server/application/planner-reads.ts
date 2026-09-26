@@ -186,6 +186,9 @@ export interface ScheduleItem {
   kind: "WORK" | "EVENT" | "COURSE_MEETING" | "PROTECTED" | "SLEEP" | "COMMUTE_WINDOW";
   startAt: Date;
   endAt: Date;
+  /** Visible segment within the selected Today local day; original instants remain authoritative. */
+  visibleStartAt?: Date;
+  visibleEndAt?: Date;
   title: string;
   taskId?: string;
   courseId?: string;
@@ -485,8 +488,12 @@ export function buildToday(
   date: string,
   now: Date,
 ): TodayViewModel {
-  const timeline = schedule(state, date, 1, successful);
   const { startAt, endAt } = bounds(date, state.user.timezone, 1);
+  const timeline = schedule(state, date, 1, successful).map((item) => ({
+    ...item,
+    visibleStartAt: new Date(Math.max(item.startAt.getTime(), startAt.getTime())),
+    visibleEndAt: new Date(Math.min(item.endAt.getTime(), endAt.getTime())),
+  }));
   const work = timeline.filter((item) => item.kind === "WORK");
   const taskById = new Map(state.tasks.map((task) => [task.id, task]));
   const courseById = new Map(state.courses.map((course) => [course.id, course]));

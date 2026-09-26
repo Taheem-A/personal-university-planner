@@ -28,7 +28,7 @@ function load(file, overrides = {}) {
     if (name === "next/link") return { __esModule: true, default: Link };
     if (name === "lucide-react") return webRequire(name);
     if (name === "./planner-primitives") return overrides.primitives;
-    if (name === "./course-color") return { courseColor: () => "violet" };
+    if (name === "./course-color") return overrides.courseColor;
     if (name === "./today-selection-close")
       return {
         TodaySelectionClose: () =>
@@ -41,7 +41,8 @@ function load(file, overrides = {}) {
 }
 
 const primitives = load("planner-primitives.tsx");
-const { TodayView } = load("today-view.tsx", { primitives });
+const courseColor = load("course-color.ts");
+const { TodayView } = load("today-view.tsx", { primitives, courseColor });
 
 export function renderToday(model, selectedSession = null, selectedTask = null) {
   return renderToStaticMarkup(
