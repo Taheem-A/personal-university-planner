@@ -23,5 +23,10 @@ export default async function Page({
       </div>
     );
   }
-  return <CoursesView model={result.value} />;
+  return (
+    <CoursesView
+      model={result.value}
+      edit={typeof query.edit === "string" ? query.edit : undefined}
+    />
+  );
 }

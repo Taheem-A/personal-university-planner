@@ -6,6 +6,7 @@ import type {
   AvailabilityViewModel,
 } from "../server/application/secondary-reads";
 import { courseColor } from "./course-color";
+import { EventEditor } from "./manual-editors";
 
 const kinds: Record<AvailabilityItem["kind"], string> = {
   EVENT: "Fixed event",
@@ -58,9 +59,13 @@ function AvailabilityEntry({ item, timezone }: { item: AvailabilityItem; timezon
     </li>
   );
 }
-export function AvailabilityView({ model }: { model: AvailabilityViewModel }) {
+export function AvailabilityView({ model, edit }: { model: AvailabilityViewModel; edit?: string }) {
   const previous = addLocalDays(model.weekStart, -7);
   const next = addLocalDays(model.weekStart, 7);
+  const parent = `/availability?date=${model.weekStart}`;
+  const selectedEvent = edit?.startsWith("event:")
+    ? model.manualEvents.find((event) => event.id === edit.slice(6))
+    : undefined;
   return (
     <div className="route-content availability-content">
       <header className="page-header">
@@ -102,6 +107,46 @@ export function AvailabilityView({ model }: { model: AvailabilityViewModel }) {
         protected · {model.ruleCounts.softProtected} soft protected · {model.ruleCounts.sleep} sleep
         rules. A rule can occur more than once this week.
       </p>
+      <section className="manual-structure" aria-labelledby="commitments-title">
+        <div className="manual-section-head">
+          <h2 id="commitments-title">Fixed commitments this week</h2>
+          <Link className="button button-primary" href={`${parent}&edit=event-new`}>
+            Add fixed commitment
+          </Link>
+        </div>
+        {model.manualEvents.length ? (
+          <ul className="manual-term-list">
+            {model.manualEvents.map((event) => (
+              <li key={event.id}>
+                <span>
+                  <strong>{event.title}</strong> · {clock(event.startAt, model.timezone)}–
+                  {clock(event.endAt, model.timezone)} · {event.constraintLevel.toLowerCase()}
+                </span>
+                <Link
+                  className="button button-secondary"
+                  href={`${parent}&edit=event:${encodeURIComponent(event.id)}`}
+                >
+                  Edit event
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="secondary-empty">No manually created fixed events in this week.</p>
+        )}
+        <p className="manual-help">
+          Recurring classes follow your course timetable.{" "}
+          <Link href="/courses">Manage course meetings</Link>.
+        </p>
+      </section>
+      {(edit === "event-new" || selectedEvent) && (
+        <EventEditor
+          key={selectedEvent?.id ?? "new-event"}
+          event={selectedEvent}
+          model={model}
+          returnTo={parent}
+        />
+      )}
       <div className="availability-matrix" aria-hidden="true">
         <table>
           <thead>
@@ -163,8 +208,8 @@ export function AvailabilityView({ model }: { model: AvailabilityViewModel }) {
           grid.
         </p>
         <p>
-          Creating, changing, and removing availability or protected-time rules is part of the
-          manual-management milestone. Calendar provider sync comes later.
+          Availability and protected-time rule editing follows in a later Milestone 6 slice.
+          Calendar provider sync comes later.
         </p>
       </section>
     </div>

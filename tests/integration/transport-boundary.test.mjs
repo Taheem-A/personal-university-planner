@@ -44,7 +44,15 @@ function app(file, stubs) {
 let currentUser = "a";
 let forcedFailure = false;
 let internalSignals = 0;
-const rows = { terms: [], courses: [], tasks: [], availability: [], integrations: [] };
+const rows = {
+  terms: [],
+  courses: [],
+  meetings: [],
+  events: [],
+  tasks: [],
+  availability: [],
+  integrations: [],
+};
 const owned = (collection, user, id) =>
   rows[collection].find((r) => r.userId === user && r.id === id) ?? null;
 const conditional = (collection, user, id, version, patch) => {
@@ -74,6 +82,26 @@ const repo = {
     getForUser: async (u, id) => owned("courses", u, id),
     listForTerm: async (u, id) =>
       rows.courses.filter((r) => r.userId === u && r.academicTermId === id),
+    updateIfCurrent: async (u, id, v, p) => conditional("courses", u, id, v, p),
+  },
+  courseMeetings: {
+    create: async (r) => {
+      rows.meetings.push(r);
+      return r;
+    },
+    getForUser: async (u, id) => owned("meetings", u, id),
+    listForCourse: async (u, id) =>
+      rows.meetings.filter((r) => r.userId === u && r.courseId === id),
+    updateIfCurrent: async (u, id, v, p) => conditional("meetings", u, id, v, p),
+  },
+  calendarEvents: {
+    create: async (r) => {
+      rows.events.push(r);
+      return r;
+    },
+    getForUser: async (u, id) => owned("events", u, id),
+    listForRange: async (u) => rows.events.filter((r) => r.userId === u),
+    updateIfCurrent: async (u, id, v, p) => conditional("events", u, id, v, p),
   },
   tasks: {
     create: async (r) => {
@@ -159,6 +187,10 @@ const schedule = app("application/schedule", {
   "./planner-triggers": plannerTriggerStub,
   "./validation": validation,
 });
+const manual = app("application/manual-management", {
+  "./academic": academic(),
+  "./schedule": schedule,
+});
 const lifecycle = app("application/lifecycle", {
   "./planner-reads": { planHistoryItem: (run) => run },
   "./authorization": auth,
@@ -192,6 +224,38 @@ const availability = route("availability", {
   "../../../../server/application/schedule": schedule,
   "../../../../server/transport": transport,
 });
+const manualTerms = route("manual/terms", {
+  "../../../../../server/application/manual-management": manual,
+  "../../../../../server/transport": transport,
+});
+const manualTerm = route("manual/terms/[id]", {
+  "../../../../../../server/application/manual-management": manual,
+  "../../../../../../server/transport": transport,
+});
+const manualCourses = route("manual/courses", {
+  "../../../../../server/application/manual-management": manual,
+  "../../../../../server/transport": transport,
+});
+const manualCourse = route("manual/courses/[id]", {
+  "../../../../../../server/application/manual-management": manual,
+  "../../../../../../server/transport": transport,
+});
+const manualMeetings = route("manual/meetings", {
+  "../../../../../server/application/manual-management": manual,
+  "../../../../../server/transport": transport,
+});
+const manualMeeting = route("manual/meetings/[id]", {
+  "../../../../../../server/application/manual-management": manual,
+  "../../../../../../server/transport": transport,
+});
+const manualEvents = route("manual/events", {
+  "../../../../../server/application/manual-management": manual,
+  "../../../../../server/transport": transport,
+});
+const manualEvent = route("manual/events/[id]", {
+  "../../../../../../server/application/manual-management": manual,
+  "../../../../../../server/transport": transport,
+});
 const exportRoute = route("account/export", {
   "../../../../../server/application/lifecycle": lifecycle,
   "../../../../../server/transport": transport,
@@ -207,6 +271,13 @@ async function parsed(response) {
   return { status: response.status, body: await response.json() };
 }
 const context = (id) => ({ params: Promise.resolve({ id }) });
+function mutation(path, method, payload, origin = "http://localhost:3000") {
+  return new Request(`http://localhost:3000/api/v1/manual/${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", Origin: origin },
+    body: JSON.stringify(payload),
+  });
+}
 
 test("actual route adapters enforce actor, validation, ownership, versions, rollback and redacted export", async () => {
   currentUser = null;
@@ -405,4 +476,225 @@ test("package policy rejects transport imports and direct repository use", () =>
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("manual route adapters persist owned facts and return narrow safe outcomes", async () => {
+  currentUser = null;
+  assert.equal(
+    (
+      await parsed(
+        await manualTerms.POST(
+          mutation("terms", "POST", {
+            name: "Fall",
+            startDate: "2026-09-01",
+            endDate: "2026-12-20",
+          }),
+        ),
+      )
+    ).status,
+    401,
+  );
+  currentUser = "manual-a";
+  const termInput = { name: "Fall", startDate: "2026-09-01", endDate: "2026-12-20" };
+  assert.equal(
+    (
+      await parsed(
+        await manualTerms.POST(mutation("terms", "POST", { ...termInput, userId: "manual-b" })),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualTerms.POST(mutation("terms", "POST", termInput, "https://evil.test")),
+      )
+    ).status,
+    403,
+  );
+  assert.equal(rows.terms.filter((r) => r.userId === "manual-a").length, 0);
+  const created = await parsed(await manualTerms.POST(mutation("terms", "POST", termInput)));
+  assert.equal(created.status, 200);
+  assert.deepEqual(Object.keys(created.body.data).sort(), ["id", "planning", "version"]);
+  assert.equal(created.body.data.planning.status, "NOT_REQUESTED");
+  const termId = created.body.data.id;
+  assert.equal(owned("terms", "manual-a", termId).name, "Fall");
+  const patchTerm = (version, body) =>
+    mutation(`terms/${termId}`, "PATCH", { expectedVersion: version, ...body });
+  assert.equal(
+    (await parsed(await manualTerm.PATCH(patchTerm(0, { name: "Autumn" }), context(termId))))
+      .status,
+    200,
+  );
+  assert.equal(
+    (await parsed(await manualTerm.PATCH(patchTerm(0, { name: "Stale" }), context(termId)))).body
+      .error.code,
+    "STALE_WRITE",
+  );
+  assert.equal(owned("terms", "manual-a", termId).name, "Autumn");
+  const course = await parsed(
+    await manualCourses.POST(
+      mutation("courses", "POST", { academicTermId: termId, code: "CSC101", name: "Computing" }),
+    ),
+  );
+  assert.equal(course.status, 200);
+  const courseId = course.body.data.id;
+  assert.equal(owned("courses", "manual-a", courseId).code, "CSC101");
+  assert.equal(
+    (
+      await parsed(
+        await manualCourse.PATCH(
+          mutation(`courses/${courseId}`, "PATCH", { expectedVersion: 0, name: "Computing I" }),
+          context(courseId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  const meetingInput = {
+    courseId,
+    meetingType: "LECTURE",
+    recurrenceRule: "FREQ=WEEKLY;BYDAY=MO",
+    startTimeLocal: "09:00",
+    endTimeLocal: "10:00",
+    spansNextDay: false,
+    timezone: "America/Toronto",
+    effectiveFrom: "2026-09-01",
+    attendanceRequired: true,
+  };
+  const meeting = await parsed(
+    await manualMeetings.POST(mutation("meetings", "POST", meetingInput)),
+  );
+  assert.equal(meeting.status, 200);
+  const meetingId = meeting.body.data.id;
+  assert.equal(
+    (
+      await parsed(
+        await manualMeeting.PATCH(
+          mutation(`meetings/${meetingId}`, "PATCH", { expectedVersion: 0, location: "Room 1" }),
+          context(meetingId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  const eventInput = {
+    title: "Appointment",
+    eventType: "APPOINTMENT",
+    startAt: "2026-09-02T13:00:00.000Z",
+    endAt: "2026-09-02T14:00:00.000Z",
+    constraintLevel: "HARD",
+  };
+  const event = await parsed(await manualEvents.POST(mutation("events", "POST", eventInput)));
+  assert.equal(event.status, 200);
+  const eventId = event.body.data.id;
+  assert.equal(
+    (
+      await parsed(
+        await manualEvent.PATCH(
+          mutation(`events/${eventId}`, "PATCH", { expectedVersion: 0, title: "Doctor" }),
+          context(eventId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualEvents.POST(
+          mutation("events", "POST", { ...eventInput, endAt: "2026-09-02T12:00:00.000Z" }),
+        ),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(rows.events.filter((r) => r.userId === "manual-a").length, 1);
+  currentUser = "manual-b";
+  assert.equal(
+    (await parsed(await manualTerm.PATCH(patchTerm(1, { name: "Stolen" }), context(termId))))
+      .status,
+    404,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualCourse.PATCH(
+          mutation(`courses/${courseId}`, "PATCH", { expectedVersion: 1, name: "Stolen" }),
+          context(courseId),
+        ),
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualEvent.DELETE(
+          mutation(`events/${eventId}`, "DELETE", { expectedVersion: 1 }),
+          context(eventId),
+        ),
+      )
+    ).status,
+    404,
+  );
+  currentUser = "manual-a";
+  assert.equal(
+    (
+      await parsed(
+        await manualMeeting.DELETE(
+          mutation(`meetings/${meetingId}`, "DELETE", { expectedVersion: 1 }),
+          context(meetingId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualEvent.DELETE(
+          mutation(`events/${eventId}`, "DELETE", { expectedVersion: 1 }),
+          context(eventId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualCourse.DELETE(
+          mutation(`courses/${courseId}`, "DELETE", { expectedVersion: 1 }),
+          context(courseId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualTerm.DELETE(
+          mutation(`terms/${termId}`, "DELETE", { expectedVersion: 1 }),
+          context(termId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualCourses.POST(
+          mutation("courses", "POST", {
+            academicTermId: termId,
+            code: "NEW",
+            name: "Cannot create",
+          }),
+        ),
+      )
+    ).status,
+    404,
+  );
 });

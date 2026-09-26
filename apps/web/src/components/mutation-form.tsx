@@ -131,13 +131,14 @@ export function DaySelection({
 
 export function InstantField({
   timezone,
+  meaning = "deadline",
   ...props
-}: Omit<InputFieldProps, "type"> & { timezone: string }) {
+}: Omit<InputFieldProps, "type"> & { timezone: string; meaning?: "deadline" | "event" }) {
   return (
     <FormField
       {...props}
       type="datetime-local"
-      help={`${props.help ? `${props.help} ` : ""}Local time in ${timezone}. The saved deadline is a UTC instant; ambiguous or nonexistent local times require correction.`}
+      help={`${props.help ? `${props.help} ` : ""}Local time in ${timezone}. The saved ${meaning === "event" ? "event time" : "deadline"} is a UTC instant; ambiguous or nonexistent local times require correction.`}
     />
   );
 }

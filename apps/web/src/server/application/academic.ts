@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type {
+  AcademicTermRecord,
   AssessmentRecord,
+  CanonicalRepositories,
   CourseMeetingRecord,
   TaskRecord,
 } from "@university-planner/database";
@@ -82,12 +84,12 @@ export const academicTerms = {
     );
   },
   update(input: unknown) {
-    let wasArchived = false;
+    let before: AcademicTermRecord | null = null;
     return planAfterMutation(
       service(termUpdate, input, async ({ id, expectedVersion, ...patch }, actor, tx) => {
         const current = await tx.repositories.academicTerms.getForUser(actor.userId, id);
         if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
-        wasArchived = current.status === "ARCHIVED";
+        before = { ...current };
         if (current.status === "ARCHIVED")
           throw new ApplicationError("CONFLICT", "Archived term cannot be edited.");
         if ((patch.startDate ?? current.startDate) > (patch.endDate ?? current.endDate))
@@ -102,9 +104,13 @@ export const academicTerms = {
         );
       }),
       (record) =>
-        !wasArchived && record.status === "ARCHIVED"
-          ? { trigger: { type: "TASK_UPDATED", entityType: "ACADEMIC_TERM", entityId: record.id } }
-          : null,
+        classifyPlanningFields(
+          before,
+          record,
+          ["status", "startDate", "endDate"],
+          "ACADEMIC_TERM",
+          "TASK_UPDATED",
+        ),
     );
   },
   archive(input: unknown) {
@@ -112,6 +118,8 @@ export const academicTerms = {
       service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
         const current = await tx.repositories.academicTerms.getForUser(actor.userId, id);
         if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
+        if (current.status === "ARCHIVED")
+          throw new ApplicationError("CONFLICT", "Archived term cannot be edited.");
         return requireUpdated(
           await tx.repositories.academicTerms.updateIfCurrent(actor.userId, id, expectedVersion, {
             status: "ARCHIVED",
@@ -124,6 +132,18 @@ export const academicTerms = {
     );
   },
 };
+
+async function requireEditableCourse(
+  repos: CanonicalRepositories,
+  actor: { userId: string },
+  id: string,
+) {
+  const course = await requireCourse(repos, actor, id);
+  const term = await repos.academicTerms.getForUser(actor.userId, course.academicTermId);
+  if (!term || term.status === "ARCHIVED")
+    throw new ApplicationError("NOT_FOUND", "Record not found.");
+  return course;
+}
 
 const courseCreate = manualProvenanceSchema
   .extend({
@@ -176,24 +196,28 @@ export const courses = {
     });
   },
   update(input: unknown) {
-    let previousEnergy: string | null = null;
+    let before: Awaited<ReturnType<typeof requireEditableCourse>> | null = null;
     return planAfterMutation(
       service(coursePatch, input, async ({ id, expectedVersion, ...patch }, actor, tx) => {
-        previousEnergy = (await requireCourse(tx.repositories, actor, id)).defaultTaskEnergy;
+        before = { ...(await requireEditableCourse(tx.repositories, actor, id)) };
         return requireUpdated(
           await tx.repositories.courses.updateIfCurrent(actor.userId, id, expectedVersion, patch),
         );
       }),
       (record) =>
-        previousEnergy !== record.defaultTaskEnergy
-          ? { trigger: { type: "TASK_UPDATED", entityType: "COURSE", entityId: record.id } }
-          : null,
+        classifyPlanningFields(
+          before,
+          record,
+          ["defaultTaskEnergy", "defaultTaskLocation"],
+          "COURSE",
+          "TASK_UPDATED",
+        ),
     );
   },
   archive(input: unknown) {
     return planAfterMutation(
       service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
-        await requireCourse(tx.repositories, actor, id);
+        await requireEditableCourse(tx.repositories, actor, id);
         return requireUpdated(
           await tx.repositories.courses.updateIfCurrent(actor.userId, id, expectedVersion, {
             archivedAt: new Date(),
@@ -236,7 +260,7 @@ export const courseMeetings = {
   create(input: unknown) {
     return planAfterMutation(
       service(meetingCreate, input, async (data, actor, tx) => {
-        await requireCourse(tx.repositories, actor, data.courseId);
+        await requireEditableCourse(tx.repositories, actor, data.courseId);
         return tx.repositories.courseMeetings.create({
           id: newRecordId(),
           userId: actor.userId,
@@ -254,13 +278,13 @@ export const courseMeetings = {
       const meeting = requireActive(
         await tx.repositories.courseMeetings.getForUser(actor.userId, id),
       );
-      await requireCourse(tx.repositories, actor, meeting.courseId);
+      await requireEditableCourse(tx.repositories, actor, meeting.courseId);
       return meeting;
     });
   },
   list(input: unknown) {
     return service(listOf, input, async ({ parentId }, actor, tx) => {
-      await requireCourse(tx.repositories, actor, parentId);
+      await requireEditableCourse(tx.repositories, actor, parentId);
       return tx.repositories.courseMeetings.listForCourse(actor.userId, parentId);
     });
   },
@@ -272,7 +296,7 @@ export const courseMeetings = {
           await tx.repositories.courseMeetings.getForUser(actor.userId, id),
         );
         before = { ...current };
-        await requireCourse(tx.repositories, actor, current.courseId);
+        await requireEditableCourse(tx.repositories, actor, current.courseId);
         if (!localRecurrenceSchema.safeParse({ ...current, ...patch }).success)
           throw new ApplicationError("VALIDATION_ERROR", "Invalid recurrence.");
         return requireUpdated(
@@ -309,6 +333,7 @@ export const courseMeetings = {
         before = {
           ...requireActive(await tx.repositories.courseMeetings.getForUser(actor.userId, id)),
         };
+        await requireEditableCourse(tx.repositories, actor, before.courseId);
         return requireUpdated(
           await tx.repositories.courseMeetings.updateIfCurrent(actor.userId, id, expectedVersion, {
             archivedAt: new Date(),

@@ -1,5 +1,11 @@
 # Roadmap progress
 
+## 2026-09-26 — Milestone 6 Step 2 academic structure and fixed commitments IN PROGRESS
+
+- Added authorized term, course, recurring course meeting, and manual fixed-event creation/edit/archive to the production Courses and Calendar & Availability screens. Onboarding links now lead to these setup actions. Term activation is explicit; archive preserves history. The timetable retains local wall-clock recurrence, timezone, effective dates, overnight spans, and required attendance. One-off events use explicit local-to-UTC conversion and cannot carry provider credentials or external IDs.
+- Reused the M2 application services and M4 post-commit trigger pipeline. Term status/date, course planning defaults, required timetable, and fixed-event changes classify through existing planner intent; a failed PlannerRun leaves the canonical fact saved and reports the planner outcome. New guarded routes return only committed ID/version and bounded planner status. Service checks prevent editing under an archived parent and reject edits to non-manual calendar events through the manual route.
+- Focused service, transport, read-projection, and rendered-editor tests cover empty-account term creation, actor ownership, same-origin protection, stale versions, invalid writes, archive boundaries, recurrence across DST, planner classification/failure, safe response fields, and labelled controls. Full `pnpm verify` passed: formatting, lint, 138-source-file boundaries, Prisma generation/validation, strict typecheck, 150/150 unit tests, 75/75 integration tests, optimized build, and 29/29 Chromium tests. The browser gate caught and prompted a fix for an undersized mobile link; the final run passed. No live authenticated database/browser acceptance was run in this slice. Full Milestone-6 acceptance remains open; the milestone is **not gate-passed**. Blockers: none for Step 3. **Exact next item: Milestone 6 Step 3 — Assessment, Task, and Subtask Manual Management.**
+
 ## 2026-09-26 — Milestone 6 mutation/UI-write foundation IN PROGRESS
 
 - Created `flow/milestone-6-manual-management` from current `master`. Added the literal [Milestone-6 exit-gate scaffold](./milestone-6-exit-gate.md); all end-to-end requirements remain NOT YET PROVEN.

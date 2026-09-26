@@ -2,7 +2,7 @@
 
 ## Milestone 6 — IN PROGRESS
 
-The first slice establishes the trusted UI write boundary: shared guarded JSON transport and client result semantics, reusable accessible form controls, conditional authenticated timezone mutation, narrow editor values in existing projections, and a literal [Milestone-6 gate scaffold](./milestone-6-exit-gate.md). A saved timezone and its post-commit planner result are reported separately. Local `pnpm verify` passed 150 unit, 71 integration and 28 Chromium tests; live Milestone-6 acceptance remains open. Verification details and blockers are recorded in [roadmap progress](./ROADMAP_PROGRESS.md). **Exact next item: Milestone 6 Step 2 — Academic Structure and Timetable Manual Management.**
+The first slice established the trusted UI write boundary: guarded JSON transport, client result semantics, reusable accessible form controls, authenticated timezone mutation, narrow editor values, and the literal [Milestone-6 gate scaffold](./milestone-6-exit-gate.md). Step 2 adds production term, course, recurring meeting, and manually owned fixed-event editors to Courses, Calendar & Availability, and onboarding links. They call the existing M2 services through narrow authorized routes and preserve M4 post-commit planner outcomes. Focused service, route, projection, and editor tests cover ownership, stale writes, invalid inputs, archived parents, recurrence across DST, and safe responses. Full verification is recorded in [roadmap progress](./ROADMAP_PROGRESS.md). Live Milestone-6 acceptance remains open. **Exact next item: Milestone 6 Step 3 — Assessment, Task, and Subtask Manual Management.**
 
 ## Current milestone status
 

@@ -340,6 +340,39 @@ const lifecycle = load("lifecycle", {
   "./validation": validation,
 });
 
+const replanRequests = [];
+let nextPlan = { ok: true, value: { status: "SUCCEEDED", planStatus: "FEASIBLE" } };
+const realTriggers = load("planner-triggers", {
+  "../database": { applicationDatabase: () => ({}) },
+  "./authorization": auth,
+  "./errors": errors,
+  "./planner": {
+    generateAuthoritativePlan: async (request) => {
+      replanRequests.push(request);
+      return nextPlan;
+    },
+  },
+});
+const plannedAcademic = load("academic", {
+  "./authorization": auth,
+  "./dependencies": dependencies,
+  "./errors": errors,
+  "./service": serviceUtils,
+  "./planner-triggers": realTriggers,
+  "./validation": validation,
+});
+const plannedSchedule = load("schedule", {
+  "./authorization": auth,
+  "./errors": errors,
+  "./service": serviceUtils,
+  "./planner-triggers": realTriggers,
+  "./validation": validation,
+});
+const manual = load("manual-management", {
+  "./academic": plannedAcademic,
+  "./schedule": plannedSchedule,
+});
+
 test("academic service module loads and enforces two-user scoping, dates, and optimistic versions", async () => {
   const bad = await academic.academicTerms.create({
     name: "Fall",
@@ -663,4 +696,230 @@ test("lifecycle migration is forward-only and account deletion orders restrictiv
   before("db.externalObjectMap.deleteMany", "db.integrationAccount.deleteMany");
   before("db.course.deleteMany", "db.academicTerm.deleteMany");
   before("db.authIdentity.deleteMany", "db.user.delete");
+});
+
+test("manual academic structure uses scoped versions, archived parents and classified triggers", async () => {
+  const term = (
+    await manual.manualTerms.create({
+      name: "Synthetic autumn",
+      startDate: "2026-09-01",
+      endDate: "2026-12-20",
+    })
+  ).value;
+  assert.equal(term.version, 0);
+  assert.equal(term.planning.status, "NOT_REQUESTED");
+  const active = (
+    await manual.manualTerms.update({ id: term.id, expectedVersion: 0, status: "ACTIVE" })
+  ).value;
+  assert.equal(active.planning.status, "SUCCEEDED");
+  assert.equal(replanRequests.at(-1).trigger.entityType, "ACADEMIC_TERM");
+  const countAfterActivation = replanRequests.length;
+  const renamed = (
+    await manual.manualTerms.update({ id: term.id, expectedVersion: 1, name: "Autumn" })
+  ).value;
+  assert.equal(renamed.planning.status, "NOT_REQUESTED");
+  assert.equal(replanRequests.length, countAfterActivation);
+  assert.equal(
+    (await manual.manualTerms.update({ id: term.id, expectedVersion: 1, name: "Stale" })).error
+      .code,
+    "STALE_WRITE",
+  );
+  const course = (
+    await manual.manualCourses.create({
+      academicTermId: term.id,
+      code: "SYN200",
+      name: "Synthetic course",
+    })
+  ).value;
+  assert.equal(course.planning.status, "NOT_REQUESTED");
+  const cosmetic = (
+    await manual.manualCourses.update({ id: course.id, expectedVersion: 0, name: "Renamed" })
+  ).value;
+  assert.equal(cosmetic.planning.status, "NOT_REQUESTED");
+  const energy = (
+    await manual.manualCourses.update({
+      id: course.id,
+      expectedVersion: 1,
+      defaultTaskEnergy: "HIGH",
+    })
+  ).value;
+  assert.equal(energy.planning.status, "SUCCEEDED");
+  assert.equal(replanRequests.at(-1).trigger.entityType, "COURSE");
+  const beforeMeetings = rows.meetings.length;
+  const bad = await manual.manualMeetings.create({
+    courseId: course.id,
+    meetingType: "LECTURE",
+    recurrenceRule: "FREQ=WEEKLY;BYDAY=MO",
+    startTimeLocal: "10:00",
+    endTimeLocal: "09:00",
+    timezone: "America/Toronto",
+    effectiveFrom: "2026-09-01",
+  });
+  assert.equal(bad.error.code, "VALIDATION_ERROR");
+  assert.equal(rows.meetings.length, beforeMeetings);
+  const meeting = (
+    await manual.manualMeetings.create({
+      courseId: course.id,
+      meetingType: "LECTURE",
+      recurrenceRule: "FREQ=WEEKLY;BYDAY=MO",
+      startTimeLocal: "23:00",
+      endTimeLocal: "01:00",
+      spansNextDay: true,
+      timezone: "America/Toronto",
+      effectiveFrom: "2026-09-01",
+    })
+  ).value;
+  assert.equal(meeting.planning.status, "SUCCEEDED");
+  assert.equal(replanRequests.at(-1).trigger.entityType, "COURSE_MEETING");
+  const rawMeeting = rows.meetings.find((row) => row.id === meeting.id);
+  const windows = shared.expandRecurringWindows(rawMeeting, "2026-11-02", "2026-11-02");
+  assert.equal(windows.length, 1);
+  assert.equal(shared.instantToLocal(windows[0].startAt, "America/Toronto").time, "23:00:00");
+  const location = (
+    await manual.manualMeetings.update({ id: meeting.id, expectedVersion: 0, location: "Room A" })
+  ).value;
+  assert.equal(location.planning.status, "NOT_REQUESTED");
+  const time = (
+    await manual.manualMeetings.update({
+      id: meeting.id,
+      expectedVersion: 1,
+      startTimeLocal: "22:00",
+    })
+  ).value;
+  assert.equal(time.planning.status, "SUCCEEDED");
+  assert.equal(
+    (await manual.manualMeetings.update({ id: meeting.id, expectedVersion: 1, location: "Stale" }))
+      .error.code,
+    "STALE_WRITE",
+  );
+  assert.equal(
+    (await manual.manualMeetings.archive({ id: meeting.id, expectedVersion: 2 })).value.planning
+      .status,
+    "SUCCEEDED",
+  );
+  assert.equal(
+    (await manual.manualCourses.archive({ id: course.id, expectedVersion: 2 })).value.planning
+      .status,
+    "SUCCEEDED",
+  );
+  const another = (
+    await manual.manualCourses.create({ academicTermId: term.id, code: "SYN201", name: "Another" })
+  ).value;
+  assert.equal(
+    (await manual.manualTerms.archive({ id: term.id, expectedVersion: 2 })).value.planning.status,
+    "SUCCEEDED",
+  );
+  assert.equal(
+    (await manual.manualTerms.update({ id: term.id, expectedVersion: 3, name: "Resurrect" })).error
+      .code,
+    "CONFLICT",
+  );
+  assert.equal(
+    (await manual.manualCourses.update({ id: another.id, expectedVersion: 0, name: "Blocked" }))
+      .error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (
+      await manual.manualCourses.create({
+        academicTermId: term.id,
+        code: "SYN202",
+        name: "Blocked",
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (
+      await manual.manualMeetings.create({
+        courseId: another.id,
+        meetingType: "LAB",
+        recurrenceRule: "FREQ=WEEKLY;BYDAY=TU",
+        startTimeLocal: "10:00",
+        endTimeLocal: "11:00",
+        timezone: "America/Toronto",
+        effectiveFrom: "2026-09-01",
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+});
+
+test("manual fixed events persist without provider fields and report failed planning separately", async () => {
+  const prior = rows.events.length;
+  const invalid = await manual.manualEvents.create({
+    title: "Appointment",
+    eventType: "PERSONAL",
+    startAt: "2026-10-01T12:00:00Z",
+    endAt: "2026-10-01T11:00:00Z",
+    constraintLevel: "HARD",
+  });
+  assert.equal(invalid.error.code, "VALIDATION_ERROR");
+  assert.equal(rows.events.length, prior);
+  nextPlan = {
+    ok: true,
+    value: { status: "FAILED", code: "INVALID_OUTPUT", runId: "private-run" },
+  };
+  const event = (
+    await manual.manualEvents.create({
+      title: "Appointment",
+      eventType: "PERSONAL",
+      startAt: "2026-10-01T11:00:00Z",
+      endAt: "2026-10-01T12:00:00Z",
+      constraintLevel: "HARD",
+    })
+  ).value;
+  assert.equal(event.planning.status, "FAILED");
+  assert.equal(rows.events.length, prior + 1);
+  assert.equal(rows.events.at(-1).source, "MANUAL");
+  assert.equal(rows.events.at(-1).externalId, null);
+  assert.doesNotMatch(JSON.stringify(event), /private-run|userId|externalId/);
+  nextPlan = { ok: true, value: { status: "SUCCEEDED", planStatus: "FEASIBLE" } };
+  assert.equal(
+    (await manual.manualEvents.update({ id: event.id, expectedVersion: 0, title: "Edited" })).value
+      .planning.status,
+    "NOT_REQUESTED",
+  );
+  assert.equal(
+    (await manual.manualEvents.update({ id: event.id, expectedVersion: 0, title: "Stale" })).error
+      .code,
+    "STALE_WRITE",
+  );
+  assert.equal(
+    (
+      await manual.manualEvents.update({
+        id: event.id,
+        expectedVersion: 1,
+        startAt: "2026-10-01T10:00:00Z",
+      })
+    ).value.planning.status,
+    "SUCCEEDED",
+  );
+  assert.equal(
+    (await manual.manualEvents.archive({ id: event.id, expectedVersion: 2 })).value.planning.status,
+    "SUCCEEDED",
+  );
+  const imported = {
+    ...rows.events.at(-1),
+    id: "external-manual-guard",
+    version: 0,
+    archivedAt: null,
+    source: "INTEGRATION",
+  };
+  rows.events.push(imported);
+  assert.equal(
+    (await manual.manualEvents.update({ id: imported.id, expectedVersion: 0, title: "Forbidden" }))
+      .error.code,
+    "NOT_FOUND",
+  );
+  rows.events.push({
+    ...imported,
+    id: "other-owned-event",
+    userId: other.userId,
+    source: "MANUAL",
+  });
+  assert.equal(
+    (await manual.manualEvents.archive({ id: "other-owned-event", expectedVersion: 0 })).error.code,
+    "NOT_FOUND",
+  );
 });

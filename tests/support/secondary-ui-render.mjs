@@ -27,6 +27,21 @@ function load(file, dependencies = {}) {
     if (name === "lucide-react") return webRequire(name);
     if (name === "./planner-primitives") return dependencies.primitives;
     if (name === "./course-color") return dependencies.courseColor;
+    if (name === "./manual-editors")
+      return {
+        TermEditor: () => null,
+        CourseEditor: () => null,
+        MeetingEditor: () => null,
+        EventEditor: () => null,
+      };
+    if (name === "next/navigation") return { useRouter: () => ({ refresh() {}, replace() {} }) };
+    if (name === "./mutation-form") return dependencies.form;
+    if (name === "./mutation-client")
+      return {
+        submitMutation: async () => {
+          throw Error("Static editor render must not mutate");
+        },
+      };
     if (name === "./course-close")
       return {
         CourseClose: () =>
@@ -52,6 +67,8 @@ function load(file, dependencies = {}) {
       };
     if (name === "@university-planner/shared")
       return {
+        instantToLocal: () => ({ date: "2026-09-01", time: "09:00" }),
+        localDateTimeToInstant: () => new Date("2026-09-01T13:00:00Z"),
         addLocalDays: (date, days) =>
           new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10),
       };
@@ -70,6 +87,38 @@ const { CoursesView } = load("courses-view.tsx", { primitives, courseColor });
 const { AvailabilityView } = load("availability-view.tsx", { courseColor });
 const { SettingsView } = load("settings-view.tsx");
 const { IntegrationsView } = load("integrations-view.tsx", { primitives });
+const form = load("mutation-form.tsx");
+const { TermEditor, CourseEditor, MeetingEditor, EventEditor } = load("manual-editors.tsx", {
+  form,
+});
+export function renderManualEditor(kind) {
+  const term = {
+    id: "synthetic-term",
+    version: 0,
+    name: "Synthetic term",
+    startDate: "2026-09-01",
+    endDate: "2026-12-20",
+    status: "ACTIVE",
+  };
+  const model = { timezone: "America/Toronto", courseChoices: [] };
+  const course = {
+    id: "synthetic-course",
+    code: "SYN101",
+    name: "Synthetic Mechanics",
+    termStatus: "ACTIVE",
+  };
+  const selection = {
+    term: [TermEditor, { term, returnTo: "/courses" }],
+    course: [CourseEditor, { terms: [term], timezone: model.timezone, returnTo: "/courses" }],
+    meeting: [
+      MeetingEditor,
+      { courses: [course], timezone: model.timezone, returnTo: "/courses?course=synthetic-course" },
+    ],
+    event: [EventEditor, { model, returnTo: "/availability?date=2026-09-01" }],
+  }[kind];
+  if (!selection) throw Error("Unknown editor");
+  return renderToStaticMarkup(React.createElement(selection[0], selection[1]));
+}
 
 export function courseModel(explicitSelection = true) {
   const detail = {
@@ -119,6 +168,16 @@ export function courseModel(explicitSelection = true) {
   };
   return {
     timezone: "America/Toronto",
+    terms: [
+      {
+        id: "synthetic-term",
+        version: 0,
+        name: "Synthetic term",
+        startDate: "2026-01-01",
+        endDate: "2026-04-30",
+        status: "ACTIVE",
+      },
+    ],
     activeTermName: "Synthetic term",
     courses: [
       {
@@ -144,6 +203,8 @@ export function availabilityModel() {
     timezone: "America/Toronto",
     weekStart: date,
     weekEnd: "2026-03-09",
+    manualEvents: [],
+    courseChoices: [{ id: "synthetic-course", code: "SYN101", name: "Synthetic Mechanics" }],
     ruleCounts: { availability: 1, hardProtected: 1, softProtected: 1, sleep: 1 },
     days: Array.from({ length: 7 }, (_, index) => ({
       date: new Date(Date.parse(`${date}T00:00:00Z`) + index * 86_400_000)

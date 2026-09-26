@@ -6,6 +6,7 @@ import {
   renderSettings,
   renderIntegrations,
   courseModel,
+  renderManualEditor,
 } from "../support/secondary-ui-render.mjs";
 
 const css = readFileSync("apps/web/src/app/styles.css", "utf8");
@@ -63,4 +64,27 @@ test("Course selection URL and Back retain the prior list context", async ({ pag
   expect(page.url()).toBe("https://planner.test/courses");
   await page.goForward();
   expect(page.url()).toContain("course=synthetic-course");
+});
+test("manual editors stay keyboard usable on a phone and at 200% equivalent zoom", async ({
+  page,
+}) => {
+  for (const width of [390, 640]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const kind of ["term", "course", "meeting", "event"] as const) {
+      await page.setContent(documentFor(renderManualEditor(kind)));
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      const save = page.getByRole("button", { name: "Save", exact: true });
+      const cancel = page.getByRole("button", { name: "Cancel" });
+      expect((await save.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      expect((await cancel.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      await page.keyboard.press("Tab");
+      await expect(page.locator(":focus")).toBeVisible();
+      await page.getByRole("button", { name: "Cancel" }).focus();
+      expect(await cancel.evaluate((button) => getComputedStyle(button).outlineStyle)).not.toBe(
+        "none",
+      );
+    }
+  }
 });

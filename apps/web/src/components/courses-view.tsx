@@ -4,6 +4,7 @@ import type { CoursesViewModel } from "../server/application/secondary-reads";
 import { CourseIdentity, StatusIndicator } from "./planner-primitives";
 import { courseColor } from "./course-color";
 import { CourseClose } from "./course-close";
+import { CourseEditor, MeetingEditor, TermEditor } from "./manual-editors";
 
 function work(minutes: number | null) {
   if (minutes === null) return "Remaining work unknown";
@@ -28,8 +29,21 @@ function time(date: Date, timezone: string) {
     timeZone: timezone,
   }).format(date);
 }
-export function CoursesView({ model }: { model: CoursesViewModel }) {
+export function CoursesView({ model, edit }: { model: CoursesViewModel; edit?: string }) {
   const detail = model.selectedCourse;
+  const parent =
+    model.explicitSelection && detail
+      ? `/courses?course=${encodeURIComponent(detail.id)}`
+      : "/courses";
+  const editorUrl = (key: string) =>
+    `${parent}${parent.includes("?") ? "&" : "?"}edit=${encodeURIComponent(key)}`;
+  const selectedTerm = edit?.startsWith("term:")
+    ? model.terms.find((term) => term.id === edit.slice(5) && term.status !== "ARCHIVED")
+    : undefined;
+  const selectedMeeting =
+    edit?.startsWith("meeting:") && detail?.termStatus !== "ARCHIVED"
+      ? detail?.meetings.find((meeting) => meeting.id === edit.slice(8))
+      : undefined;
   return (
     <div
       className={`route-content courses-content${model.explicitSelection ? " course-open" : ""}`}
@@ -40,6 +54,65 @@ export function CoursesView({ model }: { model: CoursesViewModel }) {
         </h1>
         <p>{model.activeTermName ?? "No active term"}</p>
       </header>
+      <section className="manual-structure" aria-labelledby="terms-title">
+        <div className="manual-section-head">
+          <h2 id="terms-title">Academic terms</h2>
+          <Link className="button button-secondary" href={editorUrl("term-new")}>
+            Add term
+          </Link>
+        </div>
+        {model.terms.length ? (
+          <ul className="manual-term-list">
+            {model.terms.map((term) => (
+              <li key={term.id}>
+                <span>
+                  <strong>{term.name}</strong> · {term.startDate}–{term.endDate} ·{" "}
+                  {term.status.toLowerCase()}
+                </span>
+                {term.status !== "ARCHIVED" && (
+                  <Link className="button button-secondary" href={editorUrl(`term:${term.id}`)}>
+                    Edit term
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="secondary-empty">
+            No academic term recorded. Add your semester to begin manual setup.
+          </p>
+        )}
+      </section>
+      {(edit === "term-new" || selectedTerm) && (
+        <TermEditor key={selectedTerm?.id ?? "new-term"} term={selectedTerm} returnTo={parent} />
+      )}
+      {(edit === "course-new" ||
+        (edit === "course" && detail && detail.termStatus !== "ARCHIVED")) && (
+        <CourseEditor
+          key={detail && edit === "course" ? detail.id : "new-course"}
+          course={edit === "course" ? (detail ?? undefined) : undefined}
+          terms={model.terms}
+          timezone={model.timezone}
+          returnTo={parent}
+        />
+      )}
+      {(edit === "meeting-new" || selectedMeeting) && (
+        <MeetingEditor
+          key={selectedMeeting?.id ?? "new-meeting"}
+          meeting={selectedMeeting}
+          courses={model.courses}
+          selectedCourseId={detail?.id}
+          timezone={model.timezone}
+          returnTo={parent}
+        />
+      )}
+      {model.terms.some((term) => term.status !== "ARCHIVED") && (
+        <div className="manual-top-actions">
+          <Link className="button button-primary" href={editorUrl("course-new")}>
+            Add course
+          </Link>
+        </div>
+      )}
       {model.courses.length ? (
         <div className="courses-layout">
           <nav className="course-list" aria-label="Courses">
@@ -77,6 +150,16 @@ export function CoursesView({ model }: { model: CoursesViewModel }) {
                   </div>
                   {model.explicitSelection && <CourseClose id={detail.id} />}
                 </div>
+                {detail.termStatus !== "ARCHIVED" && (
+                  <div className="manual-top-actions">
+                    <Link className="button button-secondary" href={editorUrl("course")}>
+                      Edit course
+                    </Link>
+                    <Link className="button button-secondary" href={editorUrl("meeting-new")}>
+                      Add course meeting
+                    </Link>
+                  </div>
+                )}
                 <div className="course-summary-line">
                   <span>{work(detail.remainingMinutes)}</span>
                   {detail.atRiskTasks > 0 && (
@@ -157,6 +240,14 @@ export function CoursesView({ model }: { model: CoursesViewModel }) {
                           </div>
                           <span>{meeting.location ?? "Location unknown"}</span>
                           <span>{meeting.attendanceRequired ? "Required" : "Optional"}</span>
+                          {detail.termStatus !== "ARCHIVED" && (
+                            <Link
+                              className="button button-secondary"
+                              href={editorUrl(`meeting:${meeting.id}`)}
+                            >
+                              Edit meeting
+                            </Link>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -206,8 +297,7 @@ export function CoursesView({ model }: { model: CoursesViewModel }) {
                   )}
                 </section>
                 <p className="course-deferred">
-                  Adding and editing courses, assessments, and rules comes in the manual-management
-                  milestone.
+                  Assessment, task, and recurring-work editors arrive in later Milestone 6 slices.
                 </p>
               </>
             ) : (
@@ -221,7 +311,7 @@ export function CoursesView({ model }: { model: CoursesViewModel }) {
         </div>
       ) : (
         <p className="secondary-empty">
-          No courses recorded yet. Course setup will be available in a later milestone.
+          No courses recorded yet. Add a term, then add your first course.
         </p>
       )}
     </div>

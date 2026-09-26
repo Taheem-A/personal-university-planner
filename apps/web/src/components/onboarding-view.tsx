@@ -64,6 +64,29 @@ export function OnboardingView({ model, step }: { model: OnboardingViewModel; st
               <TimezoneForm initialTimezone={model.timezone} />
             </div>
           )}
+          {step === 1 && (
+            <Link
+              className="button button-secondary"
+              href={model.term ? "/courses" : "/courses?edit=term-new"}
+            >
+              Manage academic term
+            </Link>
+          )}
+          {step === 2 && (
+            <Link className="button button-secondary" href="/courses?edit=course-new">
+              Add or manage courses
+            </Link>
+          )}
+          {step === 3 && (
+            <div className="manual-top-actions">
+              <Link className="button button-secondary" href="/courses?edit=meeting-new">
+                Add a recurring class
+              </Link>
+              <Link className="button button-secondary" href="/availability?edit=event-new">
+                Add a fixed commitment
+              </Link>
+            </div>
+          )}
           {step === 6 && (
             <p className="onboarding-note">
               This presentation does not create a term or generate a plan. First-plan setup and

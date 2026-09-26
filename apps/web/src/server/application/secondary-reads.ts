@@ -33,6 +33,7 @@ export interface CourseDetailModel {
   version: number;
   academicTermId: string;
   termVersion: number;
+  termStatus: string;
   source: string;
   sourceAuthority: string;
   code: string;
@@ -83,6 +84,14 @@ export interface CourseDetailModel {
 export interface CoursesViewModel {
   timezone: string;
   activeTermName: string | null;
+  terms: {
+    id: string;
+    version: number;
+    name: string;
+    startDate: string;
+    endDate: string;
+    status: string;
+  }[];
   courses: CourseListItem[];
   selectedCourse: CourseDetailModel | null;
   selectionUnavailable: boolean;
@@ -107,6 +116,18 @@ export interface AvailabilityViewModel {
   weekEnd: string;
   days: { date: string; items: AvailabilityItem[] }[];
   ruleCounts: { availability: number; hardProtected: number; softProtected: number; sleep: number };
+  manualEvents: {
+    id: string;
+    version: number;
+    title: string;
+    eventType: string;
+    startAt: Date;
+    endAt: Date;
+    location: string | null;
+    constraintLevel: string;
+    courseId: string | null;
+  }[];
+  courseChoices: { id: string; code: string; name: string }[];
 }
 export interface SettingsViewModel {
   user: {
@@ -278,6 +299,7 @@ export function buildCourses(
       version: selected.version,
       academicTermId: selected.academicTermId,
       termVersion: term.version,
+      termStatus: term.status,
       source: selected.source,
       sourceAuthority: selected.sourceAuthority,
       code: selected.code,
@@ -359,6 +381,14 @@ export function buildCourses(
   }
   return {
     timezone: state.user.timezone,
+    terms: [...terms.values()].map((term) => ({
+      id: term.id,
+      version: term.version,
+      name: term.name,
+      startDate: term.startDate,
+      endDate: term.endDate,
+      status: term.status,
+    })),
     activeTermName:
       state.academicTerms.find((term) => term.userId === state.user.id && term.status === "ACTIVE")
         ?.name ?? null,
@@ -514,6 +544,31 @@ export function buildAvailability(
     weekStart,
     weekEnd: end,
     days,
+    manualEvents: state.calendarEvents
+      .filter(
+        (event) =>
+          event.userId === state.user.id &&
+          !event.archivedAt &&
+          event.source === "MANUAL" &&
+          event.startAt < endAt &&
+          event.endAt > startAt,
+      )
+      .map((event) => ({
+        id: event.id,
+        version: event.version,
+        title: event.title,
+        eventType: event.eventType,
+        startAt: event.startAt,
+        endAt: event.endAt,
+        location: event.location,
+        constraintLevel: event.constraintLevel,
+        courseId: event.courseId,
+      })),
+    courseChoices: [...courses.values()].map((course) => ({
+      id: course.id,
+      code: course.code,
+      name: course.name,
+    })),
     ruleCounts: {
       availability: state.availabilityRules.filter(
         (rule) => rule.userId === state.user.id && rule.active,
