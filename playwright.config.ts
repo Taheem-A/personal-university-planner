@@ -15,6 +15,12 @@ export default defineConfig({
     {
       command: "pnpm --filter @university-planner/web dev --hostname 127.0.0.1 --port 3000",
       url: "http://127.0.0.1:3000/api/health",
+      env: {
+        AUTH_SECRET: "playwright-only-secret-with-at-least-thirty-two-characters",
+        AUTH_GOOGLE_ID: "playwright.invalid.apps.googleusercontent.com",
+        AUTH_GOOGLE_SECRET: "playwright-only-placeholder",
+        NEXTAUTH_URL: "http://127.0.0.1:3000",
+      },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

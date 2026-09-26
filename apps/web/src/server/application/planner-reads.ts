@@ -186,9 +186,17 @@ export interface ScheduleItem {
   kind: "WORK" | "EVENT" | "COURSE_MEETING" | "PROTECTED" | "SLEEP" | "COMMUTE_WINDOW";
   startAt: Date;
   endAt: Date;
+  /** Visible segment within the selected Today local day; original instants remain authoritative. */
+  visibleStartAt?: Date;
+  visibleEndAt?: Date;
   title: string;
   taskId?: string;
   courseId?: string;
+  courseCode?: string;
+  courseColorReference?: string | null;
+  assessmentId?: string | null;
+  remainingMinutes?: number | null;
+  dueAt?: Date | null;
   sourceId: string;
   generatedBy?: "PLANNER" | "USER";
   locked?: boolean;
@@ -202,16 +210,24 @@ export interface RemainingTaskItem {
   remainingMinutes: number | null;
   dueAt: Date | null;
   assessmentId: string | null;
+  courseCode: string | null;
+  courseColorReference: string | null;
+}
+export interface TodayRiskItem extends PlannerRunRisk {
+  title: string;
+  courseCode: string | null;
 }
 export interface TodayViewModel {
   date: string;
   timezone: string;
   plannedWorkMinutes: number;
+  remainingPlannedWorkMinutes: number;
   currentItem: ScheduleItem | null;
   nextItem: ScheduleItem | null;
+  nextWorkItem: ScheduleItem | null;
   timeline: ScheduleItem[];
   remainingTasks: RemainingTaskItem[];
-  risks: PlannerRunRisk[];
+  risks: TodayRiskItem[];
   warnings: PlannerRunStoredWarning[];
   planner: PlannerReadState;
 }
@@ -226,11 +242,19 @@ export interface WeekViewModel {
     riskTaskIds: string[];
   }[];
   schedule: ScheduleItem[];
-  deadlines: { id: string; kind: "TASK" | "ASSESSMENT"; title: string; dueAt: Date }[];
-  risks: PlannerRunRisk[];
+  deadlines: {
+    id: string;
+    kind: "TASK" | "ASSESSMENT";
+    title: string;
+    dueAt: Date;
+    courseCode: string | null;
+    courseColorReference: string | null;
+  }[];
+  risks: TodayRiskItem[];
   warnings: PlannerRunStoredWarning[];
   planner: PlannerReadState;
   latestChange: PlannerRunDelta | null;
+  activeTermRange: { startDate: string; endDate: string } | null;
 }
 
 function bounds(date: string, timezone: string, days: number) {
@@ -286,6 +310,7 @@ function schedule(
 ): ScheduleItem[] {
   const { startAt, endAt } = bounds(date, state.user.timezone, days);
   const tasks = new Map(state.tasks.map((task) => [task.id, task]));
+  const assessments = new Map(state.assessments.map((assessment) => [assessment.id, assessment]));
   const courses = new Map(
     state.courses
       .filter((course) => course.userId === state.user.id && !course.archivedAt)
@@ -312,6 +337,24 @@ function schedule(
       endAt: session.endAt,
       title: tasks.get(session.taskId)?.title ?? "Work session",
       taskId: session.taskId,
+      courseId:
+        tasks.get(session.taskId)?.courseId ??
+        assessments.get(tasks.get(session.taskId)?.assessmentId ?? "")?.courseId,
+      courseCode: courses.get(
+        tasks.get(session.taskId)?.courseId ??
+          assessments.get(tasks.get(session.taskId)?.assessmentId ?? "")?.courseId ??
+          "",
+      )?.code,
+      courseColorReference: courses.get(
+        tasks.get(session.taskId)?.courseId ??
+          assessments.get(tasks.get(session.taskId)?.assessmentId ?? "")?.courseId ??
+          "",
+      )?.colorReference,
+      assessmentId: tasks.get(session.taskId)?.assessmentId,
+      remainingMinutes: tasks.get(session.taskId)?.remainingMinutes,
+      dueAt:
+        tasks.get(session.taskId)?.dueAt ??
+        assessments.get(tasks.get(session.taskId)?.assessmentId ?? "")?.dueAt,
       sourceId: session.id,
       generatedBy: session.generatedBy,
       locked: session.locked,
@@ -357,6 +400,8 @@ function schedule(
         title: `${course.code} ${meeting.meetingType}`,
         sourceId: meeting.id,
         courseId: course.id,
+        courseCode: course.code,
+        courseColorReference: course.colorReference,
         constraintLevel: meeting.attendanceRequired ? "HARD" : "SOFT",
         reasonCodes: [],
       });
@@ -403,6 +448,12 @@ function schedule(
   );
 }
 function remaining(state: PlanningStateSnapshot): RemainingTaskItem[] {
+  const courses = new Map(
+    state.courses
+      .filter((course) => course.userId === state.user.id && !course.archivedAt)
+      .map((course) => [course.id, course]),
+  );
+  const assessments = new Map(state.assessments.map((assessment) => [assessment.id, assessment]));
   return state.tasks
     .filter(
       (task) =>
@@ -420,8 +471,14 @@ function remaining(state: PlanningStateSnapshot): RemainingTaskItem[] {
       id: task.id,
       title: task.title,
       remainingMinutes: task.remainingMinutes,
-      dueAt: task.dueAt,
+      dueAt: task.dueAt ?? assessments.get(task.assessmentId ?? "")?.dueAt ?? null,
       assessmentId: task.assessmentId,
+      courseCode:
+        courses.get(task.courseId ?? assessments.get(task.assessmentId ?? "")?.courseId ?? "")
+          ?.code ?? null,
+      courseColorReference:
+        courses.get(task.courseId ?? assessments.get(task.assessmentId ?? "")?.courseId ?? "")
+          ?.colorReference ?? null,
     }));
 }
 export function buildToday(
@@ -431,9 +488,18 @@ export function buildToday(
   date: string,
   now: Date,
 ): TodayViewModel {
-  const timeline = schedule(state, date, 1, successful);
   const { startAt, endAt } = bounds(date, state.user.timezone, 1);
+  const timeline = schedule(state, date, 1, successful).map((item) => ({
+    ...item,
+    visibleStartAt: new Date(Math.max(item.startAt.getTime(), startAt.getTime())),
+    visibleEndAt: new Date(Math.min(item.endAt.getTime(), endAt.getTime())),
+  }));
   const work = timeline.filter((item) => item.kind === "WORK");
+  const taskById = new Map(state.tasks.map((task) => [task.id, task]));
+  const courseById = new Map(state.courses.map((course) => [course.id, course]));
+  const assessmentById = new Map(
+    state.assessments.map((assessment) => [assessment.id, assessment]),
+  );
   return {
     date,
     timezone: state.user.timezone,
@@ -441,14 +507,27 @@ export function buildToday(
       (sum, item) => sum + overlap(item.startAt, item.endAt, startAt, endAt),
       0,
     ),
+    remainingPlannedWorkMinutes: Math.ceil(
+      work.reduce((sum, item) => sum + overlap(item.startAt, item.endAt, now, endAt), 0),
+    ),
     currentItem:
       timeline.find(
         (item) => item.startAt <= now && item.endAt > now && item.kind !== "COMMUTE_WINDOW",
       ) ?? null,
     nextItem: timeline.find((item) => item.startAt > now && item.kind !== "COMMUTE_WINDOW") ?? null,
+    nextWorkItem: work.find((item) => item.startAt > now) ?? null,
     timeline,
     remainingTasks: remaining(state).slice(0, 8),
-    risks: summaryOf(successful)?.risk ?? [],
+    risks: (summaryOf(successful)?.risk ?? []).map((risk) => {
+      const task = taskById.get(risk.taskId);
+      const courseId =
+        task?.courseId ?? assessmentById.get(task?.assessmentId ?? "")?.courseId ?? "";
+      return {
+        ...risk,
+        title: task?.title ?? "Work item",
+        courseCode: courseById.get(courseId)?.code ?? null,
+      };
+    }),
     warnings: warningsOf(latest?.status === "FAILED" ? latest : successful),
     planner: planState(state, latest, successful),
   };
@@ -462,6 +541,11 @@ export function buildWeek(
   const { startAt, endAt } = bounds(weekStart, state.user.timezone, 7);
   const scheduleItems = schedule(state, weekStart, 7, successful);
   const risks = summaryOf(successful)?.risk ?? [];
+  const taskById = new Map(state.tasks.map((task) => [task.id, task]));
+  const assessmentById = new Map(state.assessments.map((item) => [item.id, item]));
+  const courseById = new Map(state.courses.map((course) => [course.id, course]));
+  const courseForTask = (task: (typeof state.tasks)[number]) =>
+    courseById.get(task.courseId ?? assessmentById.get(task.assessmentId ?? "")?.courseId ?? "");
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = addLocalDays(weekStart, index);
     const day = bounds(date, state.user.timezone, 1);
@@ -523,6 +607,8 @@ export function buildWeek(
         kind: "TASK" as const,
         title: task.title,
         dueAt: task.dueAt!,
+        courseCode: courseForTask(task)?.code ?? null,
+        courseColorReference: courseForTask(task)?.colorReference ?? null,
       })),
     ...state.assessments
       .filter(
@@ -538,6 +624,8 @@ export function buildWeek(
         kind: "ASSESSMENT" as const,
         title: assessment.title,
         dueAt: assessment.dueAt!,
+        courseCode: courseById.get(assessment.courseId)?.code ?? null,
+        courseColorReference: courseById.get(assessment.courseId)?.colorReference ?? null,
       })),
   ].sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime() || a.id.localeCompare(b.id));
   return {
@@ -547,10 +635,23 @@ export function buildWeek(
     days,
     schedule: scheduleItems,
     deadlines,
-    risks,
+    risks: risks.map((risk) => {
+      const task = taskById.get(risk.taskId);
+      return {
+        ...risk,
+        title: task?.title ?? "Work item",
+        courseCode: task ? (courseForTask(task)?.code ?? null) : null,
+      };
+    }),
     warnings: warningsOf(latest?.status === "FAILED" ? latest : successful),
     planner: planState(state, latest, successful),
     latestChange: summaryOf(successful)?.delta ?? null,
+    activeTermRange: (() => {
+      const term = state.academicTerms.find(
+        (candidate) => candidate.userId === state.user.id && candidate.status === "ACTIVE",
+      );
+      return term ? { startDate: term.startDate, endDate: term.endDate } : null;
+    })(),
   };
 }
 

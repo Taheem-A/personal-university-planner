@@ -1,9 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-test("production Next.js shell and health boundary boot", async ({ page, request }) => {
+test("root and protected planner routes require sign-in", async ({ page, request }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Production foundation ready.");
-  await expect(page.getByText("Modular monolith")).toBeVisible();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sign in to your planner");
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
+  await page.goto("/week");
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
 
   const response = await request.get("/api/health");
   expect(response.ok()).toBe(true);
@@ -11,6 +15,8 @@ test("production Next.js shell and health boundary boot", async ({ page, request
     status: "ok",
     service: "university-planner-web",
   });
+  const presentation = await request.get("/api/v1/planner/presentation");
+  expect(presentation.status()).toBe(401);
 });
 
 test("approved preview remains interactive and isolated", async ({ page }) => {
