@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-25 — Milestone 5 merged and complete
+
+- [Implementation PR #7](https://github.com/Taheem-A/personal-university-planner/pull/7) merged into `master` as `53591b57f897171bc52a1b8266dbcb25b4ee0990`. Final implementation head `d26f065a0aab5cd6b5a6d651bbd94dbe638a2411` is included in that merge and passed pinned-runtime [CI run 36214498969](https://github.com/Taheem-A/personal-university-planner/actions/runs/36214498969) and [dependency review run 36214498924](https://github.com/Taheem-A/personal-university-planner/actions/runs/36214498924).
+- **Milestone 5 — COMPLETE / GATE PASSED.** The [exit-gate matrix](./milestone-5-exit-gate.md) records the real-state read path, fixture isolation, visual fidelity, responsive transformations and accessibility evidence. Today, Week, Upcoming, Assessment Detail, Inbox/Quick Capture, Courses/Course Detail, Calendar & Availability, Settings, Integrations, Planner, Scenario/Conflict and Onboarding presentation are on `master`. No critical production route imports preview schedule data.
+- **Exact next roadmap item: Milestone 6 — Real Onboarding and Core Manual Management.** From an empty authenticated account, make the already-ported workflows capable of creating and editing canonical semester, courses, meetings, assessments/tasks, availability/protected time, preferences and Inbox state. Execution outcomes, trusted scenario Apply, Google Calendar synchronization, natural-language Planner execution and LMS integration remain later milestones. No Milestone-6 work was done in this closeout.
+
+The dated entries below are historical snapshots; their then-current branch and next-step statements are superseded by this merged status.
+
 ## 2026-09-25 — Milestone 5 literal exit gate passed; awaiting merge
 
 - The [requirement-by-requirement exit gate](./milestone-5-exit-gate.md) now identifies production implementation and repeatable proof for every literal Milestone-5 requirement. The production UI reads authenticated canonical view models, keeps preview fixtures isolated, and preserves the Milestone-4 Planner Service and trust boundaries.
@@ -91,7 +99,7 @@
 - [PR #5](https://github.com/Taheem-A/personal-university-planner/pull/5) merged into `master` at `6c4b70dab04ab1d55179be8963f8c7492e2a81a5`. Final PR head `1a86fe34603c97f2c2354360a18eb53877f72836` is now part of the default branch.
 - Acceptance implementation head `b4ba27248e5ef68d254b8eead30e9b3adc2b9c20` passed [CI run 36081951021](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081951021) and [dependency review 36081950998](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081950998). Final PR head passed [CI run 36082238373](https://github.com/Taheem-A/personal-university-planner/actions/runs/36082238373) and [dependency review 36082238238](https://github.com/Taheem-A/personal-university-planner/actions/runs/36082238238).
 - The [Milestone-4 exit gate](./milestone-4-exit-gate.md) is **PASSED**. Planner Service, authoritative persistence, incremental replanning, concurrency/idempotency guarantees and real Today/Week read contracts are now merged.
-- **Exact next roadmap item:** Milestone 5 — Production Next.js UI and Real-State Migration. It has **not started**.
+- **At this Milestone-4 closeout, the next roadmap item was** Milestone 5 — Production Next.js UI and Real-State Migration. It had not started at that time; its merged completion is recorded above.
 
 ## 2026-09-24 — Milestone 4 final acceptance: GATE PASSED
 
@@ -100,7 +108,7 @@
 - Guarded live PostgreSQL race and full Planner Service acceptance commands passed with synthetic users: generation/reload, incremental supersession, preserved manual/locked work, quantified infeasibility, safe failure, overlapping same-user plans, independent users, canonical edit race and duplicate event delivery.
 - Fixed keyed redelivery to retrieve the existing run before attempting to assemble newly changed canonical input; added a regression test. Full local `pnpm verify` passed with 140 unit, 39 integration and 2 browser tests. Planner scenarios passed 13/13, properties 2/2, and dependency audit found no known high-severity vulnerabilities.
 - GitHub [CI run 36081951021](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081951021) and [dependency review run 36081950998](https://github.com/Taheem-A/personal-university-planner/actions/runs/36081950998) both passed on acceptance implementation head `b4ba27248e5ef68d254b8eead30e9b3adc2b9c20`. Draft [PR #5](https://github.com/Taheem-A/personal-university-planner/pull/5) supplies the pull-request check context and remains unmerged. Documentation-head checks are verified before it is marked ready.
-- **Milestone 4 — GATE PASSED.** Exact next roadmap item: **Milestone 5 — Production Next.js UI and Real-State Migration**. It has not started.
+- **Milestone 4 — GATE PASSED.** At that audit, the next roadmap item was **Milestone 5 — Production Next.js UI and Real-State Migration**; its merged completion is recorded above.
 
 ## 2026-09-24 — Milestone 4 production planner read contracts: IN PROGRESS
 
