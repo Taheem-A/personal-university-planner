@@ -87,7 +87,11 @@ export function useEditor(initialId?: string, initialVersion = 0) {
   const [version, setVersion] = useState(initialVersion);
   const [busy, setBusy] = useState(false);
   const [archived, setArchived] = useState(false);
-  const [feedback, setFeedback] = useState<{ error: boolean; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<{
+    error: boolean;
+    text: string;
+    stale?: boolean;
+  } | null>(null);
   async function commit(
     path: string,
     method: "POST" | "PATCH" | "DELETE",
@@ -100,7 +104,7 @@ export function useEditor(initialId?: string, initialVersion = 0) {
     const result = await submitMutation(path, method, input, isSaved);
     setBusy(false);
     if (!result.ok) {
-      setFeedback({ error: true, text: result.message });
+      setFeedback({ error: true, text: result.message, stale: result.code === "STALE_WRITE" });
       return false;
     }
     setId(result.data.id);
@@ -129,7 +133,7 @@ export function EditorShell({
   title: string;
   returnTo: string;
   children: ReactNode;
-  feedback: { error: boolean; text: string } | null;
+  feedback: { error: boolean; text: string; stale?: boolean } | null;
 }) {
   return (
     <section className="manual-editor" aria-label={title}>
@@ -140,7 +144,20 @@ export function EditorShell({
         </a>
       </div>
       {children}
-      {feedback && <FormStatus message={feedback.text} error={feedback.error} />}
+      {feedback && (
+        <div className="manual-editor-feedback">
+          <FormStatus message={feedback.text} error={feedback.error} />
+          {feedback.stale && (
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={() => window.location.reload()}
+            >
+              Reload latest record
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

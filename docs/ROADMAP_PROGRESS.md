@@ -1,5 +1,11 @@
 # Roadmap progress
 
+## 2026-09-27 — Milestone 6 Step 7 cross-screen completion IN PROGRESS
+
+- Global Add now opens one URL-backed Manual Add chooser for assessment, task, course, course meeting, fixed commitment, availability and protected time. These links open the existing trusted editors. Quick Capture stays separate for uncertain raw information. Course Detail gained direct assessment/task edit links; the [correction-path and release-boundary audit](./milestone-6-step-7-audit.md) covers the other important facts.
+- Shared editors surface stale-write feedback with an explicit reload of the latest record. The previous version is never silently overwritten or resubmitted. Archive/deactivate labels and confirmation remain specific to canonical history. The chooser inherits the M5 panel's keyboard trap, focus restoration, reduced motion, semantic tokens and mobile sheet behavior.
+- Synthetic browser checks cover all Manual Add destinations, desktop/tablet/mobile size and keyboard operation, plus Add → Course creation → Course Detail edit/archive confirmation and Back navigation. Full `pnpm verify` passed formatting, lint, 158-source-file boundaries, Prisma generation/validation, strict typecheck, 157/157 unit tests, 88/88 integration tests, optimized build and 35/35 Chromium tests. Dedicated planner scenarios passed 13/13, properties passed 2/2, and dependency audit reported no known vulnerabilities. Live persisted cross-screen refresh, two-editor stale behavior and final responsive/accessibility acceptance remain Step 8 work. The milestone is **not gate-passed**. **Exact next item: Milestone 6 Step 8 — Final Acceptance Gate, Fresh Database Proof, CI, and Pull Request.**
+
 ## 2026-09-27 — Milestone 6 Step 6 deterministic Inbox resolution IN PROGRESS
 
 - Kept Quick Capture's immediate raw-text write. Added an optional conservative proposal from the [documented explicit grammar](./milestone-6-inbox-grammar.md), scoped to the authenticated user's courses and timezone. Unsupported, ambiguous, relative or DST-ambiguous wording remains raw; missing due dates remain null. The Inbox screen separates captured text, unconfirmed proposal and canonical saved object.

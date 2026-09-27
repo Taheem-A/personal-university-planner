@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { renderShell } from "../support/shell-ui-render.mjs";
 import {
   renderCourses,
   renderAvailability,
@@ -66,6 +67,62 @@ test("Course selection URL and Back retain the prior list context", async ({ pag
   expect(page.url()).toBe("https://planner.test/courses");
   await page.goForward();
   expect(page.url()).toContain("course=synthetic-course");
+});
+test("global Add reaches course creation, then course facts and archive confirmation", async ({
+  page,
+}) => {
+  await page.route("https://planner.test/**", async (route) => {
+    const url = new URL(route.request().url());
+    const course = {
+      id: "synthetic-course",
+      version: 2,
+      academicTermId: "synthetic-term",
+      code: "SYN101",
+      name: "Synthetic Mechanics",
+      section: null,
+      instructorName: null,
+      creditValue: null,
+      colorReference: null,
+      defaultTaskEnergy: null,
+      defaultTaskLocation: [],
+    };
+    const content =
+      url.pathname === "/today"
+        ? renderShell("/today", "<h1>Today</h1>", url.searchParams.toString())
+        : url.searchParams.get("edit") === "course-new"
+          ? renderManualEditor("course")
+          : url.searchParams.get("edit") === "course"
+            ? renderManualEditor("course", { course, returnTo: "/courses?course=synthetic-course" })
+            : renderCourses(courseModel(url.searchParams.has("course")));
+    await route.fulfill({ contentType: "text/html", body: documentFor(content) });
+  });
+  await page.goto("https://planner.test/today?panel=add");
+  await page
+    .getByRole("navigation", { name: "Manual Add choices" })
+    .getByRole("link", { name: /Course Add/ })
+    .click();
+  expect(page.url()).toBe("https://planner.test/courses?edit=course-new");
+  await expect(page.getByRole("heading", { name: "Add course" })).toBeVisible();
+  await page.getByRole("link", { name: "Close" }).click();
+  await page.getByRole("link", { name: /Synthetic Mechanics/ }).click();
+  await page.getByRole("link", { name: "Edit course" }).click();
+  await expect(page.getByLabel("Course code")).toHaveValue("SYN101");
+  await expect(page.getByLabel("Course name")).toHaveValue("Synthetic Mechanics");
+  await expect(page.getByLabel("I understand that course will be archived.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Archive course" })).toBeDisabled();
+  await page.goBack();
+  await expect(page.getByRole("link", { name: "Edit assessment" })).toHaveAttribute(
+    "href",
+    /edit=assessment%3Aassessment|edit=assessment:assessment/,
+  );
+  await expect(page.getByRole("link", { name: "Edit task" })).toHaveAttribute(
+    "href",
+    "/upcoming?edit=task:task",
+  );
+  await expect(page.getByRole("link", { name: "Edit meeting" })).toHaveAttribute(
+    "href",
+    /edit=meeting%3Ameeting|edit=meeting:meeting/,
+  );
 });
 test("assessment and task forms remain operable by keyboard at phone and zoom widths", async ({
   page,

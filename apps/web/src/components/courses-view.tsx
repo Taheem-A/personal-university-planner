@@ -211,6 +211,14 @@ export function CoursesView({ model, edit }: { model: CoursesViewModel; edit?: s
                           >
                             {assessment.submissionStatus.replaceAll("_", " ").toLowerCase()}
                           </StatusIndicator>
+                          {detail.termStatus !== "ARCHIVED" && (
+                            <Link
+                              className="button button-secondary"
+                              href={`/upcoming?assessment=${encodeURIComponent(assessment.id)}&edit=assessment:${encodeURIComponent(assessment.id)}`}
+                            >
+                              Edit assessment
+                            </Link>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -230,6 +238,14 @@ export function CoursesView({ model, edit }: { model: CoursesViewModel; edit?: s
                           </div>
                           <span>{work(task.remainingMinutes)}</span>
                           <span>{task.status.replaceAll("_", " ").toLowerCase()}</span>
+                          {detail.termStatus !== "ARCHIVED" && (
+                            <Link
+                              className="button button-secondary"
+                              href={`/upcoming?edit=task:${encodeURIComponent(task.id)}`}
+                            >
+                              Edit task
+                            </Link>
+                          )}
                         </li>
                       ))}
                     </ul>

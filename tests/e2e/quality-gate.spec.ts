@@ -104,6 +104,47 @@ test("mobile controls and 200% equivalent view remain usable", async ({ page }) 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test("Manual Add routes known objects to their owning editors and preserves capture", async ({
+  page,
+}) => {
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 850 });
+    await page.setContent(
+      documentFor("/today", renderToday(syntheticTodayModel()), "panel=add", "dark"),
+    );
+    const chooser = page.getByRole("navigation", { name: "Manual Add choices" });
+    await expect(chooser).toBeVisible();
+    const routes = [
+      ["Assessment or assignment", "/upcoming?edit=assessment-new"],
+      ["Work task", "/upcoming?edit=task-new"],
+      ["Course", "/courses?edit=course-new"],
+      ["Course meeting", "/courses?edit=meeting-new"],
+      ["Fixed commitment", "/availability?edit=event-new"],
+      ["Availability", "/availability?edit=availability-new"],
+      ["Protected time", "/availability?edit=protection-new"],
+    ] as const;
+    for (const [label, href] of routes) {
+      const link = chooser.locator(`a[href="${href}"]`);
+      await expect(link).toContainText(label);
+    }
+    await expect(page.getByRole("link", { name: "Quick Capture" })).toHaveAttribute(
+      "href",
+      "/inbox?capture=1",
+    );
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    const small = await chooser
+      .locator("a")
+      .evaluateAll(
+        (links) => links.filter((link) => link.getBoundingClientRect().height < 44).length,
+      );
+    expect(small).toBe(0);
+    await chooser.getByRole("link", { name: /Assessment or assignment/ }).focus();
+    await expect(chooser.getByRole("link", { name: /Assessment or assignment/ })).toBeFocused();
+  }
+});
+
 test("keyboard focus and week list offer a complete semantic route through the calendar", async ({
   page,
 }) => {

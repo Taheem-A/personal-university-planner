@@ -129,7 +129,7 @@ export function renderWorkloadEditor(kind, overrides = {}) {
   if (!selection) throw Error("Unknown workload editor");
   return renderToStaticMarkup(React.createElement(selection[0], { ...selection[1], ...overrides }));
 }
-export function renderManualEditor(kind) {
+export function renderManualEditor(kind, overrides = {}) {
   const term = {
     id: "synthetic-term",
     version: 0,
@@ -155,7 +155,7 @@ export function renderManualEditor(kind) {
     event: [EventEditor, { model, returnTo: "/availability?date=2026-09-01" }],
   }[kind];
   if (!selection) throw Error("Unknown editor");
-  return renderToStaticMarkup(React.createElement(selection[0], selection[1]));
+  return renderToStaticMarkup(React.createElement(selection[0], { ...selection[1], ...overrides }));
 }
 
 export function courseModel(explicitSelection = true) {

@@ -24,7 +24,8 @@ const codes = new Set<MutationCode>([
 const fallback: Record<MutationCode, string> = {
   VALIDATION_ERROR: "Check the information and try again.",
   CONFLICT: "This change conflicts with another record.",
-  STALE_WRITE: "This record changed. Reload it before saving again.",
+  STALE_WRITE:
+    "This record changed. Your changes were not saved. Reload the latest record, review it, then try again.",
   NOT_FOUND: "This record is no longer available.",
   UNAUTHORIZED: "Your session ended. Sign in again.",
   PLANNER_INFEASIBLE: "The planner could not make a feasible plan.",
