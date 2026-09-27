@@ -58,6 +58,7 @@ test("Upcoming unknowns and inaccessible detail remain honest", () => {
 test("Inbox presents persisted raw state and a truthful empty state", () => {
   const model = {
     timezone: "America/Toronto",
+    courseChoices: [{ id: "course", code: "SYN101", name: "Synthetic course" }],
     tabs: [
       { status: "ACTIVE", count: 1 },
       { status: "PROCESSED", count: 0 },
@@ -66,12 +67,17 @@ test("Inbox presents persisted raw state and a truthful empty state", () => {
     items: [
       {
         id: "synthetic-item",
+        version: 0,
         rawText: "Check synthetic lab notes",
         status: "ACTIVE",
         source: "MANUAL",
         sourceAuthority: "USER",
         proposedEntityType: null,
         proposedTitle: null,
+        proposedPayload: null,
+        resolvedEntityType: null,
+        resolvedEntityId: null,
+        planningStatus: null,
         createdAt: new Date("2026-03-09T12:00:00Z"),
         processedAt: null,
       },
@@ -81,6 +87,11 @@ test("Inbox presents persisted raw state and a truthful empty state", () => {
   assert.match(html, /Check synthetic lab notes/);
   assert.match(html, /Captured as raw text · details unresolved/);
   assert.match(html, /Quick capture/);
+  const selected = renderInbox(model, "ACTIVE", "synthetic-item");
+  assert.match(selected, /Captured text · preserved/);
+  assert.match(selected, /Proposed interpretation · unconfirmed/);
+  assert.match(selected, /Save canonical object and process/);
+  assert.match(selected, /Dismiss capture/);
   assert.match(
     renderInbox({ tabs: model.tabs.map((tab) => ({ ...tab, count: 0 })), items: [] }),
     /Your inbox is clear/,

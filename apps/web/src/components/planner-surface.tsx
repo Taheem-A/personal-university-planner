@@ -9,7 +9,7 @@ const destinations = [
   { label: "Today", href: "/today", icon: CalendarDays },
   { label: "Week", href: "/week", icon: CalendarDays },
   { label: "Upcoming", href: "/upcoming", icon: ClipboardList },
-  { label: "Inbox and Quick Add", href: "/inbox?capture=1", icon: Inbox },
+  { label: "Inbox and Quick Capture", href: "/inbox?capture=1", icon: Inbox },
   { label: "Settings", href: "/settings", icon: Settings2 },
 ] as const;
 

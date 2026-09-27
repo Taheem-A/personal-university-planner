@@ -28,7 +28,12 @@ function invalid(message: string, status = 400): Response {
 /** Transport-only JSON and same-origin checks; all domain input is validated by the service. */
 export async function bodyOf(request: Request): Promise<unknown | Response> {
   const origin = request.headers.get("origin");
-  if (!origin || origin !== new URL(request.url).origin)
+  // Next may normalize request.url to an internal hostname. The Host header is
+  // the browser-facing authority, so use it for the CSRF comparison when set.
+  const url = new URL(request.url);
+  const host = request.headers.get("host");
+  const expectedOrigin = host ? `${url.protocol}//${host}` : url.origin;
+  if (!origin || origin !== expectedOrigin)
     return Response.json(
       { error: { code: "UNAUTHORIZED", message: "Same-origin request required." } },
       { status: 403, headers },

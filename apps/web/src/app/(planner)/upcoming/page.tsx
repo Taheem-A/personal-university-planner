@@ -21,6 +21,14 @@ export default async function Page({
       : "overview";
   const result = await informationViews.upcoming({
     ...(typeof query.assessment === "string" ? { assessmentId: query.assessment } : {}),
+    ...(typeof query.edit === "string" && query.edit.startsWith("task:")
+      ? { taskId: query.edit.slice(5) }
+      : {}),
+    ...(typeof query.edit === "string" && query.edit.startsWith("assessment")
+      ? { editorKind: "ASSESSMENT" as const }
+      : typeof query.edit === "string" && query.edit.startsWith("task")
+        ? { editorKind: "TASK" as const }
+        : {}),
     sort,
   });
   if (!result.ok) {
@@ -34,5 +42,15 @@ export default async function Page({
       </div>
     );
   }
-  return <UpcomingView model={result.value} range={range} sort={sort} view={view} />;
+  return (
+    <UpcomingView
+      model={result.value}
+      range={range}
+      sort={sort}
+      view={view}
+      edit={typeof query.edit === "string" ? query.edit : undefined}
+      selectedCourseId={typeof query.course === "string" ? query.course : undefined}
+      selectedParentId={typeof query.parent === "string" ? query.parent : undefined}
+    />
+  );
 }

@@ -23,9 +23,27 @@ function load(file) {
   const require = (name) =>
     name === "next/link"
       ? { __esModule: true, default: Link }
-      : name === "lucide-react"
-        ? webRequire(name)
-        : webRequire(name);
+      : name === "./timezone-form"
+        ? {
+            TimezoneForm: () =>
+              React.createElement(
+                "button",
+                { type: "button", className: "button button-secondary" },
+                "Change time zone",
+              ),
+          }
+        : name === "lucide-react"
+          ? webRequire(name)
+          : name === "./first-plan-action"
+            ? {
+                FirstPlanAction: () =>
+                  React.createElement(
+                    "button",
+                    { type: "submit", className: "button button-primary" },
+                    "Generate first plan",
+                  ),
+              }
+            : webRequire(name);
   vm.runInNewContext(
     javascript,
     { exports, require, Date, Intl, URLSearchParams },
@@ -37,14 +55,19 @@ const { OnboardingView } = load("onboarding-view.tsx");
 const { PlannerSurface } = load("planner-surface.tsx");
 export const onboardingModel = {
   timezone: "America/Toronto",
-  term: { name: "Synthetic Spring", status: "ACTIVE" },
+  term: { id: "synthetic-term", name: "Synthetic Spring", status: "ACTIVE" },
   courseCount: 2,
   meetingCount: 3,
+  fixedEventCount: 1,
   availabilityCount: 2,
   protectedCount: 1,
+  sleepCount: 1,
+  preferencesConfigured: true,
   assessmentCount: 4,
   taskCount: 6,
+  schedulableTaskCount: 5,
   hasSuccessfulPlan: false,
+  hasUsablePlan: false,
   needsSetup: true,
 };
 export const renderOnboarding = (step = 1, model = onboardingModel) =>

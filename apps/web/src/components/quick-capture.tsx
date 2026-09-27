@@ -2,6 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { submitMutation } from "./mutation-client";
+
+function savedCapture(value: unknown): value is { id: string; status: "ACTIVE" } {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    typeof (value as { id?: unknown }).id === "string" &&
+    (value as { status?: unknown }).status === "ACTIVE",
+  );
+}
 
 export function QuickCapture({ focusOnMount }: { focusOnMount: boolean }) {
   const router = useRouter();
@@ -23,23 +33,23 @@ export function QuickCapture({ focusOnMount }: { focusOnMount: boolean }) {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/v1/inbox/capture", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText }),
-      });
-      const result = await response.json();
-      if (!response.ok || !result.data?.id) {
+      const result = await submitMutation(
+        "/api/v1/inbox/capture",
+        "POST",
+        { rawText },
+        savedCapture,
+      );
+      if (!result.ok) {
         setMessage({
           type: "error",
-          text: result.error?.message ?? "Capture could not be saved. Try again.",
+          text: result.message,
         });
         return;
       }
       setValue("");
       setMessage({
         type: "success",
-        text: "Saved to Inbox as raw text. Details have not been interpreted yet.",
+        text: "Saved to Inbox as raw text. Open the item to review or request an interpretation.",
       });
       router.refresh();
       input.current?.focus();
@@ -71,7 +81,7 @@ export function QuickCapture({ focusOnMount }: { focusOnMount: boolean }) {
         </div>
       </form>
       <p id="quick-capture-help">
-        Capture now. Interpreting dates, courses, and tasks comes later.
+        Capture now. Review or request a limited interpretation in Inbox when ready.
       </p>
       <p
         id="quick-capture-result"

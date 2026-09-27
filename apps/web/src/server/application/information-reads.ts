@@ -28,6 +28,8 @@ export interface UpcomingItem {
 }
 export interface AssessmentDetailModel {
   id: string;
+  version: number;
+  courseId: string;
   title: string;
   type: string;
   courseCode: string;
@@ -52,6 +54,7 @@ export interface AssessmentDetailModel {
     id: string;
     title: string;
     status: string;
+    parentTaskId: string | null;
     remainingMinutes: number | null;
     dueAt: Date | null;
   }[];
@@ -69,20 +72,68 @@ export interface UpcomingViewModel {
   anchorDate: string;
   groups: { id: HorizonGroup; items: UpcomingItem[] }[];
   selectedAssessment: AssessmentDetailModel | null;
+  selectedTask: TaskEditorModel | null;
+  courseChoices: { id: string; code: string; name: string }[];
+  assessmentChoices: { id: string; courseId: string; title: string }[];
+  taskChoices: {
+    id: string;
+    title: string;
+    courseId: string | null;
+    assessmentId: string | null;
+    parentTaskId: string | null;
+  }[];
   selectionUnavailable: boolean;
   planner: Pick<PlannerReadState, "status" | "authoritativeRun">;
 }
+export interface TaskEditorModel {
+  id: string;
+  version: number;
+  title: string;
+  description: string | null;
+  courseId: string | null;
+  assessmentId: string | null;
+  parentTaskId: string | null;
+  status: string;
+  dueAt: Date | null;
+  preferredCompletionAt: Date | null;
+  availableFrom: Date | null;
+  originalEstimatedMinutes: number | null;
+  currentEstimatedMinutes: number | null;
+  remainingMinutes: number | null;
+  energyRequirement: string | null;
+  locationRequirements: string[];
+  minimumSessionMinutes: number | null;
+  preferredSessionMinutes: number | null;
+  maximumSessionMinutes: number | null;
+  splittable: boolean;
+  interruptible: boolean;
+  planningMode: string;
+  priorityOverride: number | null;
+}
 export interface InboxViewModel {
   timezone: string;
+  courseChoices: { id: string; code: string; name: string }[];
   tabs: { status: "ACTIVE" | "PROCESSED" | "DISMISSED"; count: number }[];
   items: {
     id: string;
+    version: number;
     rawText: string;
     status: "ACTIVE" | "PROCESSED" | "DISMISSED";
     source: string;
     sourceAuthority: string;
     proposedEntityType: string | null;
     proposedTitle: string | null;
+    proposedPayload: {
+      title: string;
+      courseId: string | null;
+      durationMinutes?: number | null;
+      dueAt?: string | null;
+      startAt?: string | null;
+      endAt?: string | null;
+    } | null;
+    resolvedEntityType: string | null;
+    resolvedEntityId: string | null;
+    planningStatus: "SUCCEEDED" | "FAILED" | "RUNNING" | "INFEASIBLE" | null;
     createdAt: Date;
     processedAt: Date | null;
   }[];
@@ -113,6 +164,8 @@ export function buildUpcoming(
   now: Date,
   selectedId: string | null,
   sort: "PRESSURE" | "DUE",
+  selectedTaskId: string | null = null,
+  editorKind: "ASSESSMENT" | "TASK" | null = null,
 ): UpcomingViewModel {
   const timezone = state.user.timezone;
   const anchorDate = instantToLocal(now, timezone).date;
@@ -194,6 +247,8 @@ export function buildUpcoming(
     const estimates = active.map((task) => task.remainingMinutes);
     selectedAssessment = {
       id: selected.id,
+      version: selected.version,
+      courseId: selected.courseId,
       title: selected.title,
       type: selected.assessmentType,
       courseCode: course.code,
@@ -221,6 +276,7 @@ export function buildUpcoming(
         id: task.id,
         title: task.title,
         status: task.status,
+        parentTaskId: task.parentTaskId,
         remainingMinutes: task.remainingMinutes,
         dueAt: task.dueAt,
       })),
@@ -245,6 +301,73 @@ export function buildUpcoming(
   return {
     timezone,
     anchorDate,
+    selectedTask: (() => {
+      const task = selectedTaskId ? allTasks.find((item) => item.id === selectedTaskId) : null;
+      if (
+        !task ||
+        (task.courseId && !courses.has(task.courseId)) ||
+        (task.assessmentId && !assessments.some((item) => item.id === task.assessmentId))
+      )
+        return null;
+      return {
+        id: task.id,
+        version: task.version,
+        title: task.title,
+        description: task.description,
+        courseId: task.courseId,
+        assessmentId: task.assessmentId,
+        parentTaskId: task.parentTaskId,
+        status: task.status,
+        dueAt: task.dueAt,
+        preferredCompletionAt: task.preferredCompletionAt,
+        availableFrom: task.availableFrom,
+        originalEstimatedMinutes: task.originalEstimatedMinutes,
+        currentEstimatedMinutes: task.currentEstimatedMinutes,
+        remainingMinutes: task.remainingMinutes,
+        energyRequirement: task.energyRequirement,
+        locationRequirements: task.locationRequirements,
+        minimumSessionMinutes: task.minimumSessionMinutes,
+        preferredSessionMinutes: task.preferredSessionMinutes,
+        maximumSessionMinutes: task.maximumSessionMinutes,
+        splittable: task.splittable,
+        interruptible: task.interruptible,
+        planningMode: task.planningMode,
+        priorityOverride: task.priorityOverride,
+      };
+    })(),
+    courseChoices: editorKind
+      ? [...courses.values()].map((course) => ({
+          id: course.id,
+          code: course.code,
+          name: course.name,
+        }))
+      : [],
+    assessmentChoices:
+      editorKind === "TASK"
+        ? assessments.map((assessment) => ({
+            id: assessment.id,
+            courseId: assessment.courseId,
+            title: assessment.title,
+          }))
+        : [],
+    taskChoices:
+      editorKind === "TASK"
+        ? allTasks
+            .filter(
+              (task) =>
+                !["COMPLETED", "CANCELLED"].includes(task.status) &&
+                (!task.courseId || courses.has(task.courseId)) &&
+                (!task.assessmentId ||
+                  assessments.some((assessment) => assessment.id === task.assessmentId)),
+            )
+            .map((task) => ({
+              id: task.id,
+              title: task.title,
+              courseId: task.courseId,
+              assessmentId: task.assessmentId,
+              parentTaskId: task.parentTaskId,
+            }))
+        : [],
     groups: order.map((id) => ({
       id,
       items: items
@@ -272,10 +395,41 @@ export function buildUpcoming(
   };
 }
 
-export function buildInbox(rows: InboxItemRecord[], timezone: string): InboxViewModel {
+const safeInboxProposal = z
+  .object({
+    title: z.string(),
+    courseId: z.string().nullable(),
+    durationMinutes: z.number().nullable().optional(),
+    dueAt: z.string().nullable().optional(),
+    startAt: z.string().nullable().optional(),
+    endAt: z.string().nullable().optional(),
+  })
+  .strip();
+function inboxPlanningStatus(
+  run: PlannerRunRecord | undefined,
+): InboxViewModel["items"][number]["planningStatus"] {
+  if (!run) return null;
+  const summary = run.summary;
+  if (
+    run.status === "SUCCEEDED" &&
+    summary &&
+    typeof summary === "object" &&
+    !Array.isArray(summary) &&
+    summary.planStatus === "INFEASIBLE"
+  )
+    return "INFEASIBLE";
+  return run.status;
+}
+export function buildInbox(
+  rows: InboxItemRecord[],
+  timezone: string,
+  courseChoices: { id: string; code: string; name: string }[] = [],
+  runs: PlannerRunRecord[] = [],
+): InboxViewModel {
   const statuses = ["ACTIVE", "PROCESSED", "DISMISSED"] as const;
   return {
     timezone,
+    courseChoices,
     tabs: statuses.map((status) => ({
       status,
       count: rows.filter((item) => item.status === status).length,
@@ -284,11 +438,18 @@ export function buildInbox(rows: InboxItemRecord[], timezone: string): InboxView
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id))
       .map((item) => ({
         id: item.id,
+        version: item.version,
         rawText: item.rawText,
         status: item.status,
         source: item.source,
         sourceAuthority: item.sourceAuthority,
         proposedEntityType: item.proposedEntityType,
+        proposedPayload: safeInboxProposal.safeParse(item.proposedPayload).data ?? null,
+        resolvedEntityType: item.resolvedEntityType ?? null,
+        resolvedEntityId: item.resolvedEntityId ?? null,
+        planningStatus: item.resolvedEntityId
+          ? inboxPlanningStatus(runs.find((run) => run.triggerEntityId === item.resolvedEntityId))
+          : null,
         proposedTitle:
           item.proposedPayload &&
           typeof item.proposedPayload === "object" &&
@@ -305,6 +466,8 @@ export function buildInbox(rows: InboxItemRecord[], timezone: string): InboxView
 const upcomingRequest = z
   .object({
     assessmentId: idSchema.optional(),
+    taskId: idSchema.optional(),
+    editorKind: z.enum(["ASSESSMENT", "TASK"]).optional(),
     sort: z.enum(["PRESSURE", "DUE"]).default("PRESSURE"),
   })
   .strict();
@@ -341,6 +504,8 @@ export const informationViews = {
           now,
           data.assessmentId ?? null,
           data.sort,
+          data.taskId ?? null,
+          data.editorKind ?? null,
         );
       });
     });
@@ -356,7 +521,23 @@ export const informationViews = {
             tx.repositories.inboxItems.listByStatus(actor.userId, status),
           ),
         );
-        return buildInbox(rows.flat(), user.timezone);
+        const terms = await tx.repositories.academicTerms.listForUser(actor.userId);
+        const courses = (
+          await Promise.all(
+            terms
+              .filter((term) => term.status !== "ARCHIVED")
+              .map((term) => tx.repositories.courses.listForTerm(actor.userId, term.id)),
+          )
+        )
+          .flat()
+          .filter((course) => !course.archivedAt);
+        const runs = await tx.repositories.plannerRuns.listRecent(actor.userId, 50);
+        return buildInbox(
+          rows.flat(),
+          user.timezone,
+          courses.map(({ id, code, name }) => ({ id, code, name })),
+          runs,
+        );
       });
     });
   },

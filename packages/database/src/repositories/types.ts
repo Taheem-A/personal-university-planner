@@ -36,6 +36,11 @@ export interface UserRepository {
     id: string,
     patch: Pick<UserRecord, "name" | "timezone" | "defaultDayStart" | "defaultDayEnd" | "locale">,
   ): Promise<UserRecord>;
+  updateTimezoneIfCurrent(
+    id: string,
+    expectedTimezone: string,
+    timezone: string,
+  ): Promise<ConditionalMutation<UserRecord>>;
 }
 
 /** Authentication infrastructure, never a planner domain entity. */
@@ -466,7 +471,15 @@ export interface InboxItemRepository {
     id: string,
     version: number,
     patch: Partial<
-      Pick<InboxItemRecord, "status" | "proposedEntityType" | "proposedPayload" | "processedAt">
+      Pick<
+        InboxItemRecord,
+        | "status"
+        | "proposedEntityType"
+        | "proposedPayload"
+        | "resolvedEntityType"
+        | "resolvedEntityId"
+        | "processedAt"
+      >
     >,
   ): Promise<ConditionalMutation<InboxItemRecord>>;
 }

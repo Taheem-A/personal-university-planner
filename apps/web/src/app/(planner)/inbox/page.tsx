@@ -23,5 +23,12 @@ export default async function Page({
   }
   const status =
     query.status === "PROCESSED" || query.status === "DISMISSED" ? query.status : "ACTIVE";
-  return <InboxView model={result.value} status={status} focusCapture={query.capture === "1"} />;
+  return (
+    <InboxView
+      model={result.value}
+      status={status}
+      focusCapture={query.capture === "1"}
+      selectedId={typeof query.item === "string" ? query.item : null}
+    />
+  );
 }

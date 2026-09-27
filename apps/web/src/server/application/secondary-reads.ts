@@ -30,6 +30,12 @@ export interface CourseListItem {
 }
 export interface CourseDetailModel {
   id: string;
+  version: number;
+  academicTermId: string;
+  termVersion: number;
+  termStatus: string;
+  source: string;
+  sourceAuthority: string;
   code: string;
   name: string;
   colorReference: string | null;
@@ -43,12 +49,16 @@ export interface CourseDetailModel {
   defaultTaskLocation: string[];
   meetings: {
     id: string;
+    version: number;
     type: string;
     location: string | null;
     recurrenceRule: string;
     startTimeLocal: string;
     endTimeLocal: string;
     timezone: string;
+    spansNextDay: boolean;
+    effectiveFrom: string;
+    effectiveUntil: string | null;
     attendanceRequired: boolean;
   }[];
   assessments: {
@@ -74,6 +84,14 @@ export interface CourseDetailModel {
 export interface CoursesViewModel {
   timezone: string;
   activeTermName: string | null;
+  terms: {
+    id: string;
+    version: number;
+    name: string;
+    startDate: string;
+    endDate: string;
+    status: string;
+  }[];
   courses: CourseListItem[];
   selectedCourse: CourseDetailModel | null;
   selectionUnavailable: boolean;
@@ -98,6 +116,46 @@ export interface AvailabilityViewModel {
   weekEnd: string;
   days: { date: string; items: AvailabilityItem[] }[];
   ruleCounts: { availability: number; hardProtected: number; softProtected: number; sleep: number };
+  availabilityRules: {
+    id: string;
+    version: number;
+    recurrenceRule: string;
+    startTimeLocal: string;
+    endTimeLocal: string;
+    spansNextDay: boolean;
+    timezone: string;
+    effectiveFrom: string;
+    effectiveUntil: string | null;
+    capacityFactor: number;
+    energyLevel: string;
+    allowedLocationTags: string[];
+  }[];
+  protectedRules: {
+    id: string;
+    version: number;
+    recurrenceRule: string;
+    startTimeLocal: string;
+    endTimeLocal: string;
+    spansNextDay: boolean;
+    timezone: string;
+    effectiveFrom: string;
+    effectiveUntil: string | null;
+    protectionLevel: string;
+    reason: string;
+    isSleep: boolean;
+  }[];
+  manualEvents: {
+    id: string;
+    version: number;
+    title: string;
+    eventType: string;
+    startAt: Date;
+    endAt: Date;
+    location: string | null;
+    constraintLevel: string;
+    courseId: string | null;
+  }[];
+  courseChoices: { id: string; code: string; name: string }[];
 }
 export interface SettingsViewModel {
   user: {
@@ -109,6 +167,7 @@ export interface SettingsViewModel {
   };
   activeTerm: { name: string; startDate: string; endDate: string } | null;
   preferences: {
+    version: number;
     preferredDailyStudyLimitMinutes: number;
     minimumFreeTimeMinutes: number;
     preferredDeadlineBufferHours: number;
@@ -135,14 +194,19 @@ export interface IntegrationsViewModel {
 }
 export interface OnboardingViewModel {
   timezone: string;
-  term: { name: string; status: string } | null;
+  term: { id: string; name: string; status: string } | null;
   courseCount: number;
   meetingCount: number;
+  fixedEventCount: number;
   availabilityCount: number;
   protectedCount: number;
+  sleepCount: number;
+  preferencesConfigured: boolean;
   assessmentCount: number;
   taskCount: number;
+  schedulableTaskCount: number;
   hasSuccessfulPlan: boolean;
+  hasUsablePlan: boolean;
   needsSetup: boolean;
 }
 
@@ -157,29 +221,50 @@ export function buildOnboarding(
     (item) => item.userId === userId && !item.archivedAt && item.academicTermId === term?.id,
   );
   const courseIds = new Set(courses.map((item) => item.id));
+  const tasks = state.tasks.filter(
+    (item) =>
+      item.userId === userId &&
+      !item.archivedAt &&
+      (item.courseId === null || courseIds.has(item.courseId)),
+  );
+  const rawSummary = successful?.summary;
+  const hasUsablePlan = Boolean(
+    rawSummary &&
+    typeof rawSummary === "object" &&
+    !Array.isArray(rawSummary) &&
+    rawSummary.planStatus === "VALID" &&
+    Number(rawSummary.generatedSessionCount) + Number(rawSummary.retainedSessionCount) > 0,
+  );
   return {
     timezone: state.user.timezone,
-    term: term ? { name: term.name, status: term.status } : null,
+    term: term ? { id: term.id, name: term.name, status: term.status } : null,
     courseCount: courses.length,
     meetingCount: state.courseMeetings.filter(
       (item) => item.userId === userId && !item.archivedAt && courseIds.has(item.courseId),
+    ).length,
+    fixedEventCount: state.calendarEvents.filter(
+      (item) => item.userId === userId && !item.archivedAt && item.source === "MANUAL",
     ).length,
     availabilityCount: state.availabilityRules.filter(
       (item) => item.userId === userId && item.active,
     ).length,
     protectedCount: state.protectedTimeRules.filter((item) => item.userId === userId && item.active)
       .length,
+    sleepCount: state.protectedTimeRules.filter(
+      (item) =>
+        item.userId === userId && item.active && item.isSleep && item.protectionLevel === "HARD",
+    ).length,
+    preferencesConfigured: state.planningPreferences.some((item) => item.userId === userId),
     assessmentCount: state.assessments.filter(
       (item) => item.userId === userId && !item.archivedAt && courseIds.has(item.courseId),
     ).length,
-    taskCount: state.tasks.filter(
-      (item) =>
-        item.userId === userId &&
-        !item.archivedAt &&
-        (item.courseId === null || courseIds.has(item.courseId)),
+    taskCount: tasks.length,
+    schedulableTaskCount: tasks.filter(
+      (item) => item.planningMode === "AUTO" && ["READY", "IN_PROGRESS"].includes(item.status),
     ).length,
     hasSuccessfulPlan: Boolean(successful),
-    needsSetup: !term || courses.length === 0 || !successful,
+    hasUsablePlan,
+    needsSetup: !term || courses.length === 0 || !hasUsablePlan,
   };
 }
 
@@ -265,6 +350,12 @@ export function buildCourses(
     const taskIds = new Set(ownTasks.map((task) => task.id));
     selectedCourse = {
       id: selected.id,
+      version: selected.version,
+      academicTermId: selected.academicTermId,
+      termVersion: term.version,
+      termStatus: term.status,
+      source: selected.source,
+      sourceAuthority: selected.sourceAuthority,
       code: selected.code,
       name: selected.name,
       colorReference: selected.colorReference,
@@ -285,12 +376,16 @@ export function buildCourses(
         )
         .map((meeting) => ({
           id: meeting.id,
+          version: meeting.version,
           type: meeting.meetingType,
           location: meeting.location,
           recurrenceRule: meeting.recurrenceRule,
           startTimeLocal: meeting.startTimeLocal,
           endTimeLocal: meeting.endTimeLocal,
           timezone: meeting.timezone,
+          spansNextDay: meeting.spansNextDay,
+          effectiveFrom: meeting.effectiveFrom,
+          effectiveUntil: meeting.effectiveUntil,
           attendanceRequired: meeting.attendanceRequired,
         })),
       assessments: ownAssessments
@@ -340,6 +435,14 @@ export function buildCourses(
   }
   return {
     timezone: state.user.timezone,
+    terms: [...terms.values()].map((term) => ({
+      id: term.id,
+      version: term.version,
+      name: term.name,
+      startDate: term.startDate,
+      endDate: term.endDate,
+      status: term.status,
+    })),
     activeTermName:
       state.academicTerms.find((term) => term.userId === state.user.id && term.status === "ACTIVE")
         ?.name ?? null,
@@ -495,6 +598,63 @@ export function buildAvailability(
     weekStart,
     weekEnd: end,
     days,
+    availabilityRules: state.availabilityRules
+      .filter((rule) => rule.userId === state.user.id && rule.active)
+      .map((rule) => ({
+        id: rule.id,
+        version: rule.version,
+        recurrenceRule: rule.recurrenceRule,
+        startTimeLocal: rule.startTimeLocal,
+        endTimeLocal: rule.endTimeLocal,
+        spansNextDay: rule.spansNextDay,
+        timezone: rule.timezone,
+        effectiveFrom: rule.effectiveFrom,
+        effectiveUntil: rule.effectiveUntil,
+        capacityFactor: rule.capacityFactor,
+        energyLevel: rule.energyLevel,
+        allowedLocationTags: rule.allowedLocationTags,
+      })),
+    protectedRules: state.protectedTimeRules
+      .filter((rule) => rule.userId === state.user.id && rule.active)
+      .map((rule) => ({
+        id: rule.id,
+        version: rule.version,
+        recurrenceRule: rule.recurrenceRule,
+        startTimeLocal: rule.startTimeLocal,
+        endTimeLocal: rule.endTimeLocal,
+        spansNextDay: rule.spansNextDay,
+        timezone: rule.timezone,
+        effectiveFrom: rule.effectiveFrom,
+        effectiveUntil: rule.effectiveUntil,
+        protectionLevel: rule.protectionLevel,
+        reason: rule.reason,
+        isSleep: rule.isSleep,
+      })),
+    manualEvents: state.calendarEvents
+      .filter(
+        (event) =>
+          event.userId === state.user.id &&
+          !event.archivedAt &&
+          event.source === "MANUAL" &&
+          event.startAt < endAt &&
+          event.endAt > startAt,
+      )
+      .map((event) => ({
+        id: event.id,
+        version: event.version,
+        title: event.title,
+        eventType: event.eventType,
+        startAt: event.startAt,
+        endAt: event.endAt,
+        location: event.location,
+        constraintLevel: event.constraintLevel,
+        courseId: event.courseId,
+      })),
+    courseChoices: [...courses.values()].map((course) => ({
+      id: course.id,
+      code: course.code,
+      name: course.name,
+    })),
     ruleCounts: {
       availability: state.availabilityRules.filter(
         (rule) => rule.userId === state.user.id && rule.active,
@@ -538,6 +698,7 @@ export function buildSettings(state: PlanningStateSnapshot): SettingsViewModel {
       : null,
     preferences: preference
       ? {
+          version: preference.version,
           preferredDailyStudyLimitMinutes: preference.preferredDailyStudyLimitMinutes,
           minimumFreeTimeMinutes: preference.minimumFreeTimeMinutes,
           preferredDeadlineBufferHours: preference.preferredDeadlineBufferHours,

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
+const webRequire = Module.createRequire(path.resolve(__dirname, "../../apps/web/package.json"));
 const ts = require("typescript");
 const core = require("../../dist/packages/planner-core/src/index.js");
 const shared = require("../../dist/packages/shared/src/index.js");
@@ -153,11 +154,66 @@ function database(states = [state()]) {
     states: Object.fromEntries(states.map((item) => [item.user.id, item])),
     sessions: [],
     runs: [],
+    inboxItems: [],
   };
   let failBatch = false;
   let beforeClaim = null;
   let transactionTail = Promise.resolve();
   const repos = (working) => ({
+    users: {
+      async getById(owner) {
+        return working.states[owner]?.user ?? null;
+      },
+    },
+    academicTerms: {
+      async listForUser(owner) {
+        return working.states[owner]?.academicTerms ?? [];
+      },
+      async getForUser(owner, id) {
+        return (
+          working.states[owner]?.academicTerms.find(
+            (row) => row.id === id && row.userId === owner,
+          ) ?? null
+        );
+      },
+    },
+    courses: {
+      async getForUser(owner, id) {
+        return (
+          working.states[owner]?.courses.find((row) => row.id === id && row.userId === owner) ??
+          null
+        );
+      },
+      async listForTerm(owner, termId) {
+        return (
+          working.states[owner]?.courses.filter(
+            (row) => row.academicTermId === termId && row.userId === owner,
+          ) ?? []
+        );
+      },
+    },
+    tasks: {
+      async create(row) {
+        working.states[row.userId].tasks.push(row);
+        return row;
+      },
+    },
+    inboxItems: {
+      async create(row) {
+        working.inboxItems.push(row);
+        return row;
+      },
+      async getForUser(owner, id) {
+        return working.inboxItems.find((row) => row.userId === owner && row.id === id) ?? null;
+      },
+      async updateIfCurrent(owner, id, version, patch) {
+        const row = working.inboxItems.find((item) => item.userId === owner && item.id === id);
+        if (!row) return { status: "NOT_FOUND" };
+        if (row.version !== version) return { status: "STALE" };
+        Object.assign(row, patch, { version: row.version + 1 });
+        return { status: "UPDATED", record: row };
+      },
+    },
     planningState: {
       async snapshot(owner) {
         const entry = working.states[owner];
@@ -318,6 +374,247 @@ function active(db, owner = userId) {
   );
 }
 
+test("Quick Capture through reviewed Inbox resolution commits a schedulable task and authoritative sessions", async () => {
+  const fresh = state();
+  fresh.tasks = [];
+  fresh.courses[0].code = "SYN101";
+  fresh.academicTerms[0].name = "Synthetic term";
+  const db = database([fresh]);
+  const errors = load("errors.ts", {
+    "@university-planner/database": { getDatabaseErrorDetails: () => null },
+    "../monitoring": { reportInternalFailure: async () => {} },
+  });
+  const validation = load("validation.ts", { zod: webRequire("zod"), "./errors": errors });
+  const actor = { userId };
+  const authorization = {
+    requireActor: async () => actor,
+    requireTaskRelationships: async () => {},
+    requireCourse: async (repos, identity, id) => {
+      const course = await repos.courses.getForUser(identity.userId, id);
+      if (!course || course.archivedAt)
+        throw new errors.ApplicationError("NOT_FOUND", "Record not found.");
+      return course;
+    },
+  };
+  const serviceTools = load("service.ts", {
+    "../database": { applicationDatabase: () => db },
+    "./authorization": authorization,
+    "./errors": errors,
+    "./validation": validation,
+  });
+  const triggers = load("planner-triggers.ts", {
+    "../database": { applicationDatabase: () => db },
+    "./authorization": authorization,
+    "./errors": errors,
+    "./planner": {
+      generateAuthoritativePlan: async (input) => ({
+        ok: true,
+        value: await service.executePlannerForActor(db, userId, { ...input, now }, dependencies()),
+      }),
+    },
+  });
+  const academic = load("academic.ts", {
+    zod: webRequire("zod"),
+    "./authorization": authorization,
+    "./dependencies": { assertAcyclicDependency: () => {} },
+    "./errors": errors,
+    "./planner-triggers": triggers,
+    "./service": serviceTools,
+    "./validation": validation,
+  });
+  const interpretation = load("inbox-interpretation.ts");
+  const inbox = load("inbox.ts", {
+    zod: webRequire("zod"),
+    "./academic": academic,
+    "./inbox-interpretation": interpretation,
+    "./planner-triggers": triggers,
+    "./schedule": {
+      createCalendarEventInTransaction: async () => {
+        throw Error("Unused");
+      },
+    },
+    "./errors": errors,
+    "./service": serviceTools,
+    "./validation": validation,
+  }).inboxItems;
+  const captured = await inbox.capture({
+    rawText: "task: Synthetic coursework; course SYN101; duration 90m",
+  });
+  assert.equal(captured.ok, true);
+  assert.equal(captured.value.proposedPayload, null);
+  const suggested = await inbox.suggest({ id: captured.value.id, expectedVersion: 0 });
+  assert.equal(suggested.value.status, "PROPOSED");
+  assert.equal(db.data.inboxItems[0].proposedPayload.durationMinutes, 90);
+  const resolved = await inbox.resolve({
+    id: captured.value.id,
+    expectedVersion: 1,
+    entityType: "TASK",
+    payload: {
+      title: "Corrected synthetic coursework",
+      courseId: "course-1",
+      status: "READY",
+      originalEstimatedMinutes: 90,
+      currentEstimatedMinutes: 90,
+      remainingMinutes: 90,
+      availableFrom: "2026-09-20T12:00:00-04:00",
+      dueAt: "2026-09-24T17:00:00-04:00",
+      minimumSessionMinutes: 20,
+      preferredSessionMinutes: 45,
+      maximumSessionMinutes: 90,
+      energyRequirement: "HIGH",
+      locationRequirements: ["DESK"],
+    },
+  });
+  assert.equal(resolved.ok, true);
+  assert.equal(resolved.value.status, "PROCESSED");
+  assert.equal(resolved.value.planning.status, "SUCCEEDED");
+  assert.equal(
+    db.data.inboxItems[0].rawText,
+    "task: Synthetic coursework; course SYN101; duration 90m",
+  );
+  assert.equal(db.data.inboxItems[0].proposedPayload.title, "Synthetic coursework");
+  assert.equal(db.data.inboxItems[0].resolvedEntityId, resolved.value.entityId);
+  assert.ok(active(db).some((row) => row.taskId === resolved.value.entityId));
+  assert.equal(db.data.runs[0].status, "SUCCEEDED");
+});
+
+test("fresh canonical setup produces a persisted first plan visible in Today, Week, and Upcoming", async () => {
+  const fresh = state();
+  fresh.academicTerms = [];
+  fresh.courses = [];
+  fresh.courseMeetings = [];
+  fresh.availabilityRules = [];
+  fresh.protectedTimeRules = [];
+  fresh.planningPreferences = [];
+  fresh.tasks = [];
+  const db = database([fresh, state(otherId)]);
+  const snapshot = db.data.states[userId];
+  snapshot.academicTerms.push({
+    id: "term-1",
+    userId,
+    name: "Fall 2026",
+    status: "ACTIVE",
+    startDate: "2026-09-01",
+    endDate: "2026-12-20",
+  });
+  snapshot.courses.push({
+    id: "course-1",
+    userId,
+    academicTermId: "term-1",
+    code: "SYN101",
+    name: "Synthetic course",
+    archivedAt: null,
+    defaultTaskEnergy: null,
+  });
+  snapshot.courseMeetings.push({
+    id: "lecture",
+    userId,
+    courseId: "course-1",
+    meetingType: "LECTURE",
+    attendanceRequired: true,
+    archivedAt: null,
+    ...recurrence("10:00", "11:00"),
+    recurrenceRule: "FREQ=WEEKLY;BYDAY=MO",
+  });
+  snapshot.calendarEvents.push({
+    id: "appointment",
+    userId,
+    title: "Appointment",
+    source: "MANUAL",
+    constraintLevel: "HARD",
+    startAt: d("2026-09-22T12:00:00-04:00"),
+    endAt: d("2026-09-22T13:00:00-04:00"),
+    archivedAt: null,
+  });
+  snapshot.availabilityRules.push({
+    id: "available",
+    userId,
+    active: true,
+    capacityFactor: 1,
+    energyLevel: "HIGH",
+    allowedLocationTags: ["DESK"],
+    ...recurrence("08:00", "22:00"),
+  });
+  snapshot.protectedTimeRules.push({
+    id: "sleep",
+    userId,
+    active: true,
+    isSleep: true,
+    protectionLevel: "HARD",
+    reason: "Sleep",
+    ...recurrence("23:00", "07:00", true),
+  });
+  snapshot.planningPreferences.push({
+    userId,
+    minimumSleepMinutes: 420,
+    preferredDailyStudyLimitMinutes: 240,
+    minimumFreeTimeMinutes: 30,
+    preferredDeadlineBufferHours: 12,
+    avoidLateHighEnergyTasks: true,
+    maximumConsecutiveWorkMinutes: 120,
+    minimumBreakMinutes: 10,
+    scheduleCommuteWork: false,
+    weekendWorkBias: -0.5,
+    planStabilityWindowMinutes: 120,
+  });
+  snapshot.assessments.push({
+    id: "assessment",
+    userId,
+    courseId: "course-1",
+    title: "Assignment",
+    assessmentType: "ASSIGNMENT",
+    dueAt: null,
+    submissionStatus: "NOT_SUBMITTED",
+    archivedAt: null,
+  });
+  snapshot.tasks.push({ ...task("assignment-work"), assessmentId: "assessment" });
+  const result = await service.executePlannerForActor(
+    db,
+    userId,
+    { ...request(), mode: "FULL" },
+    dependencies(),
+  );
+  assert.equal(result.status, "SUCCEEDED");
+  assert.equal(result.planStatus, "VALID");
+  assert.ok(active(db).length > 0);
+  assert.equal(db.data.runs[0].status, "SUCCEEDED");
+  assert.equal(db.data.runs[0].plannerVersion, "heuristic-v1");
+  assert.equal(db.data.states[otherId].user.planningRevision, 0);
+  assert.equal(db.data.sessions.filter((row) => row.userId === otherId).length, 0);
+  const visible = { ...snapshot, workSessions: active(db) };
+  const reads = load("planner-reads.ts", {
+    zod: webRequire("zod"),
+    "../database": {},
+    "./authorization": {},
+    "./errors": {},
+    "./validation": { calendarDateSchema: webRequire("zod").z.string() },
+  });
+  const information = load("information-reads.ts", {
+    zod: webRequire("zod"),
+    "../database": {},
+    "./authorization": {},
+    "./errors": {},
+    "./validation": { idSchema: webRequire("zod").z.string() },
+    "./planner-reads": reads,
+  });
+  const run = db.data.runs[0];
+  const firstDate = shared.instantToLocal(active(db)[0].startAt, "America/Toronto").date;
+  const weekStart = shared.addLocalDays(
+    firstDate,
+    -((new Date(`${firstDate}T00:00:00Z`).getUTCDay() + 6) % 7),
+  );
+  const today = reads.buildToday(visible, run, run, firstDate, now);
+  const week = reads.buildWeek(visible, run, run, weekStart);
+  const upcoming = information.buildUpcoming(visible, run, run, now, null, "PRESSURE");
+  assert.ok(today.timeline.some((item) => item.kind === "WORK"));
+  assert.ok(week.schedule.some((item) => item.kind === "WORK"));
+  assert.ok(
+    upcoming.groups
+      .flatMap((group) => group.items)
+      .some((item) => item.id === "assessment" && item.dueAt === null),
+  );
+});
+
 test("canonical snapshot invokes heuristic-v1 and persists a reloadable run and sessions", async () => {
   const db = database([state(), state(otherId)]);
   db.data.states[userId].tasks.push({ ...task("foreign", otherId) });
@@ -344,6 +641,32 @@ test("canonical snapshot invokes heuristic-v1 and persists a reloadable run and 
   assert.equal(run.summary.delta.added.length, active(db).length);
   assert.ok(active(db).every((row) => Array.isArray(run.summary.sessionReasons[row.id])));
   assert.equal(db.data.sessions.filter((row) => row.userId === otherId).length, 0);
+});
+
+test("a newly saved schedulable task enters the next authoritative plan", async () => {
+  const empty = state();
+  empty.tasks = [];
+  const db = database([empty]);
+  const newTask = {
+    ...task("new-assignment-work"),
+    assessmentId: null,
+    remainingMinutes: 180,
+    originalEstimatedMinutes: 180,
+    currentEstimatedMinutes: 180,
+    minimumSessionMinutes: 45,
+    preferredSessionMinutes: 45,
+    maximumSessionMinutes: 45,
+  };
+  db.data.states[userId].tasks.push(newTask);
+  const result = await service.executePlannerForActor(
+    db,
+    userId,
+    request({ type: "TASK_CREATED", entityType: "TASK", entityId: newTask.id }),
+    dependencies(),
+  );
+  assert.equal(result.status, "SUCCEEDED");
+  assert.ok(active(db).some((row) => row.taskId === newTask.id));
+  assert.equal(db.data.runs.at(-1).triggerType, "TASK_CREATED");
 });
 
 test("repeat incremental run retains stable session IDs without duplicates", async () => {

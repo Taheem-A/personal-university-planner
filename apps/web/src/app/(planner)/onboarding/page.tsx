@@ -3,6 +3,8 @@ import Link from "next/link";
 import { secondaryViews } from "../../../server/application/secondary-reads";
 import { OnboardingView } from "../../../components/onboarding-view";
 import { InlineState } from "../../../components/planner-primitives";
+import { assembleCanonicalPlannerSnapshot } from "../../../server/application/planner";
+import { requestForReplan } from "../../../server/application/planner-triggers";
 
 export default async function Page({
   searchParams,
@@ -27,5 +29,23 @@ export default async function Page({
       </div>
     );
   }
-  return <OnboardingView model={result.value} step={step} />;
+  const readiness =
+    step === 6
+      ? await assembleCanonicalPlannerSnapshot(
+          requestForReplan({ trigger: { type: "MANUAL" }, mode: "FULL" }, new Date()),
+        )
+      : null;
+  if (readiness && !readiness.ok && readiness.error.code === "UNAUTHORIZED") redirect("/sign-in");
+  const issues =
+    readiness?.ok && readiness.value.status === "INPUT_FAILURE"
+      ? readiness.value.issues.map(({ code, message }) => ({ code, message }))
+      : [];
+  return (
+    <OnboardingView
+      model={result.value}
+      step={step}
+      planningIssues={issues}
+      readinessError={readiness && !readiness.ok ? readiness.error.message : null}
+    />
+  );
 }

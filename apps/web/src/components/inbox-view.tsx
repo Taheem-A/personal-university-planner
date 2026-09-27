@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Inbox as InboxIcon } from "lucide-react";
 import type { InboxViewModel } from "../server/application/information-reads";
 import { QuickCapture } from "./quick-capture";
+import { InboxResolution } from "./inbox-resolution";
 
 const statusNames = { ACTIVE: "Inbox", PROCESSED: "Processed", DISMISSED: "Dismissed" } as const;
 function stamp(date: Date, timezone: string) {
@@ -15,10 +16,12 @@ export function InboxView({
   model,
   status,
   focusCapture,
+  selectedId,
 }: {
   model: InboxViewModel;
   status: "ACTIVE" | "PROCESSED" | "DISMISSED";
   focusCapture: boolean;
+  selectedId: string | null;
 }) {
   const items = model.items.filter((item) => item.status === status);
   const needsInterpretation = model.items.filter(
@@ -53,7 +56,12 @@ export function InboxView({
                     <InboxIcon size={18} />
                   </span>
                   <div className="inbox-row-main">
-                    <strong>{item.rawText}</strong>
+                    <Link
+                      href={`/inbox?status=${status}&item=${encodeURIComponent(item.id)}`}
+                      aria-current={selectedId === item.id ? "true" : undefined}
+                    >
+                      <strong>{item.rawText}</strong>
+                    </Link>
                     <span>
                       {item.proposedEntityType
                         ? `Proposed ${item.proposedEntityType.toLowerCase()}${item.proposedTitle ? ` · ${item.proposedTitle}` : ""} — unconfirmed`
@@ -84,6 +92,14 @@ export function InboxView({
               </p>
             </div>
           )}
+          {selectedId && items.some((item) => item.id === selectedId) && (
+            <InboxResolution
+              key={`${selectedId}:${items.find((item) => item.id === selectedId)!.version}`}
+              item={items.find((item) => item.id === selectedId)!}
+              timezone={model.timezone}
+              courses={model.courseChoices}
+            />
+          )}
         </div>
         <aside className="inbox-side" aria-label="Inbox context">
           <section>
@@ -91,14 +107,14 @@ export function InboxView({
             <p>
               {needsInterpretation === 0
                 ? "No active raw captures await interpretation."
-                : `${needsInterpretation} active ${needsInterpretation === 1 ? "item" : "items"} saved as raw text. Dates, course links, and durations have not been inferred.`}
+                : `${needsInterpretation} active ${needsInterpretation === 1 ? "item" : "items"} saved as raw text. You can request a limited interpretation while reviewing each item.`}
             </p>
           </section>
           <section>
             <h2>About Quick Capture</h2>
             <p>
-              Adding text saves an Inbox item. Turning it into a task, assessment, or event remains
-              a later workflow.
+              Capture saves original text first. A proposal is a suggestion until you review and
+              save a canonical object.
             </p>
           </section>
         </aside>

@@ -39,6 +39,39 @@ const secondary: NavItem[] = [
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
+const manualAdd = [
+  {
+    label: "Assessment or assignment",
+    href: "/upcoming?edit=assessment-new",
+    detail: "An academic obligation, with a true deadline when known",
+  },
+  {
+    label: "Work task",
+    href: "/upcoming?edit=task-new",
+    detail: "Work for the planner to schedule",
+  },
+  { label: "Course", href: "/courses?edit=course-new", detail: "Add a course to an existing term" },
+  {
+    label: "Course meeting",
+    href: "/courses?edit=meeting-new",
+    detail: "A recurring class in your timetable",
+  },
+  {
+    label: "Fixed commitment",
+    href: "/availability?edit=event-new",
+    detail: "A one-off appointment or event",
+  },
+  {
+    label: "Availability",
+    href: "/availability?edit=availability-new",
+    detail: "Times when work may be scheduled",
+  },
+  {
+    label: "Protected time",
+    href: "/availability?edit=protection-new",
+    detail: "Recurring time to keep free",
+  },
+] as const;
 
 function NavLink({
   item,
@@ -76,6 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const restoreTrigger = useRef(false);
+  const addTrigger = useRef<HTMLAnchorElement | null>(null);
   const triggerRef = useRef<HTMLAnchorElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLElement>(null);
@@ -92,6 +126,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const params = new URLSearchParams(search.toString());
   params.set("panel", "planner");
   const plannerHref = `${pathname}?${params.toString()}`;
+  const addParams = new URLSearchParams(search.toString());
+  addParams.delete("scenario");
+  addParams.delete("conflict");
+  addParams.set("panel", "add");
+  const addHref = `${pathname}?${addParams.toString()}`;
 
   const closePanel = useCallback(() => {
     const next = new URLSearchParams(search.toString());
@@ -99,13 +138,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     else if (conflict) next.delete("conflict");
     else if (panel) next.delete("panel");
     else for (const key of ["assessment", "course"]) next.delete(key);
+    if (panel !== "add") addTrigger.current = null;
     restoreTrigger.current = true;
     router.replace(next.size ? `${pathname}?${next}` : pathname, { scroll: false });
   }, [pathname, router, search, scenario, conflict, panel]);
   useEffect(() => {
     if (!activePanel && restoreTrigger.current) {
       restoreTrigger.current = false;
-      triggerRef.current?.focus();
+      (addTrigger.current ?? triggerRef.current)?.focus();
+      addTrigger.current = null;
     }
   }, [activePanel]);
   useEffect(() => {
@@ -283,7 +324,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           <kbd>⌘ K</kbd>
         </Link>
         <div className="topbar-actions">
-          <Link href="/inbox?capture=1" className="button button-primary quick-add">
+          <Link
+            href={addHref}
+            className="button button-primary quick-add"
+            aria-label="Manual Add"
+            onClick={(event) => {
+              addTrigger.current = event.currentTarget;
+            }}
+          >
             <Plus size={18} aria-hidden="true" />
             Add
           </Link>
@@ -328,13 +376,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             key="right-panel"
             className="right-panel"
             aria-label={
-              activePanel === "planner"
-                ? "Planner panel"
-                : activePanel === "scenario"
-                  ? "Scenario preview"
-                  : activePanel === "conflict"
-                    ? "Conflict resolution"
-                    : "Detail panel"
+              activePanel === "add"
+                ? "Manual Add"
+                : activePanel === "planner"
+                  ? "Planner panel"
+                  : activePanel === "scenario"
+                    ? "Scenario preview"
+                    : activePanel === "conflict"
+                      ? "Conflict resolution"
+                      : "Detail panel"
             }
             role="dialog"
             aria-modal="true"
@@ -347,13 +397,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div>
                 <p className="panel-kicker">University Planner</p>
                 <h2>
-                  {activePanel === "planner"
-                    ? "Planner"
-                    : activePanel === "scenario"
-                      ? "Scenario preview"
-                      : activePanel === "conflict"
-                        ? "Conflict resolution"
-                        : "Detail"}
+                  {activePanel === "add"
+                    ? "Manual Add"
+                    : activePanel === "planner"
+                      ? "Planner"
+                      : activePanel === "scenario"
+                        ? "Scenario preview"
+                        : activePanel === "conflict"
+                          ? "Conflict resolution"
+                          : "Detail"}
                 </h2>
               </div>
               <button
@@ -365,9 +417,28 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <X size={18} />
               </button>
             </div>
-            {activePanel === "planner" ||
-            activePanel === "scenario" ||
-            activePanel === "conflict" ? (
+            {activePanel === "add" ? (
+              <div className="manual-add-panel">
+                <p>Choose what you already know. Each option opens its usual editor.</p>
+                <nav aria-label="Manual Add choices" className="manual-add-choices">
+                  {manualAdd.map((item) => (
+                    <Link key={item.href} href={item.href}>
+                      <strong>{item.label}</strong>
+                      <span>{item.detail}</span>
+                    </Link>
+                  ))}
+                </nav>
+                <div className="manual-add-capture">
+                  <strong>Not sure yet?</strong>
+                  <p>Capture the original thought now and review it in Inbox later.</p>
+                  <Link className="button button-secondary" href="/inbox?capture=1">
+                    Quick Capture
+                  </Link>
+                </div>
+              </div>
+            ) : activePanel === "planner" ||
+              activePanel === "scenario" ||
+              activePanel === "conflict" ? (
               <PlannerSurface
                 key={activePanel}
                 kind={activePanel}
@@ -385,9 +456,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         {primary.slice(0, 2).map((item) => (
           <NavLink key={item.href} item={item} current={pathname} />
         ))}
-        <Link href="/inbox?capture=1" className="mobile-add" aria-label="Quick Add">
+        <Link
+          href={addHref}
+          className="mobile-add"
+          aria-label="Manual Add"
+          onClick={(event) => {
+            addTrigger.current = event.currentTarget;
+          }}
+        >
           <Plus size={22} aria-hidden="true" />
-          <span>Quick Add</span>
+          <span>Add</span>
         </Link>
         {primary.slice(2).map((item) => (
           <NavLink key={item.href} item={item} current={pathname} />

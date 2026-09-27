@@ -23,5 +23,10 @@ export default async function Page({
       </div>
     );
   }
-  return <AvailabilityView model={result.value} />;
+  return (
+    <AvailabilityView
+      model={result.value}
+      edit={typeof query.edit === "string" ? query.edit : undefined}
+    />
+  );
 }

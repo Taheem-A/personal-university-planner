@@ -1,0 +1,6 @@
+import { manualPreferences } from "../../../../../../server/application/manual-management";
+import { mutate } from "../../../../../../server/transport";
+export const runtime = "nodejs";
+export async function PATCH(request: Request) {
+  return mutate(request, manualPreferences.update);
+}

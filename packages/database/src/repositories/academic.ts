@@ -42,6 +42,17 @@ export function createAcademicRepositories(db: DatabaseExecutor): {
         });
         return toPlainRecord<UserRecord>(row);
       },
+      async updateTimezoneIfCurrent(id, expectedTimezone, timezone) {
+        const rows = await db.user.updateManyAndReturn({
+          where: { id, timezone: expectedTimezone },
+          // Migration-owned trigger invalidates in-flight planner snapshots.
+          data: { timezone },
+        });
+        if (rows[0]) return { status: "UPDATED", record: toPlainRecord<UserRecord>(rows[0]) };
+        return (await db.user.findUnique({ where: { id }, select: { id: true } }))
+          ? { status: "STALE" }
+          : { status: "NOT_FOUND" };
+      },
     },
     academicTerms: {
       async create(record) {

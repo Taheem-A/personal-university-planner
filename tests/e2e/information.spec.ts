@@ -65,3 +65,57 @@ test("Assessment URLs preserve parent range and browser history", async ({ page 
   await page.goForward();
   await expect(page.getByRole("dialog")).toBeVisible();
 });
+
+test("Inbox review keeps correction and dismissal keyboard usable on phone and zoom widths", async ({
+  page,
+}) => {
+  const model = {
+    timezone: "America/Toronto",
+    courseChoices: [{ id: "synthetic-course", code: "SYN101", name: "Synthetic course" }],
+    tabs: [
+      { status: "ACTIVE", count: 1 },
+      { status: "PROCESSED", count: 0 },
+      { status: "DISMISSED", count: 0 },
+    ],
+    items: [
+      {
+        id: "synthetic-capture",
+        version: 0,
+        rawText: "task: Draft synthetic report; duration 90m",
+        status: "ACTIVE",
+        source: "MANUAL",
+        sourceAuthority: "USER",
+        proposedEntityType: "TASK",
+        proposedTitle: "Draft synthetic report",
+        proposedPayload: {
+          title: "Draft synthetic report",
+          courseId: null,
+          durationMinutes: 90,
+          dueAt: null,
+        },
+        resolvedEntityType: null,
+        resolvedEntityId: null,
+        planningStatus: null,
+        createdAt: new Date("2026-03-09T12:00:00Z"),
+        processedAt: null,
+      },
+    ],
+  } as Parameters<typeof renderInbox>[0];
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const width of [390, 640]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.setContent(
+      `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body><main class="main-content">${renderInbox(model, "ACTIVE", "synthetic-capture")}</main></body></html>`,
+    );
+    await expect(page.getByRole("heading", { name: "Review capture" })).toBeVisible();
+    await page.getByRole("textbox", { name: "Title" }).focus();
+    await expect(page.getByRole("textbox", { name: "Title" })).toBeFocused();
+    await expect(
+      page.getByRole("button", { name: "Save canonical object and process" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Dismiss capture" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  }
+});

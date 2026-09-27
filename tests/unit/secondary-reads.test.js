@@ -236,6 +236,10 @@ test("Course context is canonical, scoped, and preserves unknown selection priva
 });
 test("Availability expands recurrence in the account timezone across spring DST", () => {
   const model = reads.buildAvailability(state(), "2026-03-02");
+  assert.equal(model.availabilityRules.length, 1);
+  assert.equal(model.availabilityRules[0].timezone, "America/Toronto");
+  assert.equal(model.protectedRules.length, 2);
+  assert.equal(model.protectedRules.find((rule) => rule.isSleep).protectionLevel, "HARD");
   assert.equal(model.days.length, 7);
   assert.deepEqual(model.ruleCounts, {
     availability: 1,
@@ -304,7 +308,15 @@ test("Onboarding progress derives only from recorded account facts", () => {
   assert.equal(recorded.courseCount, 1);
   assert.equal(recorded.meetingCount, 1);
   assert.equal(recorded.hasSuccessfulPlan, true);
-  assert.equal(recorded.needsSetup, false);
+  assert.equal(recorded.hasUsablePlan, false);
+  assert.equal(recorded.needsSetup, true);
+  const planned = reads.buildOnboarding(state(), {
+    id: "usable-run",
+    status: "SUCCEEDED",
+    summary: { planStatus: "VALID", generatedSessionCount: 2, retainedSessionCount: 0 },
+  });
+  assert.equal(planned.hasUsablePlan, true);
+  assert.equal(planned.needsSetup, false);
   const empty = state();
   empty.academicTerms = [];
   empty.courses = [];
@@ -313,4 +325,17 @@ test("Onboarding progress derives only from recorded account facts", () => {
   assert.equal(newAccount.term, null);
   assert.equal(newAccount.courseCount, 0);
   assert.equal(newAccount.needsSetup, true);
+  const resumed = state();
+  const firstVisit = reads.buildOnboarding(resumed, null);
+  assert.equal(firstVisit.courseCount, 1);
+  resumed.courses[0].name = "Corrected synthetic course";
+  resumed.courses.push({
+    ...resumed.courses[0],
+    id: "second-course",
+    code: "SYN102",
+    name: "Second synthetic course",
+  });
+  const returnVisit = reads.buildOnboarding(resumed, null);
+  assert.equal(returnVisit.courseCount, 2);
+  assert.equal(resumed.courses.length, 3);
 });

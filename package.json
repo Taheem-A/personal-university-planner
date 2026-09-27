@@ -40,6 +40,7 @@
     "db:planner:live:verify": "pnpm build:core && pnpm --filter @university-planner/database build && node --test tests/database/planner-live.integration.mjs",
     "db:ui:real-state:verify": "pnpm build:core && pnpm --filter @university-planner/database build && node --test tests/database/ui-real-state.integration.mjs",
     "db:ui:browser:verify": "node --test tests/database/ui-authenticated.browser.mjs",
+    "db:m6:live:verify": "pnpm build && node --test tests/database/m6-live.browser.mjs",
     "db:validate": "pnpm --filter @university-planner/database db:validate",
     "verify": "pnpm format:check && pnpm lint && pnpm check:boundaries && pnpm db:generate && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm db:validate && pnpm build && pnpm test:e2e"
   },

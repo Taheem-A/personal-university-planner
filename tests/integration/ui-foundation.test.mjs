@@ -74,7 +74,7 @@ test("authenticated shell renders primary and mobile navigation with selected st
     "Settings",
   ])
     assert.match(html, new RegExp(label));
-  assert.match(html, /aria-label="Quick Add"/);
+  assert.match(html, /aria-label="Manual Add"/);
   assert.match(html, /Search or ask planner/);
   assert.match(html, /class="skip-link" href="#main-content"/);
   assert.match(html, /id="main-content" tabindex="-1"/);
@@ -86,12 +86,26 @@ test("URL-driven Planner panel and theme, reduced-motion tokens are present", ()
   assert.match(html, /<h2>Planner<\/h2>/);
   assert.match(html, /aria-modal="true"/);
   assert.doesNotMatch(renderShell("/week"), /aria-label="Planner panel"/);
+  const add = renderShell("/week", "panel=add");
+  assert.match(add, /aria-label="Manual Add choices"/);
+  assert.match(renderShell("/week", "scenario=preview"), /href="\/week\?panel=add"/);
+  for (const route of [
+    "/upcoming?edit=assessment-new",
+    "/upcoming?edit=task-new",
+    "/courses?edit=course-new",
+    "/courses?edit=meeting-new",
+    "/availability?edit=event-new",
+    "/availability?edit=availability-new",
+    "/availability?edit=protection-new",
+    "/inbox?capture=1",
+  ])
+    assert.ok(add.includes(`href="${route}"`), route);
   assert.match(renderShell("/week", "scenario=preview"), /aria-label="Scenario preview"/);
   assert.match(renderShell("/week", "conflict=overview"), /aria-label="Conflict resolution"/);
   const shellSource = readFileSync("apps/web/src/components/app-shell.tsx", "utf8");
   assert.match(shellSource, /event\.key === "Escape"\) closePanel\(\)/);
   assert.match(shellSource, /event\.key === "Tab" && panelRef\.current/);
-  assert.match(shellSource, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(shellSource, /addTrigger\.current \?\? triggerRef\.current/);
   assert.match(shellSource, /menuCloseRef\.current\?\.focus\(\)/);
   assert.match(shellSource, /menuTriggerRef\.current\?\.focus\(\)/);
   assert.match(shellSource, /accountTriggerRef\.current\?\.focus\(\)/);

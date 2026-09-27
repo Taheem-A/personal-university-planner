@@ -169,6 +169,26 @@ function WeekDetail({
           Open assessment context
         </Link>
       )}
+      {item?.taskId && (
+        <Link
+          className="button button-secondary"
+          href={`/upcoming?edit=task:${encodeURIComponent(item.taskId)}`}
+        >
+          Edit task facts
+        </Link>
+      )}
+      {deadline && (
+        <Link
+          className="button button-secondary"
+          href={
+            deadline.kind === "ASSESSMENT"
+              ? `/upcoming?assessment=${encodeURIComponent(deadline.id)}&edit=assessment:${encodeURIComponent(deadline.id)}`
+              : `/upcoming?edit=task:${encodeURIComponent(deadline.id)}`
+          }
+        >
+          Edit deadline facts
+        </Link>
+      )}
       <p className="week-detail-note">
         Schedule changes and completion arrive in later slices. This view has not changed the plan.
       </p>

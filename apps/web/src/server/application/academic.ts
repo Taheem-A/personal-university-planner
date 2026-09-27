@@ -1,8 +1,11 @@
 import { z } from "zod";
 import type {
+  AcademicTermRecord,
   AssessmentRecord,
+  CanonicalRepositories,
   CourseMeetingRecord,
   TaskRecord,
+  TransactionContext,
 } from "@university-planner/database";
 import {
   requireAssessment,
@@ -34,7 +37,9 @@ import {
   textSchema,
   timezoneSchema,
   validateCompletionDeadline,
+  validateInput,
 } from "./validation";
+import type { Actor } from "./authorization";
 
 const id = z.object({ id: idSchema }).strict();
 const listOf = z.object({ parentId: idSchema }).strict();
@@ -82,12 +87,12 @@ export const academicTerms = {
     );
   },
   update(input: unknown) {
-    let wasArchived = false;
+    let before: AcademicTermRecord | null = null;
     return planAfterMutation(
       service(termUpdate, input, async ({ id, expectedVersion, ...patch }, actor, tx) => {
         const current = await tx.repositories.academicTerms.getForUser(actor.userId, id);
         if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
-        wasArchived = current.status === "ARCHIVED";
+        before = { ...current };
         if (current.status === "ARCHIVED")
           throw new ApplicationError("CONFLICT", "Archived term cannot be edited.");
         if ((patch.startDate ?? current.startDate) > (patch.endDate ?? current.endDate))
@@ -102,9 +107,13 @@ export const academicTerms = {
         );
       }),
       (record) =>
-        !wasArchived && record.status === "ARCHIVED"
-          ? { trigger: { type: "TASK_UPDATED", entityType: "ACADEMIC_TERM", entityId: record.id } }
-          : null,
+        classifyPlanningFields(
+          before,
+          record,
+          ["status", "startDate", "endDate"],
+          "ACADEMIC_TERM",
+          "TASK_UPDATED",
+        ),
     );
   },
   archive(input: unknown) {
@@ -112,6 +121,8 @@ export const academicTerms = {
       service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
         const current = await tx.repositories.academicTerms.getForUser(actor.userId, id);
         if (!current) throw new ApplicationError("NOT_FOUND", "Record not found.");
+        if (current.status === "ARCHIVED")
+          throw new ApplicationError("CONFLICT", "Archived term cannot be edited.");
         return requireUpdated(
           await tx.repositories.academicTerms.updateIfCurrent(actor.userId, id, expectedVersion, {
             status: "ARCHIVED",
@@ -124,6 +135,18 @@ export const academicTerms = {
     );
   },
 };
+
+async function requireEditableCourse(
+  repos: CanonicalRepositories,
+  actor: { userId: string },
+  id: string,
+) {
+  const course = await requireCourse(repos, actor, id);
+  const term = await repos.academicTerms.getForUser(actor.userId, course.academicTermId);
+  if (!term || term.status === "ARCHIVED")
+    throw new ApplicationError("NOT_FOUND", "Record not found.");
+  return course;
+}
 
 const courseCreate = manualProvenanceSchema
   .extend({
@@ -138,8 +161,17 @@ const courseCreate = manualProvenanceSchema
     defaultTaskLocation: z.array(textSchema).default([]),
   })
   .strict();
-const coursePatch = courseCreate
-  .omit({ academicTermId: true, source: true, sourceAuthority: true, sourceConfidence: true })
+const coursePatch = z
+  .object({
+    code: textSchema.max(32),
+    name: textSchema,
+    section: textSchema.nullable(),
+    instructorName: textSchema.nullable(),
+    colorReference: textSchema.nullable(),
+    creditValue: z.number().nonnegative().nullable(),
+    defaultTaskEnergy: z.enum(["LOW", "MEDIUM", "HIGH"]).nullable(),
+    defaultTaskLocation: z.array(textSchema),
+  })
   .partial()
   .extend({ id: idSchema, expectedVersion: expectedVersionSchema })
   .strict();
@@ -176,24 +208,28 @@ export const courses = {
     });
   },
   update(input: unknown) {
-    let previousEnergy: string | null = null;
+    let before: Awaited<ReturnType<typeof requireEditableCourse>> | null = null;
     return planAfterMutation(
       service(coursePatch, input, async ({ id, expectedVersion, ...patch }, actor, tx) => {
-        previousEnergy = (await requireCourse(tx.repositories, actor, id)).defaultTaskEnergy;
+        before = { ...(await requireEditableCourse(tx.repositories, actor, id)) };
         return requireUpdated(
           await tx.repositories.courses.updateIfCurrent(actor.userId, id, expectedVersion, patch),
         );
       }),
       (record) =>
-        previousEnergy !== record.defaultTaskEnergy
-          ? { trigger: { type: "TASK_UPDATED", entityType: "COURSE", entityId: record.id } }
-          : null,
+        classifyPlanningFields(
+          before,
+          record,
+          ["defaultTaskEnergy", "defaultTaskLocation"],
+          "COURSE",
+          "TASK_UPDATED",
+        ),
     );
   },
   archive(input: unknown) {
     return planAfterMutation(
       service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
-        await requireCourse(tx.repositories, actor, id);
+        await requireEditableCourse(tx.repositories, actor, id);
         return requireUpdated(
           await tx.repositories.courses.updateIfCurrent(actor.userId, id, expectedVersion, {
             archivedAt: new Date(),
@@ -236,7 +272,7 @@ export const courseMeetings = {
   create(input: unknown) {
     return planAfterMutation(
       service(meetingCreate, input, async (data, actor, tx) => {
-        await requireCourse(tx.repositories, actor, data.courseId);
+        await requireEditableCourse(tx.repositories, actor, data.courseId);
         return tx.repositories.courseMeetings.create({
           id: newRecordId(),
           userId: actor.userId,
@@ -254,13 +290,13 @@ export const courseMeetings = {
       const meeting = requireActive(
         await tx.repositories.courseMeetings.getForUser(actor.userId, id),
       );
-      await requireCourse(tx.repositories, actor, meeting.courseId);
+      await requireEditableCourse(tx.repositories, actor, meeting.courseId);
       return meeting;
     });
   },
   list(input: unknown) {
     return service(listOf, input, async ({ parentId }, actor, tx) => {
-      await requireCourse(tx.repositories, actor, parentId);
+      await requireEditableCourse(tx.repositories, actor, parentId);
       return tx.repositories.courseMeetings.listForCourse(actor.userId, parentId);
     });
   },
@@ -272,7 +308,7 @@ export const courseMeetings = {
           await tx.repositories.courseMeetings.getForUser(actor.userId, id),
         );
         before = { ...current };
-        await requireCourse(tx.repositories, actor, current.courseId);
+        await requireEditableCourse(tx.repositories, actor, current.courseId);
         if (!localRecurrenceSchema.safeParse({ ...current, ...patch }).success)
           throw new ApplicationError("VALIDATION_ERROR", "Invalid recurrence.");
         return requireUpdated(
@@ -309,6 +345,7 @@ export const courseMeetings = {
         before = {
           ...requireActive(await tx.repositories.courseMeetings.getForUser(actor.userId, id)),
         };
+        await requireEditableCourse(tx.repositories, actor, before.courseId);
         return requireUpdated(
           await tx.repositories.courseMeetings.updateIfCurrent(actor.userId, id, expectedVersion, {
             archivedAt: new Date(),
@@ -335,8 +372,19 @@ const assessmentCreate = manualProvenanceSchema
     submissionUrl: z.url().nullable().default(null),
   })
   .strict();
-const assessmentPatch = assessmentCreate
-  .omit({ courseId: true, source: true, sourceAuthority: true, sourceConfidence: true })
+const assessmentPatch = z
+  .object({
+    title: textSchema,
+    assessmentType: textSchema,
+    releaseAt: nullableInstantSchema,
+    dueAt: nullableInstantSchema,
+    preferredCompletionAt: nullableInstantSchema,
+    gradeWeight: z.number().min(0).max(100).nullable(),
+    gradeReceived: z.number().min(0).max(100).nullable(),
+    notes: z.string().nullable(),
+    instructionsUrl: z.url().nullable(),
+    submissionUrl: z.url().nullable(),
+  })
   .partial()
   .extend({
     id: idSchema,
@@ -365,26 +413,35 @@ function checkAssessment(data: {
     throw new ApplicationError("VALIDATION_ERROR", "Submission state and time disagree.");
 }
 
+export async function createAssessmentInTransaction(
+  input: unknown,
+  actor: Actor,
+  tx: TransactionContext,
+) {
+  const data = validateInput(assessmentCreate, input);
+  await requireEditableCourse(tx.repositories, actor, data.courseId);
+  const record: AssessmentRecord = {
+    ...data,
+    releaseAt: parseInstant(data.releaseAt),
+    dueAt: parseInstant(data.dueAt),
+    preferredCompletionAt: parseInstant(data.preferredCompletionAt),
+    id: newRecordId(),
+    version: 0,
+    userId: actor.userId,
+    submissionStatus: "NOT_SUBMITTED",
+    submittedAt: null,
+    archivedAt: null,
+    ...auditNow(),
+  };
+  checkAssessment(record);
+  return tx.repositories.assessments.create(record);
+}
+
 export const assessments = {
   create(input: unknown) {
-    return service(assessmentCreate, input, async (data, actor, tx) => {
-      await requireCourse(tx.repositories, actor, data.courseId);
-      const record: AssessmentRecord = {
-        ...data,
-        releaseAt: parseInstant(data.releaseAt),
-        dueAt: parseInstant(data.dueAt),
-        preferredCompletionAt: parseInstant(data.preferredCompletionAt),
-        id: newRecordId(),
-        version: 0,
-        userId: actor.userId,
-        submissionStatus: "NOT_SUBMITTED",
-        submittedAt: null,
-        archivedAt: null,
-        ...auditNow(),
-      };
-      checkAssessment(record);
-      return tx.repositories.assessments.create(record);
-    });
+    return service(assessmentCreate, input, (data, actor, tx) =>
+      createAssessmentInTransaction(data, actor, tx),
+    );
   },
   get(input: unknown) {
     return service(id, input, async ({ id }, actor, tx) =>
@@ -402,6 +459,7 @@ export const assessments = {
     return planAfterMutation(
       service(assessmentPatch, input, async ({ id, expectedVersion, ...data }, actor, tx) => {
         const current = await requireAssessment(tx.repositories, actor, id);
+        await requireEditableCourse(tx.repositories, actor, current.courseId);
         before = { ...current };
         const patch = {
           ...data,
@@ -440,7 +498,12 @@ export const assessments = {
     let before: AssessmentRecord | null = null;
     return planAfterMutation(
       service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
+        await tx.locks.userGraph(actor.userId);
         before = { ...(await requireAssessment(tx.repositories, actor, id)) };
+        await requireEditableCourse(tx.repositories, actor, before.courseId);
+        const related = await tx.repositories.tasks.listForUser(actor.userId);
+        if (related.some((task) => task.assessmentId === id && !task.archivedAt))
+          throw new ApplicationError("CONFLICT", "Archive or move related tasks first.");
         return requireUpdated(
           await tx.repositories.assessments.updateIfCurrent(actor.userId, id, expectedVersion, {
             archivedAt: new Date(),
@@ -480,12 +543,29 @@ const taskCreate = manualProvenanceSchema
     planningMode: z.enum(["AUTO", "MANUAL", "UNSCHEDULED"]).default("AUTO"),
   })
   .strict();
-const taskPatch = taskCreate
-  .omit({
-    source: true,
-    sourceAuthority: true,
-    sourceConfidence: true,
-    originalEstimatedMinutes: true,
+const taskPatch = z
+  .object({
+    title: textSchema,
+    description: z.string().nullable(),
+    courseId: idSchema.nullable(),
+    assessmentId: idSchema.nullable(),
+    parentTaskId: idSchema.nullable(),
+    status: z.enum(["INBOX", "READY", "IN_PROGRESS", "BLOCKED", "CANCELLED", "DEFERRED"]),
+    dueAt: nullableInstantSchema,
+    preferredCompletionAt: nullableInstantSchema,
+    availableFrom: nullableInstantSchema,
+    originalEstimatedMinutes: positiveMinutesSchema,
+    currentEstimatedMinutes: positiveMinutesSchema.nullable(),
+    remainingMinutes: nonnegativeMinutesSchema.nullable(),
+    minimumSessionMinutes: positiveMinutesSchema.nullable(),
+    preferredSessionMinutes: positiveMinutesSchema.nullable(),
+    maximumSessionMinutes: positiveMinutesSchema.nullable(),
+    energyRequirement: z.enum(["LOW", "MEDIUM", "HIGH"]).nullable(),
+    locationRequirements: z.array(textSchema),
+    priorityOverride: z.number().min(0).max(1).nullable(),
+    splittable: z.boolean(),
+    interruptible: z.boolean(),
+    planningMode: z.enum(["AUTO", "MANUAL", "UNSCHEDULED"]),
   })
   .partial()
   .extend({ id: idSchema, expectedVersion: expectedVersionSchema })
@@ -539,32 +619,56 @@ function taskInstantPatch(data: Record<string, unknown>) {
   };
 }
 
+async function requireEditableTaskRelationships(
+  repos: CanonicalRepositories,
+  actor: { userId: string },
+  refs: { courseId?: string | null; assessmentId?: string | null; parentTaskId?: string | null },
+) {
+  await requireTaskRelationships(repos, actor, refs);
+  if (refs.courseId) await requireEditableCourse(repos, actor, refs.courseId);
+  if (refs.assessmentId) {
+    const assessment = await requireAssessment(repos, actor, refs.assessmentId);
+    await requireEditableCourse(repos, actor, assessment.courseId);
+  }
+  if (refs.parentTaskId) {
+    const parent = await requireTask(repos, actor, refs.parentTaskId);
+    if (parent.courseId) await requireEditableCourse(repos, actor, parent.courseId);
+  }
+}
+
+export async function createTaskInTransaction(
+  input: unknown,
+  actor: Actor,
+  tx: TransactionContext,
+) {
+  const data = validateInput(taskCreate, input);
+  if (data.parentTaskId || data.assessmentId) await tx.locks.userGraph(actor.userId);
+  await requireEditableTaskRelationships(tx.repositories, actor, data);
+  const record: TaskRecord = {
+    ...data,
+    id: newRecordId(),
+    version: 0,
+    userId: actor.userId,
+    recurringWorkRuleId: null,
+    availableFrom: parseInstant(data.availableFrom),
+    dueAt: parseInstant(data.dueAt),
+    preferredCompletionAt: parseInstant(data.preferredCompletionAt),
+    originalEstimatedMinutes: data.originalEstimatedMinutes,
+    currentEstimatedMinutes: data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
+    remainingMinutes:
+      data.remainingMinutes ?? data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
+    completedAt: null,
+    archivedAt: null,
+    ...auditNow(),
+  };
+  checkTask(record);
+  return tx.repositories.tasks.create(record);
+}
+
 export const tasks = {
   create(input: unknown) {
     return planAfterMutation(
-      service(taskCreate, input, async (data, actor, tx) => {
-        await requireTaskRelationships(tx.repositories, actor, data);
-        if (data.parentTaskId) await tx.locks.userGraph(actor.userId);
-        const record: TaskRecord = {
-          ...data,
-          id: newRecordId(),
-          version: 0,
-          userId: actor.userId,
-          recurringWorkRuleId: null,
-          availableFrom: parseInstant(data.availableFrom),
-          dueAt: parseInstant(data.dueAt),
-          preferredCompletionAt: parseInstant(data.preferredCompletionAt),
-          originalEstimatedMinutes: data.originalEstimatedMinutes,
-          currentEstimatedMinutes: data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
-          remainingMinutes:
-            data.remainingMinutes ?? data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
-          completedAt: null,
-          archivedAt: null,
-          ...auditNow(),
-        };
-        checkTask(record);
-        return tx.repositories.tasks.create(record);
-      }),
+      service(taskCreate, input, (data, actor, tx) => createTaskInTransaction(data, actor, tx)),
       (record) => classifyTaskMutation(null, record),
     );
   },
@@ -604,10 +708,16 @@ export const tasks = {
     let before: TaskRecord | null = null;
     return planAfterMutation(
       service(taskPatch, input, async ({ id, expectedVersion, ...data }, actor, tx) => {
-        if (data.parentTaskId !== undefined) await tx.locks.userGraph(actor.userId);
+        if (data.parentTaskId !== undefined || data.assessmentId !== undefined)
+          await tx.locks.userGraph(actor.userId);
         const current = await requireTask(tx.repositories, actor, id);
         before = { ...current };
-        await requireTaskRelationships(tx.repositories, actor, {
+        if (
+          data.originalEstimatedMinutes !== undefined &&
+          current.originalEstimatedMinutes !== null
+        )
+          throw new ApplicationError("CONFLICT", "Original estimate is already recorded.");
+        await requireEditableTaskRelationships(tx.repositories, actor, {
           courseId: data.courseId === undefined ? current.courseId : data.courseId,
           assessmentId: data.assessmentId === undefined ? current.assessmentId : data.assessmentId,
           parentTaskId: data.parentTaskId === undefined ? current.parentTaskId : data.parentTaskId,
@@ -640,7 +750,11 @@ export const tasks = {
     let before: TaskRecord | null = null;
     return planAfterMutation(
       service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
+        await tx.locks.userGraph(actor.userId);
         before = { ...(await requireTask(tx.repositories, actor, id)) };
+        const children = await tx.repositories.tasks.listSubtasks(actor.userId, id);
+        if (children.some((child) => !child.archivedAt))
+          throw new ApplicationError("CONFLICT", "Archive or move subtasks first.");
         return requireUpdated(
           await tx.repositories.tasks.updateIfCurrent(actor.userId, id, expectedVersion, {
             archivedAt: new Date(),
