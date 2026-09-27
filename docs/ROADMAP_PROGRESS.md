@@ -1,5 +1,13 @@
 # Roadmap progress
 
+## 2026-09-27 — Milestone 6 final acceptance GATE PASSED
+
+- Audited the literal roadmap and master-spec M6 requirements, prior milestone gates, ADRs, and all M6 commits. The [exit-gate matrix](./milestone-6-exit-gate.md) maps implementation, automated checks, fresh database assertions and authenticated browser proof requirement by requirement.
+- Deployed source-controlled migrations 0001–0010 from zero to disposable non-production Neon database `up_test_m6_gate_20260927`; migration status was current. The guarded M6 live harness used synthetic Auth.js identities and protected optimized Next.js routes. Browser-entered setup created a term, course, meeting, fixed event, availability, hard sleep, soft protected time, preferences, assessment and schedulable task. M4 persisted a successful PlannerRun and generated WorkSessions shown by Today and Week with zero IntegrationAccounts; setup survived a server restart.
+- The same live path corrected course, meeting, assessment deadline, task estimate, availability, sleep protection and planning preference facts; tested invalid-write rollback, stale version rejection, cross-user 404, event archive and protected-rule deactivation; and exercised raw Inbox capture, deterministic proposal, user correction, atomic processing, dismissal and global Manual Add. Captured protected Today/Week screenshots in ignored test output. The M5 responsive/accessibility/approved-preview matrix was rerun.
+- Fixed three live findings: browser-facing Host comparison in same-origin transport, server function passed to the client assessment editor, and Prisma deserialization of the PostgreSQL advisory-lock `void` return. A focused transport regression and the live task path cover the fixes.
+- Final `pnpm verify` passed formatting, lint, package boundaries (158 files), Prisma generation/validation, strict types, 157 unit tests, 89 integration tests, optimized build and 35 Chromium tests. Planner scenarios passed 13/13, properties 2/2, and dependency audit found no known high-severity vulnerability. The branch remains unmerged. **Milestone 6 — GATE PASSED. Exact next roadmap item: Milestone 7 — Execution Outcomes and Dynamic Replanning.**
+
 ## 2026-09-27 — Milestone 6 Step 7 cross-screen completion IN PROGRESS
 
 - Global Add now opens one URL-backed Manual Add chooser for assessment, task, course, course meeting, fixed commitment, availability and protected time. These links open the existing trusted editors. Quick Capture stays separate for uncertain raw information. Course Detail gained direct assessment/task edit links; the [correction-path and release-boundary audit](./milestone-6-step-7-audit.md) covers the other important facts.

@@ -80,14 +80,14 @@ export function AssessmentEditor({
   selectedCourseId,
   timezone,
   returnTo,
-  taskHref,
+  taskReturnTo,
 }: {
   assessment?: AssessmentEdit;
   courses: CourseChoice[];
   selectedCourseId?: string;
   timezone: string;
   returnTo: string;
-  taskHref: (assessmentId: string) => string;
+  taskReturnTo: string;
 }) {
   const editor = useEditor(assessment?.id, assessment?.version);
   const router = useRouter();
@@ -243,7 +243,10 @@ export function AssessmentEditor({
           </form>
           {editor.id && (
             <p className="manual-next-action">
-              <Link className="button button-secondary" href={taskHref(editor.id)}>
+              <Link
+                className="button button-secondary"
+                href={`${taskReturnTo}&assessment=${encodeURIComponent(editor.id)}&edit=task-new`}
+              >
                 Add work task for this assessment
               </Link>
             </p>

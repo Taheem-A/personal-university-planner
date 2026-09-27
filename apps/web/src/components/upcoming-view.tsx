@@ -360,7 +360,7 @@ export function UpcomingView({
           selectedCourseId={selectedCourseId}
           timezone={model.timezone}
           returnTo={parent}
-          taskHref={(id) => `${listBase}&assessment=${encodeURIComponent(id)}&edit=task-new`}
+          taskReturnTo={listBase}
         />
       )}
       {(edit === "task-new" || selectedTask) && (

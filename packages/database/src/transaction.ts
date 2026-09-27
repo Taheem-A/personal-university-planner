@@ -13,7 +13,8 @@ export async function runInTransaction<T>(
         repositories: createRepositories(transactionClient),
         locks: {
           async userGraph(userId) {
-            await transactionClient.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`;
+            // Prisma cannot deserialize PostgreSQL's void return type.
+            await transactionClient.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))::text`;
           },
         },
       }),

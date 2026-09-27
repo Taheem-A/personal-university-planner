@@ -118,6 +118,32 @@ function request(body, origin = "http://localhost:3000") {
 const change = (timezone, extra = {}) =>
   request({ timezone, expectedTimezone: "America/Toronto", ...extra });
 
+test("same-origin validation uses the browser-facing Host when Next rewrites request URL", async () => {
+  const browserRequest = new Request("http://localhost:3000/api/v1/account/timezone", {
+    method: "PATCH",
+    headers: {
+      Host: "127.0.0.1:3000",
+      Origin: "http://127.0.0.1:3000",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ timezone: "Europe/London", expectedTimezone: "America/Toronto" }),
+  });
+  assert.deepEqual(await transport.bodyOf(browserRequest), {
+    timezone: "Europe/London",
+    expectedTimezone: "America/Toronto",
+  });
+  const foreignRequest = new Request("http://localhost:3000/api/v1/account/timezone", {
+    method: "PATCH",
+    headers: {
+      Host: "127.0.0.1:3000",
+      Origin: "http://evil.example",
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  });
+  assert.equal((await transport.bodyOf(foreignRequest)).status, 403);
+});
+
 test("timezone mutation keeps actor server-owned, validates and rejects cross-origin requests", async () => {
   user.timezone = "America/Toronto";
   actor = null;
