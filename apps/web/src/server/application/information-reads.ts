@@ -28,6 +28,8 @@ export interface UpcomingItem {
 }
 export interface AssessmentDetailModel {
   id: string;
+  version: number;
+  courseId: string;
   title: string;
   type: string;
   courseCode: string;
@@ -52,6 +54,7 @@ export interface AssessmentDetailModel {
     id: string;
     title: string;
     status: string;
+    parentTaskId: string | null;
     remainingMinutes: number | null;
     dueAt: Date | null;
   }[];
@@ -69,8 +72,43 @@ export interface UpcomingViewModel {
   anchorDate: string;
   groups: { id: HorizonGroup; items: UpcomingItem[] }[];
   selectedAssessment: AssessmentDetailModel | null;
+  selectedTask: TaskEditorModel | null;
+  courseChoices: { id: string; code: string; name: string }[];
+  assessmentChoices: { id: string; courseId: string; title: string }[];
+  taskChoices: {
+    id: string;
+    title: string;
+    courseId: string | null;
+    assessmentId: string | null;
+    parentTaskId: string | null;
+  }[];
   selectionUnavailable: boolean;
   planner: Pick<PlannerReadState, "status" | "authoritativeRun">;
+}
+export interface TaskEditorModel {
+  id: string;
+  version: number;
+  title: string;
+  description: string | null;
+  courseId: string | null;
+  assessmentId: string | null;
+  parentTaskId: string | null;
+  status: string;
+  dueAt: Date | null;
+  preferredCompletionAt: Date | null;
+  availableFrom: Date | null;
+  originalEstimatedMinutes: number | null;
+  currentEstimatedMinutes: number | null;
+  remainingMinutes: number | null;
+  energyRequirement: string | null;
+  locationRequirements: string[];
+  minimumSessionMinutes: number | null;
+  preferredSessionMinutes: number | null;
+  maximumSessionMinutes: number | null;
+  splittable: boolean;
+  interruptible: boolean;
+  planningMode: string;
+  priorityOverride: number | null;
 }
 export interface InboxViewModel {
   timezone: string;
@@ -113,6 +151,8 @@ export function buildUpcoming(
   now: Date,
   selectedId: string | null,
   sort: "PRESSURE" | "DUE",
+  selectedTaskId: string | null = null,
+  editorKind: "ASSESSMENT" | "TASK" | null = null,
 ): UpcomingViewModel {
   const timezone = state.user.timezone;
   const anchorDate = instantToLocal(now, timezone).date;
@@ -194,6 +234,8 @@ export function buildUpcoming(
     const estimates = active.map((task) => task.remainingMinutes);
     selectedAssessment = {
       id: selected.id,
+      version: selected.version,
+      courseId: selected.courseId,
       title: selected.title,
       type: selected.assessmentType,
       courseCode: course.code,
@@ -221,6 +263,7 @@ export function buildUpcoming(
         id: task.id,
         title: task.title,
         status: task.status,
+        parentTaskId: task.parentTaskId,
         remainingMinutes: task.remainingMinutes,
         dueAt: task.dueAt,
       })),
@@ -245,6 +288,73 @@ export function buildUpcoming(
   return {
     timezone,
     anchorDate,
+    selectedTask: (() => {
+      const task = selectedTaskId ? allTasks.find((item) => item.id === selectedTaskId) : null;
+      if (
+        !task ||
+        (task.courseId && !courses.has(task.courseId)) ||
+        (task.assessmentId && !assessments.some((item) => item.id === task.assessmentId))
+      )
+        return null;
+      return {
+        id: task.id,
+        version: task.version,
+        title: task.title,
+        description: task.description,
+        courseId: task.courseId,
+        assessmentId: task.assessmentId,
+        parentTaskId: task.parentTaskId,
+        status: task.status,
+        dueAt: task.dueAt,
+        preferredCompletionAt: task.preferredCompletionAt,
+        availableFrom: task.availableFrom,
+        originalEstimatedMinutes: task.originalEstimatedMinutes,
+        currentEstimatedMinutes: task.currentEstimatedMinutes,
+        remainingMinutes: task.remainingMinutes,
+        energyRequirement: task.energyRequirement,
+        locationRequirements: task.locationRequirements,
+        minimumSessionMinutes: task.minimumSessionMinutes,
+        preferredSessionMinutes: task.preferredSessionMinutes,
+        maximumSessionMinutes: task.maximumSessionMinutes,
+        splittable: task.splittable,
+        interruptible: task.interruptible,
+        planningMode: task.planningMode,
+        priorityOverride: task.priorityOverride,
+      };
+    })(),
+    courseChoices: editorKind
+      ? [...courses.values()].map((course) => ({
+          id: course.id,
+          code: course.code,
+          name: course.name,
+        }))
+      : [],
+    assessmentChoices:
+      editorKind === "TASK"
+        ? assessments.map((assessment) => ({
+            id: assessment.id,
+            courseId: assessment.courseId,
+            title: assessment.title,
+          }))
+        : [],
+    taskChoices:
+      editorKind === "TASK"
+        ? allTasks
+            .filter(
+              (task) =>
+                !["COMPLETED", "CANCELLED"].includes(task.status) &&
+                (!task.courseId || courses.has(task.courseId)) &&
+                (!task.assessmentId ||
+                  assessments.some((assessment) => assessment.id === task.assessmentId)),
+            )
+            .map((task) => ({
+              id: task.id,
+              title: task.title,
+              courseId: task.courseId,
+              assessmentId: task.assessmentId,
+              parentTaskId: task.parentTaskId,
+            }))
+        : [],
     groups: order.map((id) => ({
       id,
       items: items
@@ -305,6 +415,8 @@ export function buildInbox(rows: InboxItemRecord[], timezone: string): InboxView
 const upcomingRequest = z
   .object({
     assessmentId: idSchema.optional(),
+    taskId: idSchema.optional(),
+    editorKind: z.enum(["ASSESSMENT", "TASK"]).optional(),
     sort: z.enum(["PRESSURE", "DUE"]).default("PRESSURE"),
   })
   .strict();
@@ -341,6 +453,8 @@ export const informationViews = {
           now,
           data.assessmentId ?? null,
           data.sort,
+          data.taskId ?? null,
+          data.editorKind ?? null,
         );
       });
     });

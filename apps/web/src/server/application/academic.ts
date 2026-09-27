@@ -158,8 +158,17 @@ const courseCreate = manualProvenanceSchema
     defaultTaskLocation: z.array(textSchema).default([]),
   })
   .strict();
-const coursePatch = courseCreate
-  .omit({ academicTermId: true, source: true, sourceAuthority: true, sourceConfidence: true })
+const coursePatch = z
+  .object({
+    code: textSchema.max(32),
+    name: textSchema,
+    section: textSchema.nullable(),
+    instructorName: textSchema.nullable(),
+    colorReference: textSchema.nullable(),
+    creditValue: z.number().nonnegative().nullable(),
+    defaultTaskEnergy: z.enum(["LOW", "MEDIUM", "HIGH"]).nullable(),
+    defaultTaskLocation: z.array(textSchema),
+  })
   .partial()
   .extend({ id: idSchema, expectedVersion: expectedVersionSchema })
   .strict();
@@ -360,8 +369,19 @@ const assessmentCreate = manualProvenanceSchema
     submissionUrl: z.url().nullable().default(null),
   })
   .strict();
-const assessmentPatch = assessmentCreate
-  .omit({ courseId: true, source: true, sourceAuthority: true, sourceConfidence: true })
+const assessmentPatch = z
+  .object({
+    title: textSchema,
+    assessmentType: textSchema,
+    releaseAt: nullableInstantSchema,
+    dueAt: nullableInstantSchema,
+    preferredCompletionAt: nullableInstantSchema,
+    gradeWeight: z.number().min(0).max(100).nullable(),
+    gradeReceived: z.number().min(0).max(100).nullable(),
+    notes: z.string().nullable(),
+    instructionsUrl: z.url().nullable(),
+    submissionUrl: z.url().nullable(),
+  })
   .partial()
   .extend({
     id: idSchema,
@@ -393,7 +413,7 @@ function checkAssessment(data: {
 export const assessments = {
   create(input: unknown) {
     return service(assessmentCreate, input, async (data, actor, tx) => {
-      await requireCourse(tx.repositories, actor, data.courseId);
+      await requireEditableCourse(tx.repositories, actor, data.courseId);
       const record: AssessmentRecord = {
         ...data,
         releaseAt: parseInstant(data.releaseAt),
@@ -427,6 +447,7 @@ export const assessments = {
     return planAfterMutation(
       service(assessmentPatch, input, async ({ id, expectedVersion, ...data }, actor, tx) => {
         const current = await requireAssessment(tx.repositories, actor, id);
+        await requireEditableCourse(tx.repositories, actor, current.courseId);
         before = { ...current };
         const patch = {
           ...data,
@@ -465,7 +486,12 @@ export const assessments = {
     let before: AssessmentRecord | null = null;
     return planAfterMutation(
       service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
+        await tx.locks.userGraph(actor.userId);
         before = { ...(await requireAssessment(tx.repositories, actor, id)) };
+        await requireEditableCourse(tx.repositories, actor, before.courseId);
+        const related = await tx.repositories.tasks.listForUser(actor.userId);
+        if (related.some((task) => task.assessmentId === id && !task.archivedAt))
+          throw new ApplicationError("CONFLICT", "Archive or move related tasks first.");
         return requireUpdated(
           await tx.repositories.assessments.updateIfCurrent(actor.userId, id, expectedVersion, {
             archivedAt: new Date(),
@@ -505,12 +531,29 @@ const taskCreate = manualProvenanceSchema
     planningMode: z.enum(["AUTO", "MANUAL", "UNSCHEDULED"]).default("AUTO"),
   })
   .strict();
-const taskPatch = taskCreate
-  .omit({
-    source: true,
-    sourceAuthority: true,
-    sourceConfidence: true,
-    originalEstimatedMinutes: true,
+const taskPatch = z
+  .object({
+    title: textSchema,
+    description: z.string().nullable(),
+    courseId: idSchema.nullable(),
+    assessmentId: idSchema.nullable(),
+    parentTaskId: idSchema.nullable(),
+    status: z.enum(["INBOX", "READY", "IN_PROGRESS", "BLOCKED", "CANCELLED", "DEFERRED"]),
+    dueAt: nullableInstantSchema,
+    preferredCompletionAt: nullableInstantSchema,
+    availableFrom: nullableInstantSchema,
+    originalEstimatedMinutes: positiveMinutesSchema,
+    currentEstimatedMinutes: positiveMinutesSchema.nullable(),
+    remainingMinutes: nonnegativeMinutesSchema.nullable(),
+    minimumSessionMinutes: positiveMinutesSchema.nullable(),
+    preferredSessionMinutes: positiveMinutesSchema.nullable(),
+    maximumSessionMinutes: positiveMinutesSchema.nullable(),
+    energyRequirement: z.enum(["LOW", "MEDIUM", "HIGH"]).nullable(),
+    locationRequirements: z.array(textSchema),
+    priorityOverride: z.number().min(0).max(1).nullable(),
+    splittable: z.boolean(),
+    interruptible: z.boolean(),
+    planningMode: z.enum(["AUTO", "MANUAL", "UNSCHEDULED"]),
   })
   .partial()
   .extend({ id: idSchema, expectedVersion: expectedVersionSchema })
@@ -564,12 +607,29 @@ function taskInstantPatch(data: Record<string, unknown>) {
   };
 }
 
+async function requireEditableTaskRelationships(
+  repos: CanonicalRepositories,
+  actor: { userId: string },
+  refs: { courseId?: string | null; assessmentId?: string | null; parentTaskId?: string | null },
+) {
+  await requireTaskRelationships(repos, actor, refs);
+  if (refs.courseId) await requireEditableCourse(repos, actor, refs.courseId);
+  if (refs.assessmentId) {
+    const assessment = await requireAssessment(repos, actor, refs.assessmentId);
+    await requireEditableCourse(repos, actor, assessment.courseId);
+  }
+  if (refs.parentTaskId) {
+    const parent = await requireTask(repos, actor, refs.parentTaskId);
+    if (parent.courseId) await requireEditableCourse(repos, actor, parent.courseId);
+  }
+}
+
 export const tasks = {
   create(input: unknown) {
     return planAfterMutation(
       service(taskCreate, input, async (data, actor, tx) => {
-        await requireTaskRelationships(tx.repositories, actor, data);
-        if (data.parentTaskId) await tx.locks.userGraph(actor.userId);
+        if (data.parentTaskId || data.assessmentId) await tx.locks.userGraph(actor.userId);
+        await requireEditableTaskRelationships(tx.repositories, actor, data);
         const record: TaskRecord = {
           ...data,
           id: newRecordId(),
@@ -629,10 +689,16 @@ export const tasks = {
     let before: TaskRecord | null = null;
     return planAfterMutation(
       service(taskPatch, input, async ({ id, expectedVersion, ...data }, actor, tx) => {
-        if (data.parentTaskId !== undefined) await tx.locks.userGraph(actor.userId);
+        if (data.parentTaskId !== undefined || data.assessmentId !== undefined)
+          await tx.locks.userGraph(actor.userId);
         const current = await requireTask(tx.repositories, actor, id);
         before = { ...current };
-        await requireTaskRelationships(tx.repositories, actor, {
+        if (
+          data.originalEstimatedMinutes !== undefined &&
+          current.originalEstimatedMinutes !== null
+        )
+          throw new ApplicationError("CONFLICT", "Original estimate is already recorded.");
+        await requireEditableTaskRelationships(tx.repositories, actor, {
           courseId: data.courseId === undefined ? current.courseId : data.courseId,
           assessmentId: data.assessmentId === undefined ? current.assessmentId : data.assessmentId,
           parentTaskId: data.parentTaskId === undefined ? current.parentTaskId : data.parentTaskId,
@@ -665,7 +731,11 @@ export const tasks = {
     let before: TaskRecord | null = null;
     return planAfterMutation(
       service(versioned, input, async ({ id, expectedVersion }, actor, tx) => {
+        await tx.locks.userGraph(actor.userId);
         before = { ...(await requireTask(tx.repositories, actor, id)) };
+        const children = await tx.repositories.tasks.listSubtasks(actor.userId, id);
+        if (children.some((child) => !child.archivedAt))
+          throw new ApplicationError("CONFLICT", "Archive or move subtasks first.");
         return requireUpdated(
           await tx.repositories.tasks.updateIfCurrent(actor.userId, id, expectedVersion, {
             archivedAt: new Date(),

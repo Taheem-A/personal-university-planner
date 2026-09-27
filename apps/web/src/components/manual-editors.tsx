@@ -14,7 +14,7 @@ import {
   InstantField,
   SelectField,
   ValidationSummary,
-  deadlineInstant,
+  editedInstant,
 } from "./mutation-form";
 
 type Saved = { id: string; version: number; planning: { status: string; planStatus?: string } };
@@ -81,7 +81,7 @@ function savedMessage(action: string, planning: Saved["planning"]) {
     return `${action} saved. The planner refreshed the current plan; review any unmet work.`;
   return `${action} saved. The planner could not publish a new plan. Review the Planner panel and missing facts.`;
 }
-function useEditor(initialId?: string, initialVersion = 0) {
+export function useEditor(initialId?: string, initialVersion = 0) {
   const router = useRouter();
   const [id, setId] = useState(initialId);
   const [version, setVersion] = useState(initialVersion);
@@ -120,7 +120,7 @@ function useEditor(initialId?: string, initialVersion = 0) {
     fail: (text: string) => setFeedback({ error: true, text }),
   };
 }
-function EditorShell({
+export function EditorShell({
   title,
   returnTo,
   children,
@@ -144,7 +144,7 @@ function EditorShell({
     </section>
   );
 }
-function ArchiveAction({
+export function ArchiveAction({
   name,
   confirmed,
   setConfirmed,
@@ -665,7 +665,7 @@ export function MeetingEditor({
   );
 }
 
-function localValue(instant: Date, timezone: string) {
+export function localValue(instant: Date, timezone: string) {
   const local = instantToLocal(instant, timezone);
   return `${local.date}T${local.time.slice(0, 5)}`;
 }
@@ -701,8 +701,8 @@ export function EventEditor({
     }
     let startAt: string, endAt: string;
     try {
-      startAt = deadlineInstant(start, model.timezone);
-      endAt = deadlineInstant(end, model.timezone);
+      startAt = editedInstant(start, model.timezone, event?.startAt);
+      endAt = editedInstant(end, model.timezone, event?.endAt);
     } catch {
       editor.fail(
         "Choose an unambiguous local time. Daylight-saving gaps and repeated times cannot be saved without clarification.",

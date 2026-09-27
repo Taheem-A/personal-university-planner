@@ -421,7 +421,13 @@ test("academic service module loads and enforces two-user scoping, dates, and op
 });
 
 test("task relations, unknown deadlines, hierarchy, and dependency cycles", async () => {
-  const course = { id: "active-course", userId: user.userId, archivedAt: null };
+  rows.terms.push({ id: "active-term", userId: user.userId, status: "ACTIVE" });
+  const course = {
+    id: "active-course",
+    userId: user.userId,
+    academicTermId: "active-term",
+    archivedAt: null,
+  };
   rows.courses.push(course);
   rows.courses.push({ ...course, id: "foreign-course", userId: other.userId });
   const bad = await academic.tasks.create({ title: "Cross-user", courseId: "foreign-course" });
@@ -843,6 +849,21 @@ test("manual academic structure uses scoped versions, archived parents and class
     ).error.code,
     "NOT_FOUND",
   );
+  assert.equal(
+    (
+      await manual.manualAssessments.create({
+        courseId: another.id,
+        title: "Blocked",
+        assessmentType: "Exam",
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (await manual.manualTasks.create({ title: "Blocked", courseId: another.id, status: "READY" }))
+      .error.code,
+    "NOT_FOUND",
+  );
 });
 
 test("manual fixed events persist without provider fields and report failed planning separately", async () => {
@@ -921,5 +942,273 @@ test("manual fixed events persist without provider fields and report failed plan
   assert.equal(
     (await manual.manualEvents.archive({ id: "other-owned-event", expectedVersion: 0 })).error.code,
     "NOT_FOUND",
+  );
+});
+
+test("assessment and task manual workflow preserves unknowns, hierarchy, versions and planner intent", async () => {
+  const term = (
+    await manual.manualTerms.create({
+      name: "Workload term",
+      startDate: "2026-09-01",
+      endDate: "2026-12-20",
+    })
+  ).value;
+  const course = (
+    await manual.manualCourses.create({
+      academicTermId: term.id,
+      code: "CIV100",
+      name: "Civil engineering",
+    })
+  ).value;
+  const beforeInvalid = rows.assessments.length;
+  const invalid = await manual.manualAssessments.create({
+    courseId: course.id,
+    title: "Wrong dates",
+    assessmentType: "Assignment",
+    releaseAt: "2026-10-10T12:00:00Z",
+    dueAt: "2026-10-09T12:00:00Z",
+  });
+  assert.equal(invalid.error.code, "VALIDATION_ERROR");
+  assert.equal(rows.assessments.length, beforeInvalid);
+  const assignment = (
+    await manual.manualAssessments.create({
+      courseId: course.id,
+      title: "Assignment 3",
+      assessmentType: "Assignment",
+      dueAt: "2026-10-15T20:00:00Z",
+    })
+  ).value;
+  assert.equal(assignment.planning.status, "NOT_REQUESTED");
+  const unknown = (
+    await manual.manualAssessments.create({
+      courseId: course.id,
+      title: "Exam",
+      assessmentType: "Exam",
+    })
+  ).value;
+  assert.equal(owned("assessments", user.userId, unknown.id).dueAt, null);
+  const changedDeadline = (
+    await manual.manualAssessments.update({
+      id: assignment.id,
+      expectedVersion: 0,
+      dueAt: "2026-10-16T20:00:00Z",
+    })
+  ).value;
+  assert.equal(changedDeadline.planning.status, "SUCCEEDED");
+  assert.equal(replanRequests.at(-1).trigger.type, "DEADLINE_CHANGED");
+  assert.equal(
+    (
+      await manual.manualAssessments.update({
+        id: assignment.id,
+        expectedVersion: 0,
+        title: "Stale",
+      })
+    ).error.code,
+    "STALE_WRITE",
+  );
+  const base = {
+    title: "Solve",
+    courseId: course.id,
+    assessmentId: assignment.id,
+    status: "READY",
+    availableFrom: "2026-10-10T12:00:00Z",
+    originalEstimatedMinutes: 180,
+    minimumSessionMinutes: 45,
+    preferredSessionMinutes: 45,
+    maximumSessionMinutes: 45,
+  };
+  const beforeTask = rows.tasks.length;
+  const badTask = await manual.manualTasks.create({ ...base, dueAt: "2026-10-09T12:00:00Z" });
+  assert.equal(badTask.error.code, "VALIDATION_ERROR");
+  assert.equal(rows.tasks.length, beforeTask);
+  const parent = (await manual.manualTasks.create(base)).value;
+  assert.equal(parent.planning.status, "SUCCEEDED");
+  assert.equal(replanRequests.at(-1).trigger.type, "TASK_CREATED");
+  assert.equal(owned("tasks", user.userId, parent.id).remainingMinutes, 180);
+  assert.equal(owned("tasks", user.userId, parent.id).dueAt, null);
+  const subtask = (
+    await manual.manualTasks.create({
+      ...base,
+      title: "Review / submit",
+      parentTaskId: parent.id,
+      originalEstimatedMinutes: 30,
+    })
+  ).value;
+  assert.equal(owned("tasks", user.userId, subtask.id).parentTaskId, parent.id);
+  assert.equal(
+    (
+      await manual.manualTasks.create({
+        ...base,
+        title: "Foreign child",
+        parentTaskId: "other-parent",
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (
+      await manual.manualTasks.create({
+        ...base,
+        title: "Foreign course",
+        courseId: "other-course",
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (
+      await manual.manualTasks.create({
+        ...base,
+        title: "Foreign assessment",
+        assessmentId: "other-assessment",
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  const corrected = (
+    await manual.manualTasks.update({
+      id: parent.id,
+      expectedVersion: 0,
+      currentEstimatedMinutes: 240,
+      remainingMinutes: 240,
+    })
+  ).value;
+  assert.equal(corrected.planning.status, "SUCCEEDED");
+  assert.equal(replanRequests.at(-1).trigger.type, "TASK_UPDATED");
+  assert.equal(
+    (await manual.manualTasks.update({ id: parent.id, expectedVersion: 0, title: "Stale" })).error
+      .code,
+    "STALE_WRITE",
+  );
+  const dueChanged = (
+    await manual.manualTasks.update({
+      id: parent.id,
+      expectedVersion: 1,
+      dueAt: "2026-10-15T12:00:00Z",
+    })
+  ).value;
+  assert.equal(
+    owned("tasks", user.userId, parent.id).dueAt?.toISOString(),
+    "2026-10-15T12:00:00.000Z",
+  );
+  assert.equal(owned("tasks", user.userId, parent.id).status, "READY");
+  assert.equal(owned("tasks", user.userId, parent.id).planningMode, "AUTO");
+  assert.ok(
+    realTriggers.classifyTaskMutation(
+      { ...owned("tasks", user.userId, parent.id), dueAt: null },
+      owned("tasks", user.userId, parent.id),
+    ),
+  );
+  assert.equal(dueChanged.planning.status, "SUCCEEDED");
+  assert.equal(replanRequests.at(-1).trigger.type, "DEADLINE_CHANGED");
+  const preferred = (
+    await manual.manualTasks.update({
+      id: parent.id,
+      expectedVersion: 2,
+      preferredCompletionAt: "2026-10-14T12:00:00Z",
+    })
+  ).value;
+  assert.equal(preferred.planning.status, "SUCCEEDED");
+  const manualMode = (
+    await manual.manualTasks.update({ id: parent.id, expectedVersion: 3, planningMode: "MANUAL" })
+  ).value;
+  assert.equal(manualMode.planning.status, "SUCCEEDED");
+  assert.equal(
+    (await manual.manualTasks.update({ id: parent.id, expectedVersion: 4, planningMode: "AUTO" }))
+      .value.planning.status,
+    "SUCCEEDED",
+  );
+  assert.equal(
+    (await manual.manualTasks.archive({ id: parent.id, expectedVersion: 5 })).error.code,
+    "CONFLICT",
+  );
+  assert.equal(
+    (await manual.manualAssessments.archive({ id: assignment.id, expectedVersion: 1 })).error.code,
+    "CONFLICT",
+  );
+  assert.equal(
+    (await manual.manualTasks.archive({ id: subtask.id, expectedVersion: 0 })).value.planning
+      .status,
+    "SUCCEEDED",
+  );
+  const manualArchive = (await manual.manualTasks.archive({ id: parent.id, expectedVersion: 5 }))
+    .value;
+  assert.equal(manualArchive.planning.status, "SUCCEEDED");
+  assert.equal(
+    (await manual.manualTasks.update({ id: parent.id, expectedVersion: 6, title: "Resurrect" }))
+      .error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (await manual.manualAssessments.archive({ id: assignment.id, expectedVersion: 1 })).value
+      .planning.status,
+    "SUCCEEDED",
+  );
+  assert.equal(
+    (
+      await manual.manualTasks.create({
+        ...base,
+        title: "Archived assessment",
+        assessmentId: assignment.id,
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  rows.tasks.push({
+    ...rows.tasks.at(-1),
+    id: "foreign-owned-task",
+    userId: other.userId,
+    archivedAt: null,
+    version: 0,
+  });
+  assert.equal(
+    (
+      await manual.manualTasks.update({
+        id: "foreign-owned-task",
+        expectedVersion: 0,
+        title: "Stolen",
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (await manual.manualAssessments.update({ id: unknown.id, expectedVersion: 0, dueAt: null }))
+      .value.planning.status,
+    "NOT_REQUESTED",
+  );
+  const initiallyUnknown = (
+    await manual.manualTasks.create({
+      title: "Estimate later",
+      courseId: course.id,
+      status: "READY",
+      availableFrom: "2026-10-10T12:00:00Z",
+      minimumSessionMinutes: 45,
+      preferredSessionMinutes: 45,
+      maximumSessionMinutes: 45,
+    })
+  ).value;
+  assert.equal(owned("tasks", user.userId, initiallyUnknown.id).originalEstimatedMinutes, null);
+  assert.equal(
+    (
+      await manual.manualTasks.update({
+        id: initiallyUnknown.id,
+        expectedVersion: 0,
+        originalEstimatedMinutes: 90,
+        currentEstimatedMinutes: 90,
+        remainingMinutes: 90,
+      })
+    ).value.planning.status,
+    "SUCCEEDED",
+  );
+  assert.equal(owned("tasks", user.userId, initiallyUnknown.id).originalEstimatedMinutes, 90);
+  assert.equal(
+    (
+      await manual.manualTasks.update({
+        id: initiallyUnknown.id,
+        expectedVersion: 1,
+        originalEstimatedMinutes: 120,
+      })
+    ).error.code,
+    "CONFLICT",
   );
 });

@@ -28,12 +28,14 @@ function load(file, dependencies = {}) {
     if (name === "./planner-primitives") return dependencies.primitives;
     if (name === "./course-color") return dependencies.courseColor;
     if (name === "./manual-editors")
-      return {
-        TermEditor: () => null,
-        CourseEditor: () => null,
-        MeetingEditor: () => null,
-        EventEditor: () => null,
-      };
+      return (
+        dependencies.manualEditors ?? {
+          TermEditor: () => null,
+          CourseEditor: () => null,
+          MeetingEditor: () => null,
+          EventEditor: () => null,
+        }
+      );
     if (name === "next/navigation") return { useRouter: () => ({ refresh() {}, replace() {} }) };
     if (name === "./mutation-form") return dependencies.form;
     if (name === "./mutation-client")
@@ -88,9 +90,28 @@ const { AvailabilityView } = load("availability-view.tsx", { courseColor });
 const { SettingsView } = load("settings-view.tsx");
 const { IntegrationsView } = load("integrations-view.tsx", { primitives });
 const form = load("mutation-form.tsx");
-const { TermEditor, CourseEditor, MeetingEditor, EventEditor } = load("manual-editors.tsx", {
-  form,
-});
+const manualEditors = load("manual-editors.tsx", { form });
+const { TermEditor, CourseEditor, MeetingEditor, EventEditor } = manualEditors;
+const { AssessmentEditor, TaskEditor } = load("workload-editors.tsx", { form, manualEditors });
+export function renderWorkloadEditor(kind, overrides = {}) {
+  const course = { id: "synthetic-course", code: "SYN101", name: "Synthetic Mechanics" };
+  const props = {
+    courses: [course],
+    timezone: "America/Toronto",
+    returnTo: "/upcoming?range=all&sort=pressure",
+  };
+  const selection =
+    kind === "assessment"
+      ? [
+          AssessmentEditor,
+          { ...props, taskHref: (id) => `/upcoming?assessment=${id}&edit=task-new` },
+        ]
+      : kind === "task"
+        ? [TaskEditor, { ...props, assessments: [], tasks: [] }]
+        : null;
+  if (!selection) throw Error("Unknown workload editor");
+  return renderToStaticMarkup(React.createElement(selection[0], { ...selection[1], ...overrides }));
+}
 export function renderManualEditor(kind) {
   const term = {
     id: "synthetic-term",

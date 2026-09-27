@@ -1,4 +1,4 @@
-import { academicTerms, courses, courseMeetings } from "./academic";
+import { academicTerms, assessments, courses, courseMeetings, tasks } from "./academic";
 import { calendarEvents } from "./schedule";
 import type { ApplicationResult } from "./errors";
 import type { PlannedMutation } from "./planner-triggers";
@@ -80,5 +80,27 @@ export const manualEvents = {
   async archive(input: unknown) {
     const found = await manualEvent(input);
     return found.ok ? project(await calendarEvents.archive(input)) : found;
+  },
+};
+export const manualAssessments = {
+  async create(input: unknown) {
+    return project(await assessments.create(input));
+  },
+  async update(input: unknown) {
+    return project(await assessments.update(input));
+  },
+  async archive(input: unknown) {
+    return project(await assessments.archive(input));
+  },
+};
+export const manualTasks = {
+  async create(input: unknown) {
+    return project(await tasks.create(input));
+  },
+  async update(input: unknown) {
+    return project(await tasks.update(input));
+  },
+  async archive(input: unknown) {
+    return project(await tasks.archive(input));
   },
 };

@@ -28,6 +28,8 @@ function load(file, dependencies = {}) {
     if (name === "lucide-react") return webRequire(name);
     if (name === "./planner-primitives") return dependencies.primitives;
     if (name === "./course-color") return dependencies.courseColor;
+    if (name === "./workload-editors")
+      return { AssessmentEditor: () => null, TaskEditor: () => null };
     if (name === "./assessment-close")
       return {
         AssessmentClose: () =>

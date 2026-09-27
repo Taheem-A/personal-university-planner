@@ -233,4 +233,11 @@ test("deadline input converts with an explicit zone and rejects DST ambiguity", 
   );
   assert.throws(() => form.deadlineInstant("2026-03-08T02:30", "America/Toronto"));
   assert.throws(() => form.deadlineInstant("2026-11-01T01:30", "America/Toronto"));
+  assert.equal(
+    form.editedInstant("2026-11-01T01:30", "America/Toronto", new Date("2026-11-01T05:30:00Z")),
+    "2026-11-01T05:30:00.000Z",
+  );
+  assert.throws(() =>
+    form.editedInstant("2026-11-01T01:30", "America/Toronto", new Date("2026-11-01T08:00:00Z")),
+  );
 });

@@ -37,6 +37,7 @@ function state() {
     assessments: [
       {
         id: "exam",
+        version: 2,
         userId: "owner",
         courseId: "course",
         title: "Synthetic exam",
@@ -88,13 +89,30 @@ function state() {
     tasks: [
       {
         id: "study",
+        version: 3,
         userId: "owner",
         courseId: "course",
         assessmentId: "exam",
+        parentTaskId: null,
         title: "Study",
+        description: "Read the notes",
         status: "READY",
+        planningMode: "AUTO",
+        originalEstimatedMinutes: 120,
+        currentEstimatedMinutes: 90,
         remainingMinutes: 90,
+        availableFrom: new Date("2026-03-09T12:00:00Z"),
         dueAt: null,
+        preferredCompletionAt: null,
+        energyRequirement: "MEDIUM",
+        locationRequirements: ["DESK"],
+        minimumSessionMinutes: 20,
+        preferredSessionMinutes: 45,
+        maximumSessionMinutes: 90,
+        splittable: true,
+        interruptible: true,
+        priorityOverride: null,
+        credentialReference: "hidden-secret",
         archivedAt: null,
       },
       {
@@ -180,6 +198,29 @@ test("Unknown and unauthorized selections disclose no assessment facts", () => {
   const absent = reads.buildUpcoming(state(), null, null, now, "missing", "DUE");
   assert.equal(absent.selectedAssessment, null);
   assert.equal(absent.selectionUnavailable, true);
+});
+
+test("workload editors receive only owned edit values and preserve unknown dates", () => {
+  const model = reads.buildUpcoming(state(), null, null, now, "exam", "DUE", "study", "TASK");
+  assert.equal(model.selectedAssessment.version, 2);
+  assert.equal(model.selectedAssessment.courseId, "course");
+  assert.equal(model.selectedTask.version, 3);
+  assert.equal(model.selectedTask.currentEstimatedMinutes, 90);
+  assert.equal(model.selectedTask.dueAt, null);
+  assert.equal(
+    model.taskChoices.some((task) => task.id === "study"),
+    true,
+  );
+  assert.equal(
+    model.courseChoices.some((course) => course.id === "foreign-course"),
+    false,
+  );
+  assert.equal(JSON.stringify(model).includes("hidden-secret"), false);
+  assert.equal(
+    reads.buildUpcoming(state(), null, null, now, null, "DUE", "foreign-task").selectedTask,
+    null,
+  );
+  assert.deepEqual(reads.buildUpcoming(state(), null, null, now, null, "DUE").taskChoices, []);
 });
 
 test("FAILED and RUNNING preserve last successful plan authority", () => {

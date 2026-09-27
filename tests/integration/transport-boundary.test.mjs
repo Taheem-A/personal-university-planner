@@ -48,6 +48,7 @@ const rows = {
   terms: [],
   courses: [],
   meetings: [],
+  assessments: [],
   events: [],
   tasks: [],
   availability: [],
@@ -94,6 +95,16 @@ const repo = {
       rows.meetings.filter((r) => r.userId === u && r.courseId === id),
     updateIfCurrent: async (u, id, v, p) => conditional("meetings", u, id, v, p),
   },
+  assessments: {
+    create: async (r) => {
+      rows.assessments.push(r);
+      return r;
+    },
+    getForUser: async (u, id) => owned("assessments", u, id),
+    listForCourse: async (u, id) =>
+      rows.assessments.filter((r) => r.userId === u && r.courseId === id),
+    updateIfCurrent: async (u, id, v, p) => conditional("assessments", u, id, v, p),
+  },
   calendarEvents: {
     create: async (r) => {
       rows.events.push(r);
@@ -110,6 +121,8 @@ const repo = {
     },
     getForUser: async (u, id) => owned("tasks", u, id),
     listForUser: async (u) => rows.tasks.filter((r) => r.userId === u),
+    listSubtasks: async (u, id) =>
+      rows.tasks.filter((r) => r.userId === u && r.parentTaskId === id),
     updateIfCurrent: async (u, id, v, p) => conditional("tasks", u, id, v, p),
   },
   availabilityRules: {
@@ -253,6 +266,22 @@ const manualEvents = route("manual/events", {
   "../../../../../server/transport": transport,
 });
 const manualEvent = route("manual/events/[id]", {
+  "../../../../../../server/application/manual-management": manual,
+  "../../../../../../server/transport": transport,
+});
+const manualAssessments = route("manual/assessments", {
+  "../../../../../server/application/manual-management": manual,
+  "../../../../../server/transport": transport,
+});
+const manualAssessment = route("manual/assessments/[id]", {
+  "../../../../../../server/application/manual-management": manual,
+  "../../../../../../server/transport": transport,
+});
+const manualTasks = route("manual/tasks", {
+  "../../../../../server/application/manual-management": manual,
+  "../../../../../server/transport": transport,
+});
+const manualTask = route("manual/tasks/[id]", {
   "../../../../../../server/application/manual-management": manual,
   "../../../../../../server/transport": transport,
 });
@@ -696,5 +725,203 @@ test("manual route adapters persist owned facts and return narrow safe outcomes"
       )
     ).status,
     404,
+  );
+});
+
+test("assessment and task routes enforce owner, validation, stale writes and committed response", async () => {
+  currentUser = null;
+  assert.equal(
+    (await parsed(await manualTasks.POST(mutation("tasks", "POST", { title: "No actor" })))).status,
+    401,
+  );
+  currentUser = "work-a";
+  const term = (
+    await parsed(
+      await manualTerms.POST(
+        mutation("terms", "POST", { name: "Fall", startDate: "2026-09-01", endDate: "2026-12-20" }),
+      ),
+    )
+  ).body.data;
+  const course = (
+    await parsed(
+      await manualCourses.POST(
+        mutation("courses", "POST", { academicTermId: term.id, code: "CIV100", name: "Civil" }),
+      ),
+    )
+  ).body.data;
+  assert.equal(
+    (
+      await parsed(
+        await manualAssessments.POST(
+          mutation("assessments", "POST", {
+            courseId: course.id,
+            title: "Forged",
+            assessmentType: "Assignment",
+            userId: "work-b",
+          }),
+        ),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualAssessments.POST(
+          mutation(
+            "assessments",
+            "POST",
+            { courseId: course.id, title: "Cross origin", assessmentType: "Assignment" },
+            "https://evil.test",
+          ),
+        ),
+      )
+    ).status,
+    403,
+  );
+  assert.equal(rows.assessments.filter((r) => r.userId === "work-a").length, 0);
+  const assessment = await parsed(
+    await manualAssessments.POST(
+      mutation("assessments", "POST", {
+        courseId: course.id,
+        title: "Assignment 3",
+        assessmentType: "Assignment",
+      }),
+    ),
+  );
+  assert.equal(assessment.status, 200);
+  assert.deepEqual(Object.keys(assessment.body.data).sort(), ["id", "planning", "version"]);
+  assert.equal(owned("assessments", "work-a", assessment.body.data.id).dueAt, null);
+  const assignmentId = assessment.body.data.id;
+  assert.equal(
+    (
+      await parsed(
+        await manualAssessment.PATCH(
+          mutation(`assessments/${assignmentId}`, "PATCH", {
+            expectedVersion: 0,
+            dueAt: "2026-10-15T20:00:00Z",
+          }),
+          context(assignmentId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualAssessment.PATCH(
+          mutation(`assessments/${assignmentId}`, "PATCH", { expectedVersion: 0, title: "Stale" }),
+          context(assignmentId),
+        ),
+      )
+    ).body.error.code,
+    "STALE_WRITE",
+  );
+  const taskInput = {
+    title: "Solve",
+    courseId: course.id,
+    assessmentId: assignmentId,
+    status: "READY",
+    originalEstimatedMinutes: 180,
+    availableFrom: "2026-10-01T12:00:00Z",
+    minimumSessionMinutes: 45,
+    preferredSessionMinutes: 45,
+    maximumSessionMinutes: 45,
+  };
+  const bad = await parsed(
+    await manualTasks.POST(
+      mutation("tasks", "POST", { ...taskInput, dueAt: "2026-09-01T12:00:00Z" }),
+    ),
+  );
+  assert.equal(bad.status, 400);
+  assert.equal(rows.tasks.filter((r) => r.userId === "work-a" && r.title === "Solve").length, 0);
+  const task = await parsed(await manualTasks.POST(mutation("tasks", "POST", taskInput)));
+  assert.equal(task.status, 200);
+  assert.deepEqual(Object.keys(task.body.data).sort(), ["id", "planning", "version"]);
+  const taskId = task.body.data.id;
+  assert.equal(owned("tasks", "work-a", taskId).remainingMinutes, 180);
+  assert.equal(
+    (
+      await parsed(
+        await manualTask.PATCH(
+          mutation(`tasks/${taskId}`, "PATCH", {
+            expectedVersion: 0,
+            currentEstimatedMinutes: 240,
+            remainingMinutes: 240,
+          }),
+          context(taskId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(owned("tasks", "work-a", taskId).status, "READY");
+  assert.equal(
+    (
+      await parsed(
+        await manualTask.PATCH(
+          mutation(`tasks/${taskId}`, "PATCH", { expectedVersion: 0, title: "Stale" }),
+          context(taskId),
+        ),
+      )
+    ).body.error.code,
+    "STALE_WRITE",
+  );
+  currentUser = "work-b";
+  assert.equal(
+    (
+      await parsed(
+        await manualAssessment.DELETE(
+          mutation(`assessments/${assignmentId}`, "DELETE", { expectedVersion: 1 }),
+          context(assignmentId),
+        ),
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualTask.DELETE(
+          mutation(`tasks/${taskId}`, "DELETE", { expectedVersion: 1 }),
+          context(taskId),
+        ),
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualTasks.POST(
+          mutation("tasks", "POST", { ...taskInput, title: "Foreign relation" }),
+        ),
+      )
+    ).status,
+    404,
+  );
+  currentUser = "work-a";
+  assert.equal(
+    (
+      await parsed(
+        await manualTask.DELETE(
+          mutation(`tasks/${taskId}`, "DELETE", { expectedVersion: 1 }),
+          context(taskId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualAssessment.DELETE(
+          mutation(`assessments/${assignmentId}`, "DELETE", { expectedVersion: 1 }),
+          context(assignmentId),
+        ),
+      )
+    ).status,
+    200,
   );
 });

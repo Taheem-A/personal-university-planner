@@ -259,9 +259,16 @@ function TodayDetail({
           Open assessment context
         </Link>
       )}
+      {(session?.taskId ?? task?.id) && (
+        <Link
+          className="button button-secondary"
+          href={`/upcoming?edit=task:${encodeURIComponent((session?.taskId ?? task?.id)!)}`}
+        >
+          Edit task facts
+        </Link>
+      )}
       <p className="today-deferred">
-        Session and task editing arrive in a later Milestone 5 slice. Completion remains deferred to
-        Milestone 7.
+        Session changes and work completion remain separate from task fact editing.
       </p>
     </aside>
   );

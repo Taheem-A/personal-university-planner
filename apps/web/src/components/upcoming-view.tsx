@@ -9,6 +9,7 @@ import type {
 import { CourseIdentity, StatusIndicator } from "./planner-primitives";
 import { courseColor } from "./course-color";
 import { AssessmentClose } from "./assessment-close";
+import { AssessmentEditor, TaskEditor } from "./workload-editors";
 
 const groupNames: Record<HorizonGroup, string> = {
   OVERDUE: "Overdue",
@@ -72,12 +73,14 @@ function AssessmentDetail({
   range,
   sort,
   view,
+  editUrl,
 }: {
   detail: AssessmentDetailModel | null;
   model: UpcomingViewModel;
   range: string;
   sort: "PRESSURE" | "DUE";
   view: string;
+  editUrl: (key: string, context?: string) => string;
 }) {
   if (!detail && !model.selectionUnavailable) return null;
   const base = detail ? assessmentHref(detail.id, range, sort) : "";
@@ -110,6 +113,14 @@ function AssessmentDetail({
       </header>
       {detail ? (
         <>
+          <div className="manual-top-actions">
+            <Link className="button button-secondary" href={editUrl(`assessment:${detail.id}`)}>
+              Edit assessment
+            </Link>
+            <Link className="button button-secondary" href={editUrl("task-new")}>
+              Add work task
+            </Link>
+          </div>
           <div className="assessment-facts">
             <div>
               <small>Due</small>
@@ -184,11 +195,32 @@ function AssessmentDetail({
               {detail.tasks.length ? (
                 <ul>
                   {detail.tasks.map((task) => (
-                    <li key={task.id}>
+                    <li
+                      key={task.id}
+                      className={task.parentTaskId ? "assessment-subtask" : undefined}
+                    >
                       <strong>{task.title}</strong>
+                      {task.parentTaskId && (
+                        <small>
+                          Subtask of{" "}
+                          {detail.tasks.find((item) => item.id === task.parentTaskId)?.title ??
+                            "another task"}
+                        </small>
+                      )}
                       <span>
                         {task.status.replaceAll("_", " ").toLowerCase()} ·{" "}
                         {minutes(task.remainingMinutes)}
+                      </span>
+                      <span className="manual-inline-actions">
+                        <Link className="button button-secondary" href={editUrl(`task:${task.id}`)}>
+                          Edit task
+                        </Link>
+                        <Link
+                          className="button button-secondary"
+                          href={editUrl("task-new", `parent=${encodeURIComponent(task.id)}`)}
+                        >
+                          Add subtask
+                        </Link>
                       </span>
                     </li>
                   ))}
@@ -248,7 +280,7 @@ function AssessmentDetail({
             </section>
           )}
           <p className="assessment-deferred">
-            Editing, submission updates, and task resolution belong to later workflows.
+            Submission and work completion controls arrive in a later milestone.
           </p>
         </>
       ) : (
@@ -265,12 +297,30 @@ export function UpcomingView({
   range,
   sort,
   view,
+  edit,
+  selectedCourseId,
+  selectedParentId,
 }: {
   model: UpcomingViewModel;
   range: string;
   sort: "PRESSURE" | "DUE";
   view: string;
+  edit?: string;
+  selectedCourseId?: string;
+  selectedParentId?: string;
 }) {
+  const listBase = `/upcoming?range=${range}&sort=${sort === "DUE" ? "due" : "pressure"}`;
+  const parent = `${listBase}${model.selectedAssessment ? `&assessment=${encodeURIComponent(model.selectedAssessment.id)}` : ""}`;
+  const editUrl = (key: string, context?: string) =>
+    `${parent}&edit=${encodeURIComponent(key)}${context ? `&${context}` : ""}`;
+  const selectedAssessment =
+    edit?.startsWith("assessment:") && model.selectedAssessment?.id === edit.slice(11)
+      ? model.selectedAssessment
+      : undefined;
+  const selectedTask =
+    edit?.startsWith("task:") && model.selectedTask?.id === edit.slice(5)
+      ? model.selectedTask
+      : undefined;
   const visible = model.groups.filter(
     (group) =>
       range === "all" ||
@@ -294,6 +344,49 @@ export function UpcomingView({
         </h1>
         <p>Your assessments, deadlines, and important commitments.</p>
       </header>
+      <div className="manual-top-actions">
+        <Link className="button button-primary" href={`${parent}&edit=assessment-new`}>
+          Add assessment
+        </Link>
+        <Link className="button button-secondary" href={`${parent}&edit=task-new`}>
+          Add work task
+        </Link>
+      </div>
+      {(edit === "assessment-new" || selectedAssessment) && (
+        <AssessmentEditor
+          key={selectedAssessment?.id ?? "new-assessment"}
+          assessment={selectedAssessment}
+          courses={model.courseChoices}
+          selectedCourseId={selectedCourseId}
+          timezone={model.timezone}
+          returnTo={parent}
+          taskHref={(id) => `${listBase}&assessment=${encodeURIComponent(id)}&edit=task-new`}
+        />
+      )}
+      {(edit === "task-new" || selectedTask) && (
+        <TaskEditor
+          key={selectedTask?.id ?? "new-task"}
+          task={selectedTask}
+          courses={model.courseChoices}
+          assessments={model.assessmentChoices}
+          tasks={model.taskChoices}
+          selectedAssessmentId={model.selectedAssessment?.id}
+          selectedParentId={selectedParentId}
+          selectedCourseId={selectedCourseId}
+          timezone={model.timezone}
+          returnTo={parent}
+        />
+      )}
+      {edit?.startsWith("task:") && !selectedTask && (
+        <p className="secondary-empty" role="alert">
+          Task unavailable. The link may be invalid or you may not have access.
+        </p>
+      )}
+      {edit?.startsWith("assessment:") && !selectedAssessment && (
+        <p className="secondary-empty" role="alert">
+          Assessment unavailable. The link may be invalid or you may not have access.
+        </p>
+      )}
       <div className="upcoming-toolbar">
         <nav className="upcoming-tabs" aria-label="Upcoming range">
           {tabs.map(([key, label]) => (
@@ -374,7 +467,13 @@ export function UpcomingView({
                           <ChevronRight size={18} aria-hidden="true" />
                         </Link>
                       ) : (
-                        <span className="upcoming-open" aria-hidden="true" />
+                        <Link
+                          className="upcoming-open"
+                          href={editUrl(`task:${item.id}`)}
+                          aria-label={`Edit task: ${item.title}`}
+                        >
+                          <ChevronRight size={18} aria-hidden="true" />
+                        </Link>
                       )}
                     </div>
                   </li>
@@ -392,6 +491,7 @@ export function UpcomingView({
         range={range}
         sort={sort}
         view={view}
+        editUrl={editUrl}
       />
     </div>
   );

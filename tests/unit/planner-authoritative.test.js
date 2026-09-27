@@ -346,6 +346,32 @@ test("canonical snapshot invokes heuristic-v1 and persists a reloadable run and 
   assert.equal(db.data.sessions.filter((row) => row.userId === otherId).length, 0);
 });
 
+test("a newly saved schedulable task enters the next authoritative plan", async () => {
+  const empty = state();
+  empty.tasks = [];
+  const db = database([empty]);
+  const newTask = {
+    ...task("new-assignment-work"),
+    assessmentId: null,
+    remainingMinutes: 180,
+    originalEstimatedMinutes: 180,
+    currentEstimatedMinutes: 180,
+    minimumSessionMinutes: 45,
+    preferredSessionMinutes: 45,
+    maximumSessionMinutes: 45,
+  };
+  db.data.states[userId].tasks.push(newTask);
+  const result = await service.executePlannerForActor(
+    db,
+    userId,
+    request({ type: "TASK_CREATED", entityType: "TASK", entityId: newTask.id }),
+    dependencies(),
+  );
+  assert.equal(result.status, "SUCCEEDED");
+  assert.ok(active(db).some((row) => row.taskId === newTask.id));
+  assert.equal(db.data.runs.at(-1).triggerType, "TASK_CREATED");
+});
+
 test("repeat incremental run retains stable session IDs without duplicates", async () => {
   const db = database();
   const deps = dependencies();

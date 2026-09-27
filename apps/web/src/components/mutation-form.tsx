@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
-import { localDateTimeToInstant } from "@university-planner/shared";
+import { instantToLocal, localDateTimeToInstant } from "@university-planner/shared";
 
 type BaseField = { label: string; help?: string; error?: string; id?: string };
 type InputFieldProps = BaseField &
@@ -148,6 +148,14 @@ export function deadlineInstant(local: string, timezone: string): string {
   const [date, time] = local.split("T");
   if (!date || !time) throw new Error("Enter a local date and time.");
   return localDateTimeToInstant({ date, time, timezone }, "REJECT").toISOString();
+}
+/** Preserve an unchanged canonical instant even if its local clock time falls in a DST overlap. */
+export function editedInstant(local: string, timezone: string, original?: Date | null): string {
+  if (original) {
+    const wall = instantToLocal(original, timezone);
+    if (local === `${wall.date}T${wall.time.slice(0, 5)}`) return original.toISOString();
+  }
+  return deadlineInstant(local, timezone);
 }
 
 export function ValidationSummary({ errors }: { errors: string[] }) {

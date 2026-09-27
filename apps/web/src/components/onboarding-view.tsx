@@ -87,6 +87,16 @@ export function OnboardingView({ model, step }: { model: OnboardingViewModel; st
               </Link>
             </div>
           )}
+          {step === 5 && (
+            <div className="manual-top-actions">
+              <Link className="button button-secondary" href="/upcoming?edit=assessment-new">
+                Add an assessment
+              </Link>
+              <Link className="button button-secondary" href="/upcoming?edit=task-new">
+                Add work for the planner
+              </Link>
+            </div>
+          )}
           {step === 6 && (
             <p className="onboarding-note">
               This presentation does not create a term or generate a plan. First-plan setup and

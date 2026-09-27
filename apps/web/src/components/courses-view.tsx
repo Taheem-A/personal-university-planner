@@ -158,6 +158,18 @@ export function CoursesView({ model, edit }: { model: CoursesViewModel; edit?: s
                     <Link className="button button-secondary" href={editorUrl("meeting-new")}>
                       Add course meeting
                     </Link>
+                    <Link
+                      className="button button-secondary"
+                      href={`/upcoming?edit=assessment-new&course=${encodeURIComponent(detail.id)}`}
+                    >
+                      Add assessment
+                    </Link>
+                    <Link
+                      className="button button-secondary"
+                      href={`/upcoming?edit=task-new&course=${encodeURIComponent(detail.id)}`}
+                    >
+                      Add work task
+                    </Link>
                   </div>
                 )}
                 <div className="course-summary-line">
@@ -297,7 +309,7 @@ export function CoursesView({ model, edit }: { model: CoursesViewModel; edit?: s
                   )}
                 </section>
                 <p className="course-deferred">
-                  Assessment, task, and recurring-work editors arrive in later Milestone 6 slices.
+                  Recurring-work automation remains outside this manual slice.
                 </p>
               </>
             ) : (
