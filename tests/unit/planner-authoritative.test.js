@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
+const webRequire = Module.createRequire(path.resolve(__dirname, "../../apps/web/package.json"));
 const ts = require("typescript");
 const core = require("../../dist/packages/planner-core/src/index.js");
 const shared = require("../../dist/packages/shared/src/index.js");
@@ -317,6 +318,143 @@ function active(db, owner = userId) {
     (row) => row.userId === owner && row.state === "PLANNED" && row.generatedBy === "PLANNER",
   );
 }
+
+test("fresh canonical setup produces a persisted first plan visible in Today, Week, and Upcoming", async () => {
+  const fresh = state();
+  fresh.academicTerms = [];
+  fresh.courses = [];
+  fresh.courseMeetings = [];
+  fresh.availabilityRules = [];
+  fresh.protectedTimeRules = [];
+  fresh.planningPreferences = [];
+  fresh.tasks = [];
+  const db = database([fresh, state(otherId)]);
+  const snapshot = db.data.states[userId];
+  snapshot.academicTerms.push({
+    id: "term-1",
+    userId,
+    name: "Fall 2026",
+    status: "ACTIVE",
+    startDate: "2026-09-01",
+    endDate: "2026-12-20",
+  });
+  snapshot.courses.push({
+    id: "course-1",
+    userId,
+    academicTermId: "term-1",
+    code: "SYN101",
+    name: "Synthetic course",
+    archivedAt: null,
+    defaultTaskEnergy: null,
+  });
+  snapshot.courseMeetings.push({
+    id: "lecture",
+    userId,
+    courseId: "course-1",
+    meetingType: "LECTURE",
+    attendanceRequired: true,
+    archivedAt: null,
+    ...recurrence("10:00", "11:00"),
+    recurrenceRule: "FREQ=WEEKLY;BYDAY=MO",
+  });
+  snapshot.calendarEvents.push({
+    id: "appointment",
+    userId,
+    title: "Appointment",
+    source: "MANUAL",
+    constraintLevel: "HARD",
+    startAt: d("2026-09-22T12:00:00-04:00"),
+    endAt: d("2026-09-22T13:00:00-04:00"),
+    archivedAt: null,
+  });
+  snapshot.availabilityRules.push({
+    id: "available",
+    userId,
+    active: true,
+    capacityFactor: 1,
+    energyLevel: "HIGH",
+    allowedLocationTags: ["DESK"],
+    ...recurrence("08:00", "22:00"),
+  });
+  snapshot.protectedTimeRules.push({
+    id: "sleep",
+    userId,
+    active: true,
+    isSleep: true,
+    protectionLevel: "HARD",
+    reason: "Sleep",
+    ...recurrence("23:00", "07:00", true),
+  });
+  snapshot.planningPreferences.push({
+    userId,
+    minimumSleepMinutes: 420,
+    preferredDailyStudyLimitMinutes: 240,
+    minimumFreeTimeMinutes: 30,
+    preferredDeadlineBufferHours: 12,
+    avoidLateHighEnergyTasks: true,
+    maximumConsecutiveWorkMinutes: 120,
+    minimumBreakMinutes: 10,
+    scheduleCommuteWork: false,
+    weekendWorkBias: -0.5,
+    planStabilityWindowMinutes: 120,
+  });
+  snapshot.assessments.push({
+    id: "assessment",
+    userId,
+    courseId: "course-1",
+    title: "Assignment",
+    assessmentType: "ASSIGNMENT",
+    dueAt: null,
+    submissionStatus: "NOT_SUBMITTED",
+    archivedAt: null,
+  });
+  snapshot.tasks.push({ ...task("assignment-work"), assessmentId: "assessment" });
+  const result = await service.executePlannerForActor(
+    db,
+    userId,
+    { ...request(), mode: "FULL" },
+    dependencies(),
+  );
+  assert.equal(result.status, "SUCCEEDED");
+  assert.equal(result.planStatus, "VALID");
+  assert.ok(active(db).length > 0);
+  assert.equal(db.data.runs[0].status, "SUCCEEDED");
+  assert.equal(db.data.runs[0].plannerVersion, "heuristic-v1");
+  assert.equal(db.data.states[otherId].user.planningRevision, 0);
+  assert.equal(db.data.sessions.filter((row) => row.userId === otherId).length, 0);
+  const visible = { ...snapshot, workSessions: active(db) };
+  const reads = load("planner-reads.ts", {
+    zod: webRequire("zod"),
+    "../database": {},
+    "./authorization": {},
+    "./errors": {},
+    "./validation": { calendarDateSchema: webRequire("zod").z.string() },
+  });
+  const information = load("information-reads.ts", {
+    zod: webRequire("zod"),
+    "../database": {},
+    "./authorization": {},
+    "./errors": {},
+    "./validation": { idSchema: webRequire("zod").z.string() },
+    "./planner-reads": reads,
+  });
+  const run = db.data.runs[0];
+  const firstDate = shared.instantToLocal(active(db)[0].startAt, "America/Toronto").date;
+  const weekStart = shared.addLocalDays(
+    firstDate,
+    -((new Date(`${firstDate}T00:00:00Z`).getUTCDay() + 6) % 7),
+  );
+  const today = reads.buildToday(visible, run, run, firstDate, now);
+  const week = reads.buildWeek(visible, run, run, weekStart);
+  const upcoming = information.buildUpcoming(visible, run, run, now, null, "PRESSURE");
+  assert.ok(today.timeline.some((item) => item.kind === "WORK"));
+  assert.ok(week.schedule.some((item) => item.kind === "WORK"));
+  assert.ok(
+    upcoming.groups
+      .flatMap((group) => group.items)
+      .some((item) => item.id === "assessment" && item.dueAt === null),
+  );
+});
 
 test("canonical snapshot invokes heuristic-v1 and persists a reloadable run and sessions", async () => {
   const db = database([state(), state(otherId)]);

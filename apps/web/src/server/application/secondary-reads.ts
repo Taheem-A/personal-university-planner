@@ -194,14 +194,19 @@ export interface IntegrationsViewModel {
 }
 export interface OnboardingViewModel {
   timezone: string;
-  term: { name: string; status: string } | null;
+  term: { id: string; name: string; status: string } | null;
   courseCount: number;
   meetingCount: number;
+  fixedEventCount: number;
   availabilityCount: number;
   protectedCount: number;
+  sleepCount: number;
+  preferencesConfigured: boolean;
   assessmentCount: number;
   taskCount: number;
+  schedulableTaskCount: number;
   hasSuccessfulPlan: boolean;
+  hasUsablePlan: boolean;
   needsSetup: boolean;
 }
 
@@ -216,29 +221,50 @@ export function buildOnboarding(
     (item) => item.userId === userId && !item.archivedAt && item.academicTermId === term?.id,
   );
   const courseIds = new Set(courses.map((item) => item.id));
+  const tasks = state.tasks.filter(
+    (item) =>
+      item.userId === userId &&
+      !item.archivedAt &&
+      (item.courseId === null || courseIds.has(item.courseId)),
+  );
+  const rawSummary = successful?.summary;
+  const hasUsablePlan = Boolean(
+    rawSummary &&
+    typeof rawSummary === "object" &&
+    !Array.isArray(rawSummary) &&
+    rawSummary.planStatus === "VALID" &&
+    Number(rawSummary.generatedSessionCount) + Number(rawSummary.retainedSessionCount) > 0,
+  );
   return {
     timezone: state.user.timezone,
-    term: term ? { name: term.name, status: term.status } : null,
+    term: term ? { id: term.id, name: term.name, status: term.status } : null,
     courseCount: courses.length,
     meetingCount: state.courseMeetings.filter(
       (item) => item.userId === userId && !item.archivedAt && courseIds.has(item.courseId),
+    ).length,
+    fixedEventCount: state.calendarEvents.filter(
+      (item) => item.userId === userId && !item.archivedAt && item.source === "MANUAL",
     ).length,
     availabilityCount: state.availabilityRules.filter(
       (item) => item.userId === userId && item.active,
     ).length,
     protectedCount: state.protectedTimeRules.filter((item) => item.userId === userId && item.active)
       .length,
+    sleepCount: state.protectedTimeRules.filter(
+      (item) =>
+        item.userId === userId && item.active && item.isSleep && item.protectionLevel === "HARD",
+    ).length,
+    preferencesConfigured: state.planningPreferences.some((item) => item.userId === userId),
     assessmentCount: state.assessments.filter(
       (item) => item.userId === userId && !item.archivedAt && courseIds.has(item.courseId),
     ).length,
-    taskCount: state.tasks.filter(
-      (item) =>
-        item.userId === userId &&
-        !item.archivedAt &&
-        (item.courseId === null || courseIds.has(item.courseId)),
+    taskCount: tasks.length,
+    schedulableTaskCount: tasks.filter(
+      (item) => item.planningMode === "AUTO" && ["READY", "IN_PROGRESS"].includes(item.status),
     ).length,
     hasSuccessfulPlan: Boolean(successful),
-    needsSetup: !term || courses.length === 0 || !successful,
+    hasUsablePlan,
+    needsSetup: !term || courses.length === 0 || !hasUsablePlan,
   };
 }
 

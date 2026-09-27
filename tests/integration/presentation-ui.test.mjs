@@ -30,14 +30,15 @@ test("Scenario and conflict shells cannot apply or simulate in the browser", () 
     /simulateProtectedWindow|plannerRuns\.create|workSessions\.create/,
   );
 });
-test("Onboarding steps are URL-backed and never claim canonical completion", () => {
+test("Onboarding steps are URL-backed and show canonical progress and the plan action", () => {
   const first = renderOnboarding();
   const last = renderOnboarding(6);
   assert.match(first, /Synthetic Spring · active/);
   assert.match(first, /href="\/onboarding\?step=2"/);
   assert.match(last, /No successful plan recorded/);
-  assert.match(last, /does not create a term or generate a plan/);
-  assert.doesNotMatch(last, /Generate plan<\/button>/);
+  assert.match(first, /core planning facts recorded/);
+  assert.match(last, /Generate first plan<\/button>/);
+  assert.match(last, /authoritative Planner Service/);
 });
 test("presentation routes stay authenticated and fixture-free", () => {
   const paths = [

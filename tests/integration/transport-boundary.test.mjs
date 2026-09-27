@@ -331,6 +331,95 @@ const manualPreferencesCurrent = route("manual/preferences/current", {
   "../../../../../../server/application/manual-management": manual,
   "../../../../../../server/transport": transport,
 });
+let nextOnboardingPlan = {
+  ok: false,
+  error: { code: "UNAUTHORIZED", message: "Sign in required." },
+};
+let onboardingCalls = 0;
+const onboardingPlan = app("application/onboarding-plan", {
+  "./errors": errors,
+  "./validation": validation,
+  "./planner-triggers": {
+    replanManually: async (input) => {
+      onboardingCalls++;
+      assert.equal(input.full, true);
+      return nextOnboardingPlan;
+    },
+  },
+});
+const onboardingPlanRoute = route("onboarding/plan", {
+  "../../../../../server/application/onboarding-plan": onboardingPlan,
+  "../../../../../server/transport": transport,
+});
+
+test("onboarding plan transport requires origin and session and reports persisted outcomes honestly", async () => {
+  const send = (payload, origin = "http://localhost:3000") =>
+    onboardingPlanRoute.POST(request("onboarding/plan", payload, origin));
+  onboardingCalls = 0;
+  assert.equal((await parsed(await send({}, "https://other.test"))).status, 403);
+  assert.equal((await parsed(await send({ userId: "forged" }))).status, 400);
+  assert.equal(onboardingCalls, 0);
+  assert.equal((await parsed(await send({}))).status, 401);
+  nextOnboardingPlan = {
+    ok: true,
+    value: {
+      status: "INPUT_FAILURE",
+      issues: [
+        { code: "MISSING_ESTIMATE", message: "Task estimate is missing.", recordId: "hidden-task" },
+      ],
+    },
+  };
+  const missing = await parsed(await send({}));
+  assert.equal(missing.status, 422);
+  assert.equal(missing.body.error.code, "PLANNER_INFEASIBLE");
+  assert.equal(JSON.stringify(missing.body).includes("hidden-task"), false);
+  nextOnboardingPlan = {
+    ok: true,
+    value: {
+      status: "SUCCEEDED",
+      runId: "run-1",
+      planStatus: "INFEASIBLE",
+      summary: { generatedSessionCount: 0, retainedSessionCount: 0, unscheduledMinutes: 120 },
+      warnings: [
+        {
+          code: "NO_SUITABLE_WINDOW",
+          taskId: "hidden-task",
+          deficitMinutes: 120,
+          reasonCodes: ["HARD_CONFLICT"],
+        },
+      ],
+    },
+  };
+  const infeasible = await parsed(await send({}));
+  assert.equal(infeasible.body.data.status, "INFEASIBLE");
+  assert.equal(JSON.stringify(infeasible.body).includes("hidden-task"), false);
+  nextOnboardingPlan = {
+    ok: true,
+    value: {
+      status: "SUCCEEDED",
+      runId: "run-2",
+      planStatus: "VALID",
+      summary: { generatedSessionCount: 1, retainedSessionCount: 0, unscheduledMinutes: 0 },
+      warnings: [],
+    },
+  };
+  const success = await parsed(await send({}));
+  assert.equal(success.body.data.status, "READY");
+  assert.equal(success.body.data.sessionCount, 1);
+  assert.deepEqual(Object.keys(success.body.data).sort(), [
+    "planStatus",
+    "runId",
+    "sessionCount",
+    "status",
+    "unscheduledMinutes",
+    "warnings",
+  ]);
+  nextOnboardingPlan = {
+    ok: true,
+    value: { status: "FAILED", runId: "run-3", code: "CORE_FAILURE" },
+  };
+  assert.equal((await parsed(await send({}))).body.data.status, "FAILED");
+});
 
 test("life-constraint routes require session and origin, persist owned versions, and redact records", async () => {
   const common = {
