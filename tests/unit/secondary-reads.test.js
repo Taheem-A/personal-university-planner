@@ -236,6 +236,10 @@ test("Course context is canonical, scoped, and preserves unknown selection priva
 });
 test("Availability expands recurrence in the account timezone across spring DST", () => {
   const model = reads.buildAvailability(state(), "2026-03-02");
+  assert.equal(model.availabilityRules.length, 1);
+  assert.equal(model.availabilityRules[0].timezone, "America/Toronto");
+  assert.equal(model.protectedRules.length, 2);
+  assert.equal(model.protectedRules.find((rule) => rule.isSleep).protectionLevel, "HARD");
   assert.equal(model.days.length, 7);
   assert.deepEqual(model.ruleCounts, {
     availability: 1,

@@ -26,5 +26,11 @@ export default async function Page({
       </div>
     );
   }
-  return <SettingsView model={result.value} section={section} />;
+  return (
+    <SettingsView
+      model={result.value}
+      section={section}
+      edit={typeof query.edit === "string" ? query.edit : undefined}
+    />
+  );
 }

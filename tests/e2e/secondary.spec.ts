@@ -8,6 +8,7 @@ import {
   courseModel,
   renderManualEditor,
   renderWorkloadEditor,
+  renderConstraintEditor,
 } from "../support/secondary-ui-render.mjs";
 
 const css = readFileSync("apps/web/src/app/styles.css", "utf8");
@@ -85,6 +86,30 @@ test("assessment and task forms remain operable by keyboard at phone and zoom wi
       await more.focus();
       await page.keyboard.press("Enter");
       await expect(page.locator(".manual-advanced")).toHaveAttribute("open", "");
+    }
+  }
+});
+test("life constraint and preference forms work by keyboard on phone and zoom widths", async ({
+  page,
+}) => {
+  for (const width of [390, 640]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const kind of ["availability", "protection", "preferences"] as const) {
+      await page.setContent(documentFor(renderConstraintEditor(kind)));
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await page.keyboard.press("Tab");
+      await expect(page.locator(":focus")).toBeVisible();
+      const save = page.getByRole("button", { name: "Save", exact: true });
+      expect((await save.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      if (kind !== "preferences") {
+        const more = page.locator(".manual-advanced summary");
+        expect((await more.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+        await more.focus();
+        await page.keyboard.press("Enter");
+        await expect(page.locator(".manual-advanced")).toHaveAttribute("open", "");
+      }
     }
   }
 });

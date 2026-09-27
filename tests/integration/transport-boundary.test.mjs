@@ -52,6 +52,8 @@ const rows = {
   events: [],
   tasks: [],
   availability: [],
+  protection: [],
+  preferences: [],
   integrations: [],
 };
 const owned = (collection, user, id) =>
@@ -131,6 +133,26 @@ const repo = {
       return r;
     },
     listActive: async (u) => rows.availability.filter((r) => r.userId === u && r.active),
+    getForUser: async (u, id) => owned("availability", u, id),
+    updateIfCurrent: async (u, id, v, p) => conditional("availability", u, id, v, p),
+  },
+  protectedTimeRules: {
+    create: async (r) => {
+      rows.protection.push(r);
+      return r;
+    },
+    listActive: async (u) => rows.protection.filter((r) => r.userId === u && r.active),
+    getForUser: async (u, id) => owned("protection", u, id),
+    updateIfCurrent: async (u, id, v, p) => conditional("protection", u, id, v, p),
+  },
+  planningPreferences: {
+    create: async (r) => {
+      rows.preferences.push(r);
+      return r;
+    },
+    getForUser: async (u) => rows.preferences.find((r) => r.userId === u) ?? null,
+    updateIfCurrent: async (u, v, p) =>
+      conditional("preferences", u, rows.preferences.find((r) => r.userId === u)?.id, v, p),
   },
   accountLifecycle: {
     snapshot: async (u) => ({
@@ -284,6 +306,233 @@ const manualTasks = route("manual/tasks", {
 const manualTask = route("manual/tasks/[id]", {
   "../../../../../../server/application/manual-management": manual,
   "../../../../../../server/transport": transport,
+});
+const manualAvailability = route("manual/availability", {
+  "../../../../../server/application/manual-management": manual,
+  "../../../../../server/transport": transport,
+});
+const manualAvailabilityItem = route("manual/availability/[id]", {
+  "../../../../../../server/application/manual-management": manual,
+  "../../../../../../server/transport": transport,
+});
+const manualProtection = route("manual/protected-time", {
+  "../../../../../server/application/manual-management": manual,
+  "../../../../../server/transport": transport,
+});
+const manualProtectionItem = route("manual/protected-time/[id]", {
+  "../../../../../../server/application/manual-management": manual,
+  "../../../../../../server/transport": transport,
+});
+const manualPreferences = route("manual/preferences", {
+  "../../../../../server/application/manual-management": manual,
+  "../../../../../server/transport": transport,
+});
+const manualPreferencesCurrent = route("manual/preferences/current", {
+  "../../../../../../server/application/manual-management": manual,
+  "../../../../../../server/transport": transport,
+});
+
+test("life-constraint routes require session and origin, persist owned versions, and redact records", async () => {
+  const common = {
+    recurrenceRule: "FREQ=WEEKLY;BYDAY=MO",
+    startTimeLocal: "09:00",
+    endTimeLocal: "12:00",
+    spansNextDay: false,
+    timezone: "America/Toronto",
+    effectiveFrom: "2026-03-01",
+    effectiveUntil: null,
+  };
+  const availabilityInput = {
+    ...common,
+    capacityFactor: 1,
+    energyLevel: "HIGH",
+    allowedLocationTags: ["DESK"],
+  };
+  currentUser = null;
+  assert.equal(
+    (
+      await parsed(
+        await manualAvailability.POST(mutation("availability", "POST", availabilityInput)),
+      )
+    ).status,
+    401,
+  );
+  currentUser = "constraint-a";
+  assert.equal(
+    (
+      await parsed(
+        await manualAvailability.POST(
+          mutation("availability", "POST", availabilityInput, "https://other.test"),
+        ),
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualAvailability.POST(
+          mutation("availability", "POST", { ...availabilityInput, userId: "constraint-b" }),
+        ),
+      )
+    ).status,
+    400,
+  );
+  const added = await parsed(
+    await manualAvailability.POST(mutation("availability", "POST", availabilityInput)),
+  );
+  assert.equal(added.status, 200);
+  assert.deepEqual(Object.keys(added.body.data).sort(), ["id", "planning", "version"]);
+  const id = added.body.data.id;
+  assert.equal(owned("availability", "constraint-a", id).capacityFactor, 1);
+  assert.equal(
+    (
+      await parsed(
+        await manualAvailabilityItem.PATCH(
+          mutation(`availability/${id}`, "PATCH", { expectedVersion: 0, capacityFactor: 0.5 }),
+          context(id),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualAvailabilityItem.PATCH(
+          mutation(`availability/${id}`, "PATCH", { expectedVersion: 0, capacityFactor: 0.8 }),
+          context(id),
+        ),
+      )
+    ).body.error.code,
+    "STALE_WRITE",
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualAvailabilityItem.PATCH(
+          mutation(`availability/${id}`, "PATCH", { expectedVersion: 1, endTimeLocal: "08:00" }),
+          context(id),
+        ),
+      )
+    ).body.error.code,
+    "VALIDATION_ERROR",
+  );
+  currentUser = "constraint-b";
+  assert.equal(
+    (
+      await parsed(
+        await manualAvailabilityItem.DELETE(
+          mutation(`availability/${id}`, "DELETE", { expectedVersion: 1 }),
+          context(id),
+        ),
+      )
+    ).status,
+    404,
+  );
+  currentUser = "constraint-a";
+  assert.equal(
+    (
+      await parsed(
+        await manualAvailabilityItem.DELETE(
+          mutation(`availability/${id}`, "DELETE", { expectedVersion: 1 }),
+          context(id),
+        ),
+      )
+    ).status,
+    200,
+  );
+  const badSleep = await parsed(
+    await manualProtection.POST(
+      mutation("protected-time", "POST", {
+        ...common,
+        reason: "Sleep",
+        protectionLevel: "SOFT",
+        isSleep: true,
+      }),
+    ),
+  );
+  assert.equal(badSleep.body.error.code, "VALIDATION_ERROR");
+  const protection = await parsed(
+    await manualProtection.POST(
+      mutation("protected-time", "POST", {
+        ...common,
+        reason: "Commute",
+        protectionLevel: "SOFT",
+        isSleep: false,
+      }),
+    ),
+  );
+  assert.equal(protection.status, 200);
+  const protectedId = protection.body.data.id;
+  assert.equal(
+    (
+      await parsed(
+        await manualProtectionItem.PATCH(
+          mutation(`protected-time/${protectedId}`, "PATCH", {
+            expectedVersion: 0,
+            protectionLevel: "HARD",
+          }),
+          context(protectedId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualProtectionItem.DELETE(
+          mutation(`protected-time/${protectedId}`, "DELETE", { expectedVersion: 1 }),
+          context(protectedId),
+        ),
+      )
+    ).status,
+    200,
+  );
+  const balanced = {
+    preferredDailyStudyLimitMinutes: 240,
+    minimumFreeTimeMinutes: 30,
+    preferredDeadlineBufferHours: 12,
+    avoidLateHighEnergyTasks: true,
+    maximumConsecutiveWorkMinutes: 90,
+    minimumBreakMinutes: 10,
+    scheduleCommuteWork: false,
+    weekendWorkBias: 0,
+    planStabilityWindowMinutes: 120,
+    minimumSleepMinutes: 420,
+  };
+  const pref = await parsed(
+    await manualPreferences.POST(mutation("preferences", "POST", balanced)),
+  );
+  assert.equal(pref.status, 200);
+  assert.deepEqual(Object.keys(pref.body.data).sort(), ["id", "planning", "version"]);
+  assert.equal(
+    (
+      await parsed(
+        await manualPreferencesCurrent.PATCH(
+          mutation("preferences/current", "PATCH", {
+            expectedVersion: 0,
+            scheduleCommuteWork: true,
+          }),
+        ),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await manualPreferencesCurrent.PATCH(
+          mutation("preferences/current", "PATCH", {
+            expectedVersion: 0,
+            scheduleCommuteWork: false,
+          }),
+        ),
+      )
+    ).body.error.code,
+    "STALE_WRITE",
+  );
 });
 const exportRoute = route("account/export", {
   "../../../../../server/application/lifecycle": lifecycle,

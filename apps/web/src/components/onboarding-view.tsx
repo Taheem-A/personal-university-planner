@@ -87,6 +87,22 @@ export function OnboardingView({ model, step }: { model: OnboardingViewModel; st
               </Link>
             </div>
           )}
+          {step === 4 && (
+            <div className="manual-top-actions">
+              <Link className="button button-secondary" href="/availability?edit=availability-new">
+                Add available time
+              </Link>
+              <Link className="button button-secondary" href="/availability?edit=protection-new">
+                Add protected time
+              </Link>
+              <Link
+                className="button button-secondary"
+                href="/settings?section=planning&edit=preferences"
+              >
+                Set planning preferences
+              </Link>
+            </div>
+          )}
           {step === 5 && (
             <div className="manual-top-actions">
               <Link className="button button-secondary" href="/upcoming?edit=assessment-new">

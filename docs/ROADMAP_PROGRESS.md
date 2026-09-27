@@ -1,5 +1,11 @@
 # Roadmap progress
 
+## 2026-09-26 — Milestone 6 Step 4 life constraints and planning policy IN PROGRESS
+
+- Added recurring availability and protected-time create/edit/deactivate controls to Calendar & Availability, with wall-clock recurrence, effective dates, timezone, capacity, energy, capabilities, hard/soft/informational levels and explicit hard sleep. Settings now creates and edits canonical planning preferences. Balanced initializes visible canonical values from the established planner policy examples; it is not a persisted preset. Onboarding Step 4 links to these editors.
+- Reused M2 services and M4 post-commit trigger classification through narrow same-origin routes. Omitted recurrence fields remain unchanged in partial updates. A saved canonical fact reports planner failure or infeasibility separately; hard protection is never silently relaxed.
+- Focused checks cover ownership, stale versions, malformed recurrence and rollback, Toronto spring/fall wall-clock behavior, sleep invariants, preference creation/update, trigger classification, safe response fields, and keyboard/mobile operation. Existing M3 planner tests cover hard/soft capacity and commute opt-in. Full `pnpm verify` passed: formatting, lint, 150-source-file package boundaries, Prisma generation/validation, strict typecheck, 152/152 unit tests, 84/84 integration tests, optimized build, and 31/31 Chromium tests. Dedicated planner scenarios passed 13/13 and properties 2/2. No blocker remains for Step 5; live authenticated M6 acceptance remains open. The milestone is **not gate-passed**. **Exact next item: Milestone 6 Step 5 — Real Zero-to-First-Plan Onboarding.**
+
 ## 2026-09-26 — Milestone 6 Step 3 assessment and workload management IN PROGRESS
 
 - Added assessment and task create/edit/archive to Upcoming and Assessment Detail, with course-linked entry points, parent/subtask actions, and task-fact links from Today and Week. Assessments remain obligations; tasks remain schedulable work. Saving an assessment and adding initial work are two explicit actions, avoiding a misleading two-request claim of atomic creation. No completion or submission outcome control was added.

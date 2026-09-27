@@ -373,6 +373,237 @@ const manual = load("manual-management", {
   "./schedule": plannedSchedule,
 });
 
+test("manual life constraints preserve recurrence, ownership, sleep and planner intent", async () => {
+  const start = replanRequests.length;
+  const base = {
+    recurrenceRule: "FREQ=WEEKLY;BYDAY=MO,WE",
+    startTimeLocal: "09:00",
+    endTimeLocal: "12:00",
+    spansNextDay: false,
+    timezone: "America/Toronto",
+    effectiveFrom: "2026-03-01",
+    effectiveUntil: null,
+  };
+  assert.equal(
+    (
+      await plannedSchedule.availabilityRules.create({
+        ...base,
+        recurrenceRule: "BOGUS",
+        capacityFactor: 1,
+        energyLevel: "HIGH",
+      })
+    ).error.code,
+    "VALIDATION_ERROR",
+  );
+  const created = await plannedSchedule.availabilityRules.create({
+    ...base,
+    capacityFactor: 1,
+    energyLevel: "HIGH",
+    allowedLocationTags: ["DESK"],
+  });
+  assert.equal(created.ok, true);
+  const availability = created.value;
+  assert.equal(replanRequests.length, start + 1);
+  const occurrences = shared.expandRecurringWindows(availability, "2026-03-02", "2026-03-09");
+  assert.equal(occurrences[0].startAt.toISOString(), "2026-03-02T14:00:00.000Z");
+  assert.equal(occurrences.at(-1).startAt.toISOString(), "2026-03-09T13:00:00.000Z");
+  const adjusted = await plannedSchedule.availabilityRules.update({
+    id: availability.id,
+    expectedVersion: 0,
+    capacityFactor: 0.5,
+  });
+  assert.equal(adjusted.ok, true);
+  assert.equal(adjusted.value.spansNextDay, false);
+  assert.equal(adjusted.value.effectiveUntil, null);
+  assert.equal(adjusted.value.capacityFactor, 0.5);
+  assert.equal(
+    (
+      await plannedSchedule.availabilityRules.update({
+        id: availability.id,
+        expectedVersion: 0,
+        capacityFactor: 0.7,
+      })
+    ).error.code,
+    "STALE_WRITE",
+  );
+  assert.equal(
+    (
+      await plannedSchedule.availabilityRules.update({
+        id: availability.id,
+        expectedVersion: 1,
+        endTimeLocal: "08:00",
+      })
+    ).error.code,
+    "VALIDATION_ERROR",
+  );
+  assert.equal(owned("availability", user.userId, availability.id).endTimeLocal, "12:00");
+  assert.equal(
+    (
+      await plannedSchedule.availabilityRules.update({
+        id: "other-person-rule",
+        expectedVersion: 0,
+        capacityFactor: 1,
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (
+      await plannedSchedule.availabilityRules.deactivate({
+        id: availability.id,
+        expectedVersion: 1,
+      })
+    ).value.active,
+    false,
+  );
+  const overnight = await plannedSchedule.protectedTimeRules.create({
+    ...base,
+    recurrenceRule: "FREQ=DAILY",
+    startTimeLocal: "22:00",
+    endTimeLocal: "07:00",
+    spansNextDay: true,
+    reason: "Sleep",
+    protectionLevel: "HARD",
+    isSleep: true,
+  });
+  assert.equal(overnight.ok, true);
+  const sleep = overnight.value;
+  const springSleep = shared.expandRecurringWindows(sleep, "2026-03-07", "2026-03-07");
+  const fallSleep = shared.expandRecurringWindows(sleep, "2026-10-31", "2026-10-31");
+  assert.equal((springSleep[0].endAt - springSleep[0].startAt) / 3600000, 8);
+  assert.equal((fallSleep[0].endAt - fallSleep[0].startAt) / 3600000, 10);
+  assert.equal(
+    (
+      await plannedSchedule.protectedTimeRules.update({
+        id: sleep.id,
+        expectedVersion: 0,
+        protectionLevel: "SOFT",
+      })
+    ).error.code,
+    "VALIDATION_ERROR",
+  );
+  assert.equal(
+    (
+      await plannedSchedule.protectedTimeRules.create({
+        ...base,
+        reason: "Invalid sleep",
+        protectionLevel: "SOFT",
+        isSleep: true,
+      })
+    ).error.code,
+    "VALIDATION_ERROR",
+  );
+  const soft = (
+    await plannedSchedule.protectedTimeRules.create({
+      ...base,
+      reason: "Gym",
+      protectionLevel: "SOFT",
+    })
+  ).value;
+  const afterSoft = replanRequests.length;
+  assert.equal(
+    (
+      await plannedSchedule.protectedTimeRules.update({
+        id: soft.id,
+        expectedVersion: 0,
+        reason: "Gym session",
+      })
+    ).ok,
+    true,
+  );
+  assert.equal(replanRequests.length, afterSoft);
+  assert.equal(
+    (
+      await plannedSchedule.protectedTimeRules.update({
+        id: soft.id,
+        expectedVersion: 1,
+        protectionLevel: "HARD",
+      })
+    ).ok,
+    true,
+  );
+  assert.equal(replanRequests.length, afterSoft + 1);
+  const beforeInformation = replanRequests.length;
+  const information = (
+    await plannedSchedule.protectedTimeRules.create({
+      ...base,
+      reason: "Reminder",
+      protectionLevel: "INFORMATIONAL",
+    })
+  ).value;
+  assert.equal(replanRequests.length, beforeInformation);
+  assert.equal(
+    (
+      await plannedSchedule.protectedTimeRules.deactivate({
+        id: information.id,
+        expectedVersion: 0,
+      })
+    ).value.active,
+    false,
+  );
+  assert.equal(replanRequests.length, beforeInformation);
+  assert.equal(
+    (await plannedSchedule.protectedTimeRules.deactivate({ id: soft.id, expectedVersion: 2 })).value
+      .active,
+    false,
+  );
+  assert.equal(
+    (await plannedSchedule.protectedTimeRules.deactivate({ id: sleep.id, expectedVersion: 0 }))
+      .value.active,
+    false,
+  );
+});
+
+test("planning preferences create once, update conditionally and classify policy changes", async () => {
+  const before = replanRequests.length;
+  const input = {
+    preferredDailyStudyLimitMinutes: 240,
+    minimumFreeTimeMinutes: 30,
+    preferredDeadlineBufferHours: 12,
+    avoidLateHighEnergyTasks: true,
+    maximumConsecutiveWorkMinutes: 90,
+    minimumBreakMinutes: 10,
+    scheduleCommuteWork: false,
+    weekendWorkBias: 0,
+    planStabilityWindowMinutes: 120,
+    minimumSleepMinutes: 420,
+  };
+  const created = await plannedSchedule.planningPreferences.create(input);
+  assert.equal(created.ok, true);
+  assert.equal(created.value.minimumSleepMinutes, 420);
+  assert.equal(replanRequests.length, before + 1);
+  assert.equal((await plannedSchedule.planningPreferences.create(input)).error.code, "CONFLICT");
+  assert.equal(
+    (
+      await plannedSchedule.planningPreferences.update({
+        expectedVersion: 0,
+        scheduleCommuteWork: true,
+      })
+    ).value.scheduleCommuteWork,
+    true,
+  );
+  assert.equal(replanRequests.length, before + 2);
+  assert.equal(
+    (
+      await plannedSchedule.planningPreferences.update({
+        expectedVersion: 0,
+        scheduleCommuteWork: false,
+      })
+    ).error.code,
+    "STALE_WRITE",
+  );
+  assert.equal(
+    (
+      await plannedSchedule.planningPreferences.update({
+        expectedVersion: 1,
+        minimumSleepMinutes: -5,
+      })
+    ).error.code,
+    "VALIDATION_ERROR",
+  );
+  assert.equal(owned("preferences", user.userId, created.value.id).minimumSleepMinutes, 420);
+});
+
 test("academic service module loads and enforces two-user scoping, dates, and optimistic versions", async () => {
   const bad = await academic.academicTerms.create({
     name: "Fall",
@@ -545,27 +776,15 @@ test("calendar isolation, recurrence validation, inbox text and stale edits", as
 });
 
 test("preferences and protected time use versions and retain local wall-clock fields", async () => {
-  const preference = (
-    await schedule.planningPreferences.create({
-      preferredDailyStudyLimitMinutes: 300,
-      minimumFreeTimeMinutes: 30,
-      preferredDeadlineBufferHours: 12,
-      avoidLateHighEnergyTasks: true,
-      maximumConsecutiveWorkMinutes: 120,
-      minimumBreakMinutes: 10,
-      scheduleCommuteWork: false,
-      weekendWorkBias: -0.5,
-      planStabilityWindowMinutes: 180,
-    })
-  ).value;
-  assert.equal(preference.version, 0);
+  const preference = (await schedule.planningPreferences.get()).value;
+  assert.equal(preference.version, 1);
   assert.equal(
-    (await schedule.planningPreferences.update({ expectedVersion: 0, weekendWorkBias: 0 })).value
+    (await schedule.planningPreferences.update({ expectedVersion: 1, weekendWorkBias: 0 })).value
       .version,
-    1,
+    2,
   );
   assert.equal(
-    (await schedule.planningPreferences.update({ expectedVersion: 0, weekendWorkBias: 0.5 })).error
+    (await schedule.planningPreferences.update({ expectedVersion: 1, weekendWorkBias: 0.5 })).error
       .code,
     "STALE_WRITE",
   );

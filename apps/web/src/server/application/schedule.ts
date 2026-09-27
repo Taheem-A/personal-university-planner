@@ -17,12 +17,14 @@ import {
   expectedVersionSchema,
   idSchema,
   instantSchema,
+  localTimeSchema,
   localRecurrenceSchema,
   manualProvenanceSchema,
   nonnegativeMinutesSchema,
   parseInstant,
   positiveMinutesSchema,
   textSchema,
+  timezoneSchema,
   validateOrderedInstants,
 } from "./validation";
 
@@ -145,8 +147,17 @@ export const calendarEvents = {
   },
 };
 
+const recurrencePatchFields = {
+  recurrenceRule: localRecurrenceSchema.shape.recurrenceRule,
+  startTimeLocal: localTimeSchema,
+  endTimeLocal: localTimeSchema,
+  spansNextDay: z.boolean(),
+  timezone: timezoneSchema,
+  effectiveFrom: localRecurrenceSchema.shape.effectiveFrom,
+  effectiveUntil: localRecurrenceSchema.shape.effectiveUntil.unwrap(),
+};
 const availabilityFields = z.object({
-  ...localRecurrenceSchema.shape,
+  ...recurrencePatchFields,
   capacityFactor: z.number().min(0).max(1),
   energyLevel: z.enum(["LOW", "MEDIUM", "HIGH"]),
   allowedLocationTags: z.array(textSchema),
@@ -259,7 +270,7 @@ export const availabilityRules = {
 };
 
 const protectionFields = z.object({
-  ...localRecurrenceSchema.shape,
+  ...recurrencePatchFields,
   protectionLevel: constraint,
   reason: textSchema,
   isSleep: z.boolean(),

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { SettingsViewModel } from "../server/application/secondary-reads";
 import { AppearanceControl } from "./appearance-control";
 import { TimezoneForm } from "./timezone-form";
+import { PreferenceEditor } from "./constraint-editors";
 
 const sections = [
   ["general", "General"],
@@ -34,7 +35,15 @@ function minutes(value: number) {
 function yesNo(value: boolean) {
   return value ? "Enabled" : "Disabled";
 }
-export function SettingsView({ model, section }: { model: SettingsViewModel; section: string }) {
+export function SettingsView({
+  model,
+  section,
+  edit,
+}: {
+  model: SettingsViewModel;
+  section: string;
+  edit?: string;
+}) {
   const preferences = model.preferences;
   return (
     <div className="route-content settings-content">
@@ -106,6 +115,12 @@ export function SettingsView({ model, section }: { model: SettingsViewModel; sec
           {section === "planning" &&
             (preferences ? (
               <>
+                <Link
+                  className="button button-primary"
+                  href="/settings?section=planning&edit=preferences"
+                >
+                  Edit planning preferences
+                </Link>
                 <SettingRow
                   label="Preferred daily study limit"
                   description="A planning preference, not a hard cap."
@@ -162,8 +177,19 @@ export function SettingsView({ model, section }: { model: SettingsViewModel; sec
                 />
               </>
             ) : (
-              <p className="secondary-empty">Planning preferences have not been provisioned.</p>
+              <div className="secondary-empty">
+                <p>Planning preferences have not been provisioned.</p>
+                <Link
+                  className="button button-primary"
+                  href="/settings?section=planning&edit=preferences"
+                >
+                  Set planning preferences
+                </Link>
+              </div>
             ))}
+          {section === "planning" && edit === "preferences" && (
+            <PreferenceEditor preference={preferences} returnTo="/settings?section=planning" />
+          )}
           {section === "appearance" && (
             <>
               <SettingRow

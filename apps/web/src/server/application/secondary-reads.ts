@@ -116,6 +116,34 @@ export interface AvailabilityViewModel {
   weekEnd: string;
   days: { date: string; items: AvailabilityItem[] }[];
   ruleCounts: { availability: number; hardProtected: number; softProtected: number; sleep: number };
+  availabilityRules: {
+    id: string;
+    version: number;
+    recurrenceRule: string;
+    startTimeLocal: string;
+    endTimeLocal: string;
+    spansNextDay: boolean;
+    timezone: string;
+    effectiveFrom: string;
+    effectiveUntil: string | null;
+    capacityFactor: number;
+    energyLevel: string;
+    allowedLocationTags: string[];
+  }[];
+  protectedRules: {
+    id: string;
+    version: number;
+    recurrenceRule: string;
+    startTimeLocal: string;
+    endTimeLocal: string;
+    spansNextDay: boolean;
+    timezone: string;
+    effectiveFrom: string;
+    effectiveUntil: string | null;
+    protectionLevel: string;
+    reason: string;
+    isSleep: boolean;
+  }[];
   manualEvents: {
     id: string;
     version: number;
@@ -544,6 +572,38 @@ export function buildAvailability(
     weekStart,
     weekEnd: end,
     days,
+    availabilityRules: state.availabilityRules
+      .filter((rule) => rule.userId === state.user.id && rule.active)
+      .map((rule) => ({
+        id: rule.id,
+        version: rule.version,
+        recurrenceRule: rule.recurrenceRule,
+        startTimeLocal: rule.startTimeLocal,
+        endTimeLocal: rule.endTimeLocal,
+        spansNextDay: rule.spansNextDay,
+        timezone: rule.timezone,
+        effectiveFrom: rule.effectiveFrom,
+        effectiveUntil: rule.effectiveUntil,
+        capacityFactor: rule.capacityFactor,
+        energyLevel: rule.energyLevel,
+        allowedLocationTags: rule.allowedLocationTags,
+      })),
+    protectedRules: state.protectedTimeRules
+      .filter((rule) => rule.userId === state.user.id && rule.active)
+      .map((rule) => ({
+        id: rule.id,
+        version: rule.version,
+        recurrenceRule: rule.recurrenceRule,
+        startTimeLocal: rule.startTimeLocal,
+        endTimeLocal: rule.endTimeLocal,
+        spansNextDay: rule.spansNextDay,
+        timezone: rule.timezone,
+        effectiveFrom: rule.effectiveFrom,
+        effectiveUntil: rule.effectiveUntil,
+        protectionLevel: rule.protectionLevel,
+        reason: rule.reason,
+        isSleep: rule.isSleep,
+      })),
     manualEvents: state.calendarEvents
       .filter(
         (event) =>

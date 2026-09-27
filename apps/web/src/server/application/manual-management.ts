@@ -1,5 +1,10 @@
 import { academicTerms, assessments, courses, courseMeetings, tasks } from "./academic";
-import { calendarEvents } from "./schedule";
+import {
+  availabilityRules,
+  calendarEvents,
+  planningPreferences,
+  protectedTimeRules,
+} from "./schedule";
 import type { ApplicationResult } from "./errors";
 import type { PlannedMutation } from "./planner-triggers";
 
@@ -102,5 +107,35 @@ export const manualTasks = {
   },
   async archive(input: unknown) {
     return project(await tasks.archive(input));
+  },
+};
+export const manualAvailability = {
+  async create(input: unknown) {
+    return project(await availabilityRules.create(input));
+  },
+  async update(input: unknown) {
+    return project(await availabilityRules.update(input));
+  },
+  async deactivate(input: unknown) {
+    return project(await availabilityRules.deactivate(input));
+  },
+};
+export const manualProtection = {
+  async create(input: unknown) {
+    return project(await protectedTimeRules.create(input));
+  },
+  async update(input: unknown) {
+    return project(await protectedTimeRules.update(input));
+  },
+  async deactivate(input: unknown) {
+    return project(await protectedTimeRules.deactivate(input));
+  },
+};
+export const manualPreferences = {
+  async create(input: unknown) {
+    return project(await planningPreferences.create(input));
+  },
+  async update(input: unknown) {
+    return project(await planningPreferences.update(input));
   },
 };

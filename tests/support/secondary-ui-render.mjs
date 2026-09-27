@@ -36,6 +36,10 @@ function load(file, dependencies = {}) {
           EventEditor: () => null,
         }
       );
+    if (name === "./constraint-editors")
+      return (
+        dependencies.constraintEditors ?? { RuleEditor: () => null, PreferenceEditor: () => null }
+      );
     if (name === "next/navigation") return { useRouter: () => ({ refresh() {}, replace() {} }) };
     if (name === "./mutation-form") return dependencies.form;
     if (name === "./mutation-client")
@@ -91,6 +95,19 @@ const { SettingsView } = load("settings-view.tsx");
 const { IntegrationsView } = load("integrations-view.tsx", { primitives });
 const form = load("mutation-form.tsx");
 const manualEditors = load("manual-editors.tsx", { form });
+const constraintEditors = load("constraint-editors.tsx", { form, manualEditors });
+export function renderConstraintEditor(kind, overrides = {}) {
+  const props =
+    kind === "preferences"
+      ? { preference: null, returnTo: "/settings?section=planning" }
+      : { kind, timezone: "America/Toronto", returnTo: "/availability?date=2026-03-02" };
+  return renderToStaticMarkup(
+    React.createElement(
+      kind === "preferences" ? constraintEditors.PreferenceEditor : constraintEditors.RuleEditor,
+      { ...props, ...overrides },
+    ),
+  );
+}
 const { TermEditor, CourseEditor, MeetingEditor, EventEditor } = manualEditors;
 const { AssessmentEditor, TaskEditor } = load("workload-editors.tsx", { form, manualEditors });
 export function renderWorkloadEditor(kind, overrides = {}) {
@@ -225,6 +242,8 @@ export function availabilityModel() {
     weekStart: date,
     weekEnd: "2026-03-09",
     manualEvents: [],
+    availabilityRules: [],
+    protectedRules: [],
     courseChoices: [{ id: "synthetic-course", code: "SYN101", name: "Synthetic Mechanics" }],
     ruleCounts: { availability: 1, hardProtected: 1, softProtected: 1, sleep: 1 },
     days: Array.from({ length: 7 }, (_, index) => ({

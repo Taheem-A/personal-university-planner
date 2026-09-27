@@ -107,7 +107,7 @@ export function useEditor(initialId?: string, initialVersion = 0) {
     setVersion(result.data.version);
     if (method === "DELETE") setArchived(true);
     setFeedback({ error: false, text: savedMessage(action, result.data.planning) });
-    if (method !== "DELETE") router.refresh();
+    router.refresh();
     return true;
   }
   return {

@@ -7,6 +7,7 @@ import type {
 } from "../server/application/secondary-reads";
 import { courseColor } from "./course-color";
 import { EventEditor } from "./manual-editors";
+import { RuleEditor } from "./constraint-editors";
 
 const kinds: Record<AvailabilityItem["kind"], string> = {
   EVENT: "Fixed event",
@@ -66,6 +67,12 @@ export function AvailabilityView({ model, edit }: { model: AvailabilityViewModel
   const selectedEvent = edit?.startsWith("event:")
     ? model.manualEvents.find((event) => event.id === edit.slice(6))
     : undefined;
+  const selectedAvailability = edit?.startsWith("availability:")
+    ? model.availabilityRules.find((rule) => rule.id === edit.slice(13))
+    : undefined;
+  const selectedProtection = edit?.startsWith("protection:")
+    ? model.protectedRules.find((rule) => rule.id === edit.slice(11))
+    : undefined;
   return (
     <div className="route-content availability-content">
       <header className="page-header">
@@ -107,6 +114,95 @@ export function AvailabilityView({ model, edit }: { model: AvailabilityViewModel
         protected · {model.ruleCounts.softProtected} soft protected · {model.ruleCounts.sleep} sleep
         rules. A rule can occur more than once this week.
       </p>
+      <section className="manual-structure" aria-labelledby="available-rules-title">
+        <div className="manual-section-head">
+          <h2 id="available-rules-title">Recurring availability</h2>
+          <Link className="button button-primary" href={`${parent}&edit=availability-new`}>
+            Add availability
+          </Link>
+        </div>
+        <p className="manual-help">
+          Work may be scheduled in these windows. The planner will not fill every minute.
+        </p>
+        {model.availabilityRules.length ? (
+          <ul className="manual-term-list">
+            {model.availabilityRules.map((rule) => (
+              <li key={rule.id}>
+                <span>
+                  <strong>{rule.recurrenceRule}</strong> · {rule.startTimeLocal}–{rule.endTimeLocal}
+                  {rule.spansNextDay ? " next day" : ""} · {Math.round(rule.capacityFactor * 100)}%
+                  capacity
+                </span>
+                <Link
+                  className="button button-secondary"
+                  href={`${parent}&edit=availability:${encodeURIComponent(rule.id)}`}
+                >
+                  Edit availability
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="secondary-empty">No recurring availability recorded.</p>
+        )}
+      </section>
+      <section className="manual-structure" aria-labelledby="protected-rules-title">
+        <div className="manual-section-head">
+          <h2 id="protected-rules-title">Protected time</h2>
+          <Link className="button button-primary" href={`${parent}&edit=protection-new`}>
+            Add protected time
+          </Link>
+        </div>
+        {model.protectedRules.length ? (
+          <ul className="manual-term-list">
+            {model.protectedRules.map((rule) => (
+              <li key={rule.id}>
+                <span>
+                  <strong>{rule.reason}</strong> · {rule.startTimeLocal}–{rule.endTimeLocal}
+                  {rule.spansNextDay ? " next day" : ""} ·{" "}
+                  {rule.isSleep ? "hard sleep" : rule.protectionLevel.toLowerCase()}
+                </span>
+                <Link
+                  className="button button-secondary"
+                  href={`${parent}&edit=protection:${encodeURIComponent(rule.id)}`}
+                >
+                  Edit protected time
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="secondary-empty">No recurring protected time recorded.</p>
+        )}
+      </section>
+      {(edit === "availability-new" || selectedAvailability) && (
+        <RuleEditor
+          key={selectedAvailability?.id ?? "new-availability"}
+          kind="availability"
+          rule={selectedAvailability}
+          timezone={model.timezone}
+          returnTo={parent}
+        />
+      )}
+      {(edit === "protection-new" || selectedProtection) && (
+        <RuleEditor
+          key={selectedProtection?.id ?? "new-protection"}
+          kind="protection"
+          rule={selectedProtection}
+          timezone={model.timezone}
+          returnTo={parent}
+        />
+      )}
+      {edit?.startsWith("availability:") && !selectedAvailability && (
+        <p className="secondary-empty" role="alert">
+          Availability rule unavailable.
+        </p>
+      )}
+      {edit?.startsWith("protection:") && !selectedProtection && (
+        <p className="secondary-empty" role="alert">
+          Protected-time rule unavailable.
+        </p>
+      )}
       <section className="manual-structure" aria-labelledby="commitments-title">
         <div className="manual-section-head">
           <h2 id="commitments-title">Fixed commitments this week</h2>
@@ -208,8 +304,8 @@ export function AvailabilityView({ model, edit }: { model: AvailabilityViewModel
           grid.
         </p>
         <p>
-          Availability and protected-time rule editing follows in a later Milestone 6 slice.
-          Calendar provider sync comes later.
+          Recurring rules keep their local wall-clock time through daylight-saving changes. Calendar
+          provider sync comes later.
         </p>
       </section>
     </div>
