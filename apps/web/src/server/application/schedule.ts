@@ -4,8 +4,9 @@ import type {
   CalendarEventRecord,
   PlanningPreferenceRecord,
   ProtectedTimeRuleRecord,
+  TransactionContext,
 } from "@university-planner/database";
-import { requireCourse } from "./authorization";
+import { requireCourse, type Actor } from "./authorization";
 import { ApplicationError } from "./errors";
 import {
   classifyCalendarMutation,
@@ -26,6 +27,7 @@ import {
   textSchema,
   timezoneSchema,
   validateOrderedInstants,
+  validateInput,
 } from "./validation";
 
 const id = z.object({ id: idSchema }).strict();
@@ -59,28 +61,37 @@ function eventDates(value: { startAt: Date; endAt: Date }) {
   validateOrderedInstants(value.startAt, value.endAt);
 }
 
+export async function createCalendarEventInTransaction(
+  input: unknown,
+  actor: Actor,
+  tx: TransactionContext,
+) {
+  const data = validateInput(calendarCreate, input);
+  if (data.courseId) await requireCourse(tx.repositories, actor, data.courseId);
+  const startAt = parseInstant(data.startAt)!,
+    endAt = parseInstant(data.endAt)!;
+  eventDates({ startAt, endAt });
+  return tx.repositories.calendarEvents.create({
+    ...data,
+    id: newRecordId(),
+    userId: actor.userId,
+    version: 0,
+    startAt,
+    endAt,
+    integrationAccountId: null,
+    externalId: null,
+    externalUpdatedAt: null,
+    archivedAt: null,
+    ...auditNow(),
+  });
+}
+
 export const calendarEvents = {
   create(input: unknown) {
     return planAfterMutation(
-      service(calendarCreate, input, async (data, actor, tx) => {
-        if (data.courseId) await requireCourse(tx.repositories, actor, data.courseId);
-        const startAt = parseInstant(data.startAt)!,
-          endAt = parseInstant(data.endAt)!;
-        eventDates({ startAt, endAt });
-        return tx.repositories.calendarEvents.create({
-          ...data,
-          id: newRecordId(),
-          userId: actor.userId,
-          version: 0,
-          startAt,
-          endAt,
-          integrationAccountId: null,
-          externalId: null,
-          externalUpdatedAt: null,
-          archivedAt: null,
-          ...auditNow(),
-        });
-      }),
+      service(calendarCreate, input, (data, actor, tx) =>
+        createCalendarEventInTransaction(data, actor, tx),
+      ),
       (record) => classifyCalendarMutation(null, record),
     );
   },

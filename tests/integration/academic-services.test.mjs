@@ -65,6 +65,7 @@ const rows = {
 const owned = (collection, userId, id) =>
   rows[collection].find((r) => r.userId === userId && r.id === id) ?? null;
 const repo = {
+  users: { getById: async (u) => ({ id: u, timezone: "America/Toronto" }) },
   academicTerms: {
     create: async (r) => {
       rows.terms.push(r);
@@ -191,7 +192,10 @@ const repo = {
     getForUser: async (u, id) => owned("inbox", u, id),
     listByStatus: async (u, status) =>
       rows.inbox.filter((r) => r.userId === u && r.status === status),
-    updateIfCurrent: async (u, id, version, patch) => conditional("inbox", u, id, version, patch),
+    updateIfCurrent: async (u, id, version, patch) => {
+      if (failInboxUpdate) throw new Error("Synthetic inbox update failure");
+      return conditional("inbox", u, id, version, patch);
+    },
   },
   workSessions: {
     create: async (r) => {
@@ -263,6 +267,7 @@ const repo = {
   },
 };
 let forceDeleteFailure = false;
+let failInboxUpdate = false;
 function conditional(collection, userId, id, version, patch) {
   const row = owned(collection, userId, id);
   if (!row) return { status: "NOT_FOUND" };
@@ -305,6 +310,10 @@ const schedule = load("schedule", {
   "./validation": validation,
 });
 const inbox = load("inbox", {
+  "./academic": academic,
+  "./schedule": schedule,
+  "./inbox-interpretation": { interpretInboxText: () => null },
+  "./planner-triggers": plannerTriggerStub,
   "./errors": errors,
   "./service": serviceUtils,
   "./validation": validation,
@@ -368,9 +377,220 @@ const plannedSchedule = load("schedule", {
   "./planner-triggers": realTriggers,
   "./validation": validation,
 });
+const interpretation = load("inbox-interpretation", {});
+const resolvingInbox = load("inbox", {
+  "./academic": academic,
+  "./schedule": schedule,
+  "./inbox-interpretation": interpretation,
+  "./planner-triggers": realTriggers,
+  "./errors": errors,
+  "./service": transactionalService,
+  "./validation": validation,
+});
 const manual = load("manual-management", {
   "./academic": plannedAcademic,
   "./schedule": plannedSchedule,
+});
+
+test("Inbox suggestion, corrected task resolution, rollback, ownership and dismissal", async () => {
+  const ownTerm = { id: "inbox-term", userId: user.userId, status: "ACTIVE", archivedAt: null };
+  const ownCourse = {
+    id: "inbox-course",
+    userId: user.userId,
+    academicTermId: ownTerm.id,
+    code: "CIV100",
+    archivedAt: null,
+  };
+  rows.terms.push(ownTerm, { ...ownTerm, id: "foreign-inbox-term", userId: other.userId });
+  rows.courses.push(ownCourse, {
+    ...ownCourse,
+    id: "foreign-inbox-course",
+    userId: other.userId,
+    academicTermId: "foreign-inbox-term",
+  });
+  const captured = (
+    await resolvingInbox.inboxItems.capture({
+      rawText: "task: Solve draft; course CIV100; duration 2h",
+    })
+  ).value;
+  assert.equal(captured.status, "ACTIVE");
+  assert.equal(captured.proposedPayload, null);
+  const suggestion = await resolvingInbox.inboxItems.suggest({
+    id: captured.id,
+    expectedVersion: 0,
+  });
+  assert.equal(suggestion.value.status, "PROPOSED");
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(owned("inbox", user.userId, captured.id).proposedPayload)),
+    {
+      title: "Solve draft",
+      courseId: ownCourse.id,
+      durationMinutes: 120,
+      dueAt: null,
+    },
+  );
+  const beforePlan = replanRequests.length;
+  const resolved = await resolvingInbox.inboxItems.resolve({
+    id: captured.id,
+    expectedVersion: 1,
+    entityType: "TASK",
+    payload: {
+      title: "Solve corrected draft",
+      courseId: ownCourse.id,
+      status: "READY",
+      originalEstimatedMinutes: 90,
+      currentEstimatedMinutes: 90,
+      remainingMinutes: 90,
+      availableFrom: "2026-10-01T12:00:00Z",
+      minimumSessionMinutes: 45,
+      preferredSessionMinutes: 45,
+      maximumSessionMinutes: 45,
+    },
+  });
+  assert.equal(resolved.value.status, "PROCESSED");
+  assert.equal(resolved.value.planning.status, "SUCCEEDED");
+  assert.equal(replanRequests.length, beforePlan + 1);
+  assert.equal(replanRequests.at(-1).trigger.type, "TASK_CREATED");
+  const canonical = owned("tasks", user.userId, resolved.value.entityId);
+  assert.equal(canonical.title, "Solve corrected draft");
+  assert.equal(canonical.dueAt, null);
+  const history = owned("inbox", user.userId, captured.id);
+  assert.equal(history.rawText, "task: Solve draft; course CIV100; duration 2h");
+  assert.equal(history.proposedPayload.title, "Solve draft");
+  assert.equal(history.resolvedEntityId, canonical.id);
+  assert.equal(
+    (
+      await resolvingInbox.inboxItems.resolve({
+        id: captured.id,
+        expectedVersion: 2,
+        entityType: "TASK",
+        payload: { title: "Again" },
+      })
+    ).error.code,
+    "CONFLICT",
+  );
+  const raw = (
+    await resolvingInbox.inboxItems.capture({ rawText: "CIV assignment maybe next Sunday" })
+  ).value;
+  assert.equal(
+    (await resolvingInbox.inboxItems.suggest({ id: raw.id, expectedVersion: 0 })).error.code,
+    "VALIDATION_ERROR",
+  );
+  assert.equal(owned("inbox", user.userId, raw.id).proposedPayload, null);
+  assert.equal(
+    (
+      await resolvingInbox.inboxItems.resolve({
+        id: raw.id,
+        expectedVersion: 1,
+        entityType: "ASSESSMENT",
+        payload: { title: "Stale", courseId: ownCourse.id, assessmentType: "Assignment" },
+      })
+    ).error.code,
+    "STALE_WRITE",
+  );
+  const beforeTasks = rows.tasks.length;
+  assert.equal(
+    (
+      await resolvingInbox.inboxItems.resolve({
+        id: raw.id,
+        expectedVersion: 0,
+        entityType: "TASK",
+        payload: { title: "Foreign", courseId: "foreign-inbox-course" },
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(rows.tasks.length, beforeTasks);
+  assert.equal(owned("inbox", user.userId, raw.id).status, "ACTIVE");
+  failInboxUpdate = true;
+  assert.equal(
+    (
+      await resolvingInbox.inboxItems.resolve({
+        id: raw.id,
+        expectedVersion: 0,
+        entityType: "TASK",
+        payload: { title: "Rollback", status: "READY" },
+      })
+    ).error.code,
+    "INTERNAL_ERROR",
+  );
+  failInboxUpdate = false;
+  assert.equal(rows.tasks.length, beforeTasks);
+  assert.equal(owned("inbox", user.userId, raw.id).status, "ACTIVE");
+  user.userId = other.userId;
+  assert.equal(
+    (await resolvingInbox.inboxItems.suggest({ id: raw.id, expectedVersion: 0 })).error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(
+    (
+      await resolvingInbox.inboxItems.resolve({
+        id: raw.id,
+        expectedVersion: 0,
+        entityType: "TASK",
+        payload: { title: "Foreign" },
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  user.userId = "owner";
+  const dismissed = await resolvingInbox.inboxItems.dismiss({ id: raw.id, expectedVersion: 0 });
+  assert.equal(dismissed.value.status, "DISMISSED");
+  assert.equal(owned("inbox", user.userId, raw.id).rawText, "CIV assignment maybe next Sunday");
+});
+
+test("Inbox resolution reuses assessment and fixed-event validation and keeps facts after planner failure", async () => {
+  const course = rows.courses.find(
+    (row) => row.userId === user.userId && row.id === "inbox-course",
+  );
+  const assessmentCapture = (
+    await resolvingInbox.inboxItems.capture({ rawText: "assignment: Lab report; course CIV100" })
+  ).value;
+  const assessment = await resolvingInbox.inboxItems.resolve({
+    id: assessmentCapture.id,
+    expectedVersion: 0,
+    entityType: "ASSESSMENT",
+    payload: { title: "Lab report", courseId: course.id, assessmentType: "Report", dueAt: null },
+  });
+  assert.equal(assessment.value.status, "PROCESSED");
+  assert.equal(assessment.value.planning.status, "NOT_REQUESTED");
+  assert.equal(owned("assessments", user.userId, assessment.value.entityId).dueAt, null);
+  const eventCapture = (await resolvingInbox.inboxItems.capture({ rawText: "event: Appointment" }))
+    .value;
+  const invalid = await resolvingInbox.inboxItems.resolve({
+    id: eventCapture.id,
+    expectedVersion: 0,
+    entityType: "CALENDAR_EVENT",
+    payload: {
+      title: "Invalid appointment",
+      eventType: "APPOINTMENT",
+      startAt: "2026-10-05T18:00:00Z",
+      endAt: "2026-10-05T17:00:00Z",
+      constraintLevel: "HARD",
+    },
+  });
+  assert.equal(invalid.error.code, "VALIDATION_ERROR");
+  assert.equal(owned("inbox", user.userId, eventCapture.id).status, "ACTIVE");
+  nextPlan = {
+    ok: false,
+    error: { code: "PLANNER_INFEASIBLE", message: "Synthetic planner failure" },
+  };
+  const saved = await resolvingInbox.inboxItems.resolve({
+    id: eventCapture.id,
+    expectedVersion: 0,
+    entityType: "CALENDAR_EVENT",
+    payload: {
+      title: "Appointment",
+      eventType: "APPOINTMENT",
+      startAt: "2026-10-05T17:00:00Z",
+      endAt: "2026-10-05T18:00:00Z",
+      constraintLevel: "HARD",
+    },
+  });
+  assert.equal(saved.value.status, "PROCESSED");
+  assert.equal(saved.value.planning.status, "FAILED");
+  assert.equal(owned("events", user.userId, saved.value.entityId).title, "Appointment");
+  nextPlan = { ok: true, value: { status: "SUCCEEDED", planStatus: "FEASIBLE" } };
 });
 
 test("manual life constraints preserve recurrence, ownership, sleep and planner intent", async () => {

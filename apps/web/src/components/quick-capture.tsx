@@ -49,7 +49,7 @@ export function QuickCapture({ focusOnMount }: { focusOnMount: boolean }) {
       setValue("");
       setMessage({
         type: "success",
-        text: "Saved to Inbox as raw text. Details have not been interpreted yet.",
+        text: "Saved to Inbox as raw text. Open the item to review or request an interpretation.",
       });
       router.refresh();
       input.current?.focus();
@@ -81,7 +81,7 @@ export function QuickCapture({ focusOnMount }: { focusOnMount: boolean }) {
         </div>
       </form>
       <p id="quick-capture-help">
-        Capture now. Interpreting dates, courses, and tasks comes later.
+        Capture now. Review or request a limited interpretation in Inbox when ready.
       </p>
       <p
         id="quick-capture-result"

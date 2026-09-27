@@ -1,5 +1,11 @@
 # Roadmap progress
 
+## 2026-09-27 — Milestone 6 Step 6 deterministic Inbox resolution IN PROGRESS
+
+- Kept Quick Capture's immediate raw-text write. Added an optional conservative proposal from the [documented explicit grammar](./milestone-6-inbox-grammar.md), scoped to the authenticated user's courses and timezone. Unsupported, ambiguous, relative or DST-ambiguous wording remains raw; missing due dates remain null. The Inbox screen separates captured text, unconfirmed proposal and canonical saved object.
+- Added reviewed Task, Assessment and fixed-event resolution through the same validation and creation helpers used by normal management. Canonical creation and the Inbox PROCESSED transition share one transaction; optimistic version, owner and double-process checks apply. The Inbox row retains original text and proposal and records the confirmed object's type and ID. Dismissal retains history. M4 planning is triggered after commit; its failure does not erase a saved fact, and the latest recorded planner status is shown for resolved objects.
+- Focused tests cover exact and unsupported parsing, course scope, correction, unknown deadlines, stale/cross-user IDs, atomic rollback, dismissal, planner failure after saved fact, safe same-origin transports and mobile keyboard review. A synthetic Quick Capture → proposal → corrected Task → M4 PlannerRun → persisted WorkSessions path passed. Full `pnpm verify` passed: formatting, lint, 158-source-file boundaries, Prisma generation/validation, strict typecheck, 157/157 unit tests, 88/88 integration tests, optimized build and 33/33 Chromium tests. Live authenticated PostgreSQL/browser acceptance remains open. The milestone is **not gate-passed**. **Exact next item: Milestone 6 Step 7 — Global Manual Add, Correction Paths, and Cross-Screen UX Completion.**
+
 ## 2026-09-26 — Milestone 6 Step 5 real onboarding and first authoritative plan IN PROGRESS
 
 - Turned the six URL-backed onboarding screens into a guided path covering welcome, timezone confirmation, term, courses, recurring meetings/fixed events, availability/protected time, preferences, current assessments/tasks, and first plan. Each step reads current owner-scoped canonical state and links to the existing Step 1–4 editors. Progress is recomputed from saved facts when returning or reloading; navigation itself creates no records.

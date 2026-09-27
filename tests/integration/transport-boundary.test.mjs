@@ -421,6 +421,90 @@ test("onboarding plan transport requires origin and session and reports persiste
   assert.equal((await parsed(await send({}))).body.data.status, "FAILED");
 });
 
+test("Inbox resolution transports keep route identity, origin and bounded responses", async () => {
+  let calls = 0;
+  const inbox = {
+    suggest: async (input) => {
+      calls++;
+      return {
+        ok: true,
+        value: { id: input.id, status: "PROPOSED", version: input.expectedVersion + 1 },
+      };
+    },
+    resolve: async (input) => {
+      calls++;
+      return input.id === "owned"
+        ? {
+            ok: true,
+            value: {
+              id: input.id,
+              version: 1,
+              status: "PROCESSED",
+              entityType: "TASK",
+              entityId: "saved-task",
+              planning: { status: "SUCCEEDED", planStatus: "VALID" },
+            },
+          }
+        : { ok: false, error: { code: "NOT_FOUND", message: "Record not found." } };
+    },
+    dismiss: async (input) => {
+      calls++;
+      return {
+        ok: true,
+        value: {
+          id: input.id,
+          version: 1,
+          status: "DISMISSED",
+          rawText: "private capture",
+          proposedPayload: { secret: "private" },
+        },
+      };
+    },
+  };
+  const stubs = {
+    "../../../../../../server/application/inbox": { inboxItems: inbox },
+    "../../../../../../server/transport": transport,
+  };
+  const suggest = route("inbox/[id]/suggest", stubs);
+  const resolve = route("inbox/[id]/resolve", stubs);
+  const dismiss = route("inbox/[id]/dismiss", stubs);
+  const send = (path, payload, origin) => request(`inbox/owned/${path}`, payload, origin);
+  assert.equal(
+    (
+      await parsed(
+        await suggest.POST(
+          send("suggest", { expectedVersion: 0 }, "https://other.test"),
+          context("owned"),
+        ),
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await parsed(
+        await resolve.POST(send("resolve", { id: "other", expectedVersion: 0 }), context("owned")),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(calls, 0);
+  assert.equal(
+    (await parsed(await resolve.POST(send("resolve", { expectedVersion: 0 }), context("foreign"))))
+      .status,
+    404,
+  );
+  const saved = await parsed(
+    await resolve.POST(send("resolve", { expectedVersion: 0 }), context("owned")),
+  );
+  assert.equal(saved.body.data.entityId, "saved-task");
+  const dismissed = await parsed(
+    await dismiss.POST(send("dismiss", { expectedVersion: 0 }), context("owned")),
+  );
+  assert.equal(dismissed.body.data.status, "DISMISSED");
+  assert.equal(JSON.stringify(dismissed.body).includes("private"), false);
+});
+
 test("life-constraint routes require session and origin, persist owned versions, and redact records", async () => {
   const common = {
     recurrenceRule: "FREQ=WEEKLY;BYDAY=MO",

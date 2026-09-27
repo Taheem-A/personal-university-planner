@@ -471,7 +471,15 @@ export interface InboxItemRepository {
     id: string,
     version: number,
     patch: Partial<
-      Pick<InboxItemRecord, "status" | "proposedEntityType" | "proposedPayload" | "processedAt">
+      Pick<
+        InboxItemRecord,
+        | "status"
+        | "proposedEntityType"
+        | "proposedPayload"
+        | "resolvedEntityType"
+        | "resolvedEntityId"
+        | "processedAt"
+      >
     >,
   ): Promise<ConditionalMutation<InboxItemRecord>>;
 }

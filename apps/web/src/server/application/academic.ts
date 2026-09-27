@@ -5,6 +5,7 @@ import type {
   CanonicalRepositories,
   CourseMeetingRecord,
   TaskRecord,
+  TransactionContext,
 } from "@university-planner/database";
 import {
   requireAssessment,
@@ -36,7 +37,9 @@ import {
   textSchema,
   timezoneSchema,
   validateCompletionDeadline,
+  validateInput,
 } from "./validation";
+import type { Actor } from "./authorization";
 
 const id = z.object({ id: idSchema }).strict();
 const listOf = z.object({ parentId: idSchema }).strict();
@@ -410,26 +413,35 @@ function checkAssessment(data: {
     throw new ApplicationError("VALIDATION_ERROR", "Submission state and time disagree.");
 }
 
+export async function createAssessmentInTransaction(
+  input: unknown,
+  actor: Actor,
+  tx: TransactionContext,
+) {
+  const data = validateInput(assessmentCreate, input);
+  await requireEditableCourse(tx.repositories, actor, data.courseId);
+  const record: AssessmentRecord = {
+    ...data,
+    releaseAt: parseInstant(data.releaseAt),
+    dueAt: parseInstant(data.dueAt),
+    preferredCompletionAt: parseInstant(data.preferredCompletionAt),
+    id: newRecordId(),
+    version: 0,
+    userId: actor.userId,
+    submissionStatus: "NOT_SUBMITTED",
+    submittedAt: null,
+    archivedAt: null,
+    ...auditNow(),
+  };
+  checkAssessment(record);
+  return tx.repositories.assessments.create(record);
+}
+
 export const assessments = {
   create(input: unknown) {
-    return service(assessmentCreate, input, async (data, actor, tx) => {
-      await requireEditableCourse(tx.repositories, actor, data.courseId);
-      const record: AssessmentRecord = {
-        ...data,
-        releaseAt: parseInstant(data.releaseAt),
-        dueAt: parseInstant(data.dueAt),
-        preferredCompletionAt: parseInstant(data.preferredCompletionAt),
-        id: newRecordId(),
-        version: 0,
-        userId: actor.userId,
-        submissionStatus: "NOT_SUBMITTED",
-        submittedAt: null,
-        archivedAt: null,
-        ...auditNow(),
-      };
-      checkAssessment(record);
-      return tx.repositories.assessments.create(record);
-    });
+    return service(assessmentCreate, input, (data, actor, tx) =>
+      createAssessmentInTransaction(data, actor, tx),
+    );
   },
   get(input: unknown) {
     return service(id, input, async ({ id }, actor, tx) =>
@@ -624,32 +636,39 @@ async function requireEditableTaskRelationships(
   }
 }
 
+export async function createTaskInTransaction(
+  input: unknown,
+  actor: Actor,
+  tx: TransactionContext,
+) {
+  const data = validateInput(taskCreate, input);
+  if (data.parentTaskId || data.assessmentId) await tx.locks.userGraph(actor.userId);
+  await requireEditableTaskRelationships(tx.repositories, actor, data);
+  const record: TaskRecord = {
+    ...data,
+    id: newRecordId(),
+    version: 0,
+    userId: actor.userId,
+    recurringWorkRuleId: null,
+    availableFrom: parseInstant(data.availableFrom),
+    dueAt: parseInstant(data.dueAt),
+    preferredCompletionAt: parseInstant(data.preferredCompletionAt),
+    originalEstimatedMinutes: data.originalEstimatedMinutes,
+    currentEstimatedMinutes: data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
+    remainingMinutes:
+      data.remainingMinutes ?? data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
+    completedAt: null,
+    archivedAt: null,
+    ...auditNow(),
+  };
+  checkTask(record);
+  return tx.repositories.tasks.create(record);
+}
+
 export const tasks = {
   create(input: unknown) {
     return planAfterMutation(
-      service(taskCreate, input, async (data, actor, tx) => {
-        if (data.parentTaskId || data.assessmentId) await tx.locks.userGraph(actor.userId);
-        await requireEditableTaskRelationships(tx.repositories, actor, data);
-        const record: TaskRecord = {
-          ...data,
-          id: newRecordId(),
-          version: 0,
-          userId: actor.userId,
-          recurringWorkRuleId: null,
-          availableFrom: parseInstant(data.availableFrom),
-          dueAt: parseInstant(data.dueAt),
-          preferredCompletionAt: parseInstant(data.preferredCompletionAt),
-          originalEstimatedMinutes: data.originalEstimatedMinutes,
-          currentEstimatedMinutes: data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
-          remainingMinutes:
-            data.remainingMinutes ?? data.currentEstimatedMinutes ?? data.originalEstimatedMinutes,
-          completedAt: null,
-          archivedAt: null,
-          ...auditNow(),
-        };
-        checkTask(record);
-        return tx.repositories.tasks.create(record);
-      }),
+      service(taskCreate, input, (data, actor, tx) => createTaskInTransaction(data, actor, tx)),
       (record) => classifyTaskMutation(null, record),
     );
   },

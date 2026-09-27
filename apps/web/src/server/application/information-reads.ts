@@ -112,15 +112,28 @@ export interface TaskEditorModel {
 }
 export interface InboxViewModel {
   timezone: string;
+  courseChoices: { id: string; code: string; name: string }[];
   tabs: { status: "ACTIVE" | "PROCESSED" | "DISMISSED"; count: number }[];
   items: {
     id: string;
+    version: number;
     rawText: string;
     status: "ACTIVE" | "PROCESSED" | "DISMISSED";
     source: string;
     sourceAuthority: string;
     proposedEntityType: string | null;
     proposedTitle: string | null;
+    proposedPayload: {
+      title: string;
+      courseId: string | null;
+      durationMinutes?: number | null;
+      dueAt?: string | null;
+      startAt?: string | null;
+      endAt?: string | null;
+    } | null;
+    resolvedEntityType: string | null;
+    resolvedEntityId: string | null;
+    planningStatus: "SUCCEEDED" | "FAILED" | "RUNNING" | "INFEASIBLE" | null;
     createdAt: Date;
     processedAt: Date | null;
   }[];
@@ -382,10 +395,41 @@ export function buildUpcoming(
   };
 }
 
-export function buildInbox(rows: InboxItemRecord[], timezone: string): InboxViewModel {
+const safeInboxProposal = z
+  .object({
+    title: z.string(),
+    courseId: z.string().nullable(),
+    durationMinutes: z.number().nullable().optional(),
+    dueAt: z.string().nullable().optional(),
+    startAt: z.string().nullable().optional(),
+    endAt: z.string().nullable().optional(),
+  })
+  .strip();
+function inboxPlanningStatus(
+  run: PlannerRunRecord | undefined,
+): InboxViewModel["items"][number]["planningStatus"] {
+  if (!run) return null;
+  const summary = run.summary;
+  if (
+    run.status === "SUCCEEDED" &&
+    summary &&
+    typeof summary === "object" &&
+    !Array.isArray(summary) &&
+    summary.planStatus === "INFEASIBLE"
+  )
+    return "INFEASIBLE";
+  return run.status;
+}
+export function buildInbox(
+  rows: InboxItemRecord[],
+  timezone: string,
+  courseChoices: { id: string; code: string; name: string }[] = [],
+  runs: PlannerRunRecord[] = [],
+): InboxViewModel {
   const statuses = ["ACTIVE", "PROCESSED", "DISMISSED"] as const;
   return {
     timezone,
+    courseChoices,
     tabs: statuses.map((status) => ({
       status,
       count: rows.filter((item) => item.status === status).length,
@@ -394,11 +438,18 @@ export function buildInbox(rows: InboxItemRecord[], timezone: string): InboxView
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id))
       .map((item) => ({
         id: item.id,
+        version: item.version,
         rawText: item.rawText,
         status: item.status,
         source: item.source,
         sourceAuthority: item.sourceAuthority,
         proposedEntityType: item.proposedEntityType,
+        proposedPayload: safeInboxProposal.safeParse(item.proposedPayload).data ?? null,
+        resolvedEntityType: item.resolvedEntityType ?? null,
+        resolvedEntityId: item.resolvedEntityId ?? null,
+        planningStatus: item.resolvedEntityId
+          ? inboxPlanningStatus(runs.find((run) => run.triggerEntityId === item.resolvedEntityId))
+          : null,
         proposedTitle:
           item.proposedPayload &&
           typeof item.proposedPayload === "object" &&
@@ -470,7 +521,23 @@ export const informationViews = {
             tx.repositories.inboxItems.listByStatus(actor.userId, status),
           ),
         );
-        return buildInbox(rows.flat(), user.timezone);
+        const terms = await tx.repositories.academicTerms.listForUser(actor.userId);
+        const courses = (
+          await Promise.all(
+            terms
+              .filter((term) => term.status !== "ARCHIVED")
+              .map((term) => tx.repositories.courses.listForTerm(actor.userId, term.id)),
+          )
+        )
+          .flat()
+          .filter((course) => !course.archivedAt);
+        const runs = await tx.repositories.plannerRuns.listRecent(actor.userId, 50);
+        return buildInbox(
+          rows.flat(),
+          user.timezone,
+          courses.map(({ id, code, name }) => ({ id, code, name })),
+          runs,
+        );
       });
     });
   },

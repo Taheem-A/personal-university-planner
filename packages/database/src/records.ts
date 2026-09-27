@@ -388,5 +388,7 @@ export interface InboxItemRecord extends AuditFields, ProvenanceFields {
   status: InboxStatus;
   proposedEntityType: string | null;
   proposedPayload: JsonValue | null;
+  resolvedEntityType: string | null;
+  resolvedEntityId: string | null;
   processedAt: Date | null;
 }

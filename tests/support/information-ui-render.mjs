@@ -5,6 +5,7 @@ import vm from "node:vm";
 import typescript from "typescript";
 
 const webRequire = createRequire(path.resolve("apps/web/package.json"));
+const shared = webRequire(path.resolve("dist/packages/shared/src/index.js"));
 const React = webRequire("react");
 const { renderToStaticMarkup } = webRequire("react-dom/server");
 const root = path.resolve("apps/web/src/components");
@@ -25,6 +26,9 @@ function load(file, dependencies = {}) {
   const exports = {};
   const require = (name) => {
     if (name === "next/link") return { __esModule: true, default: Link };
+    if (name === "next/navigation")
+      return { useRouter: () => ({ push: () => {}, refresh: () => {} }) };
+    if (name === "@university-planner/shared") return shared;
     if (name === "lucide-react") return webRequire(name);
     if (name === "./planner-primitives") return dependencies.primitives;
     if (name === "./course-color") return dependencies.courseColor;
@@ -52,6 +56,12 @@ function load(file, dependencies = {}) {
             ),
           ),
       };
+    if (name === "./inbox-resolution") return dependencies.inboxResolution;
+    if (name === "./mutation-form") return dependencies.mutationForm;
+    if (name === "./mutation-client")
+      return {
+        submitMutation: async () => ({ ok: false, message: "Unavailable in static rendering" }),
+      };
     return webRequire(name);
   };
   vm.runInNewContext(javascript, { exports, require, Intl, Date, Map, Set, URL, Math });
@@ -60,7 +70,9 @@ function load(file, dependencies = {}) {
 const primitives = load("planner-primitives.tsx");
 const courseColor = load("course-color.ts");
 const { UpcomingView } = load("upcoming-view.tsx", { primitives, courseColor });
-const { InboxView } = load("inbox-view.tsx");
+const mutationForm = load("mutation-form.tsx");
+const inboxResolution = load("inbox-resolution.tsx", { mutationForm });
+const { InboxView } = load("inbox-view.tsx", { inboxResolution });
 
 export function syntheticInformationModel(selected = true) {
   const detail = {
@@ -144,8 +156,8 @@ export function renderUpcoming(
 ) {
   return renderToStaticMarkup(React.createElement(UpcomingView, { model, range, sort, view }));
 }
-export function renderInbox(model, status = "ACTIVE") {
+export function renderInbox(model, status = "ACTIVE", selectedId = null) {
   return renderToStaticMarkup(
-    React.createElement(InboxView, { model, status, focusCapture: false }),
+    React.createElement(InboxView, { model, status, focusCapture: false, selectedId }),
   );
 }

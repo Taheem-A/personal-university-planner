@@ -269,6 +269,11 @@ test("Inbox preserves canonical raw capture and only declared proposals", () => 
   );
   assert.equal(model.items[0].proposedTitle, "Essay");
   assert.equal(model.items[1].proposedTitle, null);
+  assert.equal(
+    reads.buildInbox(rows, "America/Toronto", [], [{ triggerEntityId: null, status: "FAILED" }])
+      .items[1].planningStatus,
+    null,
+  );
   assert.equal(rows[0].id, "older");
   assert.deepEqual(
     reads.buildInbox([], "America/Toronto").tabs.map((tab) => tab.count),
