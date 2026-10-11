@@ -386,16 +386,10 @@ test("Quick Capture through reviewed Inbox resolution commits a schedulable task
   });
   const validation = load("validation.ts", { zod: webRequire("zod"), "./errors": errors });
   const actor = { userId };
-  const authorization = {
-    requireActor: async () => actor,
-    requireTaskRelationships: async () => {},
-    requireCourse: async (repos, identity, id) => {
-      const course = await repos.courses.getForUser(identity.userId, id);
-      if (!course || course.archivedAt)
-        throw new errors.ApplicationError("NOT_FOUND", "Record not found.");
-      return course;
-    },
-  };
+  const authorization = load("authorization.ts", {
+    "../auth": { authenticatedActor: async () => actor },
+    "./errors": errors,
+  });
   const serviceTools = load("service.ts", {
     "../database": { applicationDatabase: () => db },
     "./authorization": authorization,

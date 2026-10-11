@@ -6,7 +6,7 @@ import type {
   ProtectedTimeRuleRecord,
   TransactionContext,
 } from "@university-planner/database";
-import { requireCourse, type Actor } from "./authorization";
+import { requireEditableCourse, type Actor } from "./authorization";
 import { ApplicationError } from "./errors";
 import {
   classifyCalendarMutation,
@@ -67,7 +67,7 @@ export async function createCalendarEventInTransaction(
   tx: TransactionContext,
 ) {
   const data = validateInput(calendarCreate, input);
-  if (data.courseId) await requireCourse(tx.repositories, actor, data.courseId);
+  if (data.courseId) await requireEditableCourse(tx.repositories, actor, data.courseId);
   const startAt = parseInstant(data.startAt)!,
     endAt = parseInstant(data.endAt)!;
   eventDates({ startAt, endAt });
@@ -120,7 +120,7 @@ export const calendarEvents = {
           await tx.repositories.calendarEvents.getForUser(actor.userId, id),
         );
         before = { ...current };
-        if (data.courseId) await requireCourse(tx.repositories, actor, data.courseId);
+        if (data.courseId) await requireEditableCourse(tx.repositories, actor, data.courseId);
         const { startAt, endAt, ...fields } = data;
         const patch = {
           ...fields,

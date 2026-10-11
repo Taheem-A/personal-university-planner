@@ -20,7 +20,10 @@ export const percentageSchema = z.number().min(0).max(100);
 export const weightSchema = z.number().min(0).max(1);
 export const expectedVersionSchema = z.number().int().nonnegative();
 export const archiveSchema = z.object({ id: idSchema, expectedVersion: expectedVersionSchema });
-export const localTimeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/);
+export const localTimeSchema = z
+  .string()
+  .regex(/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/)
+  .transform((time) => (time.length === 5 ? `${time}:00` : time));
 export const nullableInstantSchema = instantSchema.nullable();
 export const nullableDateSchema = calendarDateSchema.nullable();
 export const provenanceSchema = z.object({

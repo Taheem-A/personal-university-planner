@@ -10,6 +10,7 @@ import type {
 import {
   requireAssessment,
   requireCourse,
+  requireEditableCourse,
   requireTask,
   requireTaskRelationships,
 } from "./authorization";
@@ -136,18 +137,6 @@ export const academicTerms = {
   },
 };
 
-async function requireEditableCourse(
-  repos: CanonicalRepositories,
-  actor: { userId: string },
-  id: string,
-) {
-  const course = await requireCourse(repos, actor, id);
-  const term = await repos.academicTerms.getForUser(actor.userId, course.academicTermId);
-  if (!term || term.status === "ARCHIVED")
-    throw new ApplicationError("NOT_FOUND", "Record not found.");
-  return course;
-}
-
 const courseCreate = manualProvenanceSchema
   .extend({
     academicTermId: idSchema,
@@ -156,7 +145,7 @@ const courseCreate = manualProvenanceSchema
     section: textSchema.nullable().default(null),
     instructorName: textSchema.nullable().default(null),
     colorReference: textSchema.nullable().default(null),
-    creditValue: z.number().nonnegative().nullable().default(null),
+    creditValue: z.number().positive().nullable().default(null),
     defaultTaskEnergy: z.enum(["LOW", "MEDIUM", "HIGH"]).nullable().default(null),
     defaultTaskLocation: z.array(textSchema).default([]),
   })
@@ -168,7 +157,7 @@ const coursePatch = z
     section: textSchema.nullable(),
     instructorName: textSchema.nullable(),
     colorReference: textSchema.nullable(),
-    creditValue: z.number().nonnegative().nullable(),
+    creditValue: z.number().positive().nullable(),
     defaultTaskEnergy: z.enum(["LOW", "MEDIUM", "HIGH"]).nullable(),
     defaultTaskLocation: z.array(textSchema),
   })

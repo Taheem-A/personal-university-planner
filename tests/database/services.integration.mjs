@@ -35,6 +35,7 @@ function compile(source, stubs = {}) {
       exports,
       require: (name) => stubs[name] ?? webRequire(name),
       Date,
+      TextDecoder,
       Map,
       Set,
       Intl,
@@ -84,18 +85,41 @@ const service = load("application/service", {
     }),
   },
 });
+const triggers = load("application/planner-triggers", {
+  "./authorization": auth,
+  "./errors": errors,
+  "../database": { applicationDatabase: () => database },
+  // This M2 suite proves factual writes; the separate M4 live suite proves planning.
+  "./planner": {
+    generateAuthoritativePlan: async () => ({
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "No planner configuration in this M2 fixture.",
+      },
+    }),
+  },
+});
 const academic = load("application/academic", {
   "./authorization": auth,
   "./dependencies": load("application/dependencies", { "./errors": errors }),
   "./errors": errors,
   "./validation": validation,
   "./service": service,
+  "./planner-triggers": triggers,
 });
 const lifecycle = load("application/lifecycle", {
   "./authorization": auth,
   "./errors": errors,
   "./validation": validation,
   "./service": service,
+  "./planner-triggers": triggers,
+  "./planner-reads": load("application/planner-reads", {
+    "../database": { applicationDatabase: () => database },
+    "./authorization": auth,
+    "./errors": errors,
+    "./validation": validation,
+  }),
 });
 const transport = load("transport");
 function route(path, stubs) {

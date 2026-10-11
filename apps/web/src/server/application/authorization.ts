@@ -24,6 +24,18 @@ export async function requireTask(repos: CanonicalRepositories, actor: Actor, id
   return task;
 }
 
+export async function requireEditableCourse(
+  repos: CanonicalRepositories,
+  actor: Actor,
+  id: string,
+) {
+  const course = await requireCourse(repos, actor, id);
+  const term = await repos.academicTerms.getForUser(actor.userId, course.academicTermId);
+  if (!term || term.status === "ARCHIVED")
+    throw new ApplicationError("NOT_FOUND", "Record not found.");
+  return course;
+}
+
 export async function requireAssessment(repos: CanonicalRepositories, actor: Actor, id: string) {
   const assessment = await repos.assessments.getForUser(actor.userId, id);
   if (!assessment || assessment.archivedAt)

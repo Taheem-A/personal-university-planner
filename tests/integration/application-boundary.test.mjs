@@ -74,6 +74,33 @@ test("untrusted input and domain ordering reject malformed payloads", () => {
   );
 });
 
+test("recurrence validation compares normalized clocks rather than string formatting", () => {
+  const v = load("validation", { "./errors": errors });
+  const recurrence = {
+    recurrenceRule: "FREQ=DAILY",
+    timezone: "America/Toronto",
+    effectiveFrom: "2026-09-01",
+    startTimeLocal: "09:00",
+    endTimeLocal: "09:00:00",
+  };
+  assert.throws(
+    () => v.validateInput(v.localRecurrenceSchema, recurrence),
+    (error) => error.code === "VALIDATION_ERROR",
+  );
+  assert.throws(
+    () =>
+      v.validateInput(v.localRecurrenceSchema, {
+        ...recurrence,
+        startTimeLocal: "09:00:01",
+        endTimeLocal: "09:00",
+      }),
+    (error) => error.code === "VALIDATION_ERROR",
+  );
+  const valid = v.validateInput(v.localRecurrenceSchema, { ...recurrence, endTimeLocal: "10:00" });
+  assert.equal(valid.startTimeLocal, "09:00:00");
+  assert.equal(valid.endTimeLocal, "10:00:00");
+});
+
 test("database constraints map to safe structured application results", async () => {
   assert.deepEqual(
     JSON.parse(

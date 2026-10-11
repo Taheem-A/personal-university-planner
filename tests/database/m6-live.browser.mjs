@@ -26,6 +26,16 @@ if (
   throw new Error("Use a distinct, direct Neon up_test_m6_gate_* database only.");
 
 const webRequire = createRequire(new URL("../../apps/web/package.json", import.meta.url));
+const { addLocalDays, instantToLocal, localDateTimeToInstant } = createRequire(import.meta.url)(
+  "../../dist/packages/shared/src/index.js",
+);
+// The optimized app uses its real clock. Keep synthetic facts inside its current horizon.
+const today = instantToLocal(new Date(), "America/Toronto").date;
+const termStart = addLocalDays(today, -7);
+const termEnd = addLocalDays(today, 90);
+const eventDate = addLocalDays(today, 2);
+const dueDate = addLocalDays(today, 5);
+const correctedDueDate = addLocalDays(today, 6);
 const { encode } = webRequire("next-auth/jwt");
 const nextBin = webRequire.resolve("next/dist/bin/next");
 const database = createDatabase({ connectionString: url });
@@ -158,9 +168,9 @@ test(
       await page.locator(".timezone-form").getByRole("button", { name: "Save" }).click();
 
       await visit(page, "/courses?edit=term-new");
-      await page.getByLabel("Term name").fill("Synthetic Fall 2026");
-      await page.getByLabel("Start date").fill("2026-09-01");
-      await page.getByLabel("End date").fill("2026-12-20");
+      await page.getByLabel("Term name").fill("Synthetic acceptance term");
+      await page.getByLabel("Start date").fill(termStart);
+      await page.getByLabel("End date").fill(termEnd);
       await save(page);
       await page.getByLabel("Term status").selectOption("ACTIVE");
       await save(page);
@@ -169,31 +179,31 @@ test(
       await page.getByLabel("Course name").fill("Synthetic Mechanics");
       await save(page);
       await visit(page, "/courses?edit=meeting-new");
-      await page.getByLabel("Effective from").fill("2026-09-01");
+      await page.getByLabel("Effective from").fill(termStart);
       await page.getByLabel("Local start time").fill("11:00");
       await page.getByLabel("Local end time").fill("12:00");
       const meeting = await save(page);
 
       await visit(page, "/availability?edit=event-new");
       await page.getByLabel("Title", { exact: true }).fill("Synthetic appointment");
-      await page.getByLabel("Start", { exact: true }).fill("2026-09-29T15:00");
-      await page.getByLabel("End", { exact: true }).fill("2026-09-29T16:00");
+      await page.getByLabel("Start", { exact: true }).fill(`${eventDate}T15:00`);
+      await page.getByLabel("End", { exact: true }).fill(`${eventDate}T16:00`);
       const fixedEvent = await save(page);
       await visit(page, "/availability?edit=availability-new");
       await page.getByLabel("Repeats").selectOption("DAILY");
       await page.getByLabel("Local start time").fill("08:00");
       await page.getByLabel("Local end time").fill("22:00");
-      await page.getByLabel("First effective date").fill("2026-09-01");
+      await page.getByLabel("First effective date").fill(termStart);
       const availability = await save(page);
       await visit(page, "/availability?edit=protection-new");
       await page.getByLabel("Protection label").fill("Synthetic sleep");
       await page.getByLabel("This is sleep").check();
-      await page.getByLabel("First effective date").fill("2026-09-01");
+      await page.getByLabel("First effective date").fill(termStart);
       const sleep = await save(page);
       await visit(page, "/availability?edit=protection-new");
       await page.getByLabel("Protection label").fill("Synthetic leisure");
       await page.getByLabel("Protection strength").selectOption("SOFT");
-      await page.getByLabel("First effective date").fill("2026-09-01");
+      await page.getByLabel("First effective date").fill(termStart);
       const softProtection = await save(page);
       await visit(page, "/settings?section=planning&edit=preferences");
       await page.getByRole("button", { name: "Use Balanced values" }).click();
@@ -204,13 +214,13 @@ test(
         `Assessment editor absent: ${await page.locator("main").innerText()} ${serverLog}`,
       );
       await page.getByLabel("Assessment title").fill("Synthetic assignment");
-      await page.getByLabel("True due date and time").fill("2026-10-02T17:00");
+      await page.getByLabel("True due date and time").fill(`${dueDate}T17:00`);
       const assessment = await save(page);
       await visit(page, "/upcoming?edit=task-new");
       await page.getByLabel("Task title").fill("Solve synthetic assignment");
       await page.getByLabel("Estimated work (minutes)").fill("180");
-      await page.getByLabel("True task deadline").fill("2026-10-02T17:00");
-      await page.getByLabel("Available from").fill("2026-09-27T08:00");
+      await page.getByLabel("True task deadline").fill(`${dueDate}T17:00`);
+      await page.getByLabel("Available from").fill(`${today}T08:00`);
       await page.getByLabel("Typical session length (minutes)").fill("45");
       await page
         .getByLabel("Assessment", { exact: true })
@@ -250,7 +260,18 @@ test(
         path: path.join(output, "today-first-plan-desktop-light.png"),
         fullPage: true,
       });
-      await visit(page, "/week?date=2026-09-28");
+      const firstSessions = await database.repositories.workSessions.listForRange(
+        actor.id,
+        localDateTimeToInstant({ date: today, time: "00:00", timezone: "America/Toronto" }),
+        localDateTimeToInstant({
+          date: addLocalDays(today, 8),
+          time: "00:00",
+          timezone: "America/Toronto",
+        }),
+      );
+      const firstWork = firstSessions.find((session) => session.generatedBy === "PLANNER");
+      assert.ok(firstWork, "The first plan must persist generated work.");
+      await visit(page, `/week?date=${instantToLocal(firstWork.startAt, "America/Toronto").date}`);
       await page.getByText("Solve synthetic assignment").first().waitFor();
       await page.screenshot({
         path: path.join(output, "week-first-plan-desktop-light.png"),
@@ -262,8 +283,12 @@ test(
       const latestRun = await database.repositories.plannerRuns.latestSuccessful(actor.id);
       const sessions = await database.repositories.workSessions.listForRange(
         actor.id,
-        new Date("2026-09-27T00:00:00Z"),
-        new Date("2026-10-04T00:00:00Z"),
+        localDateTimeToInstant({ date: today, time: "00:00", timezone: "America/Toronto" }),
+        localDateTimeToInstant({
+          date: addLocalDays(today, 8),
+          time: "00:00",
+          timezone: "America/Toronto",
+        }),
       );
       assert.equal(courses.length, 1);
       assert.equal(tasks.length, 1);
@@ -292,13 +317,17 @@ test(
         "10:30:00",
       );
       await visit(page, `/upcoming?assessment=${assessment.id}&edit=assessment:${assessment.id}`);
-      await page.getByLabel("True due date and time").fill("2026-10-03T17:00");
+      await page.getByLabel("True due date and time").fill(`${correctedDueDate}T17:00`);
       await save(page);
       assert.equal(
         (
           await database.repositories.assessments.getForUser(actor.id, assessment.id)
         ).dueAt.toISOString(),
-        "2026-10-03T21:00:00.000Z",
+        localDateTimeToInstant({
+          date: correctedDueDate,
+          time: "17:00",
+          timezone: "America/Toronto",
+        }).toISOString(),
       );
       await visit(page, `/availability?edit=availability:${availability.id}`);
       await page.getByLabel("Local end time").fill("21:00");

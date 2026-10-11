@@ -38,13 +38,34 @@ export async function bodyOf(request: Request): Promise<unknown | Response> {
       { error: { code: "UNAUTHORIZED", message: "Same-origin request required." } },
       { status: 403, headers },
     );
-  if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json"))
+  if (
+    request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
+    "application/json"
+  )
     return invalid("Expected JSON content type.", 415);
   const size = request.headers.get("content-length");
   if (size && Number(size) > 65_536) return invalid("Request body exceeds 64 KiB.", 413);
   try {
-    const text = await request.text();
-    if (text.length > 65_536) return invalid("Request body exceeds 64 KiB.", 413);
+    const reader = request.body?.getReader();
+    if (!reader) return invalid("Malformed JSON request.");
+    const decoder = new TextDecoder();
+    let bytes = 0;
+    let text = "";
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > 65_536) {
+          await reader.cancel();
+          return invalid("Request body exceeds 64 KiB.", 413);
+        }
+        text += decoder.decode(value, { stream: true });
+      }
+      text += decoder.decode();
+    } finally {
+      reader.releaseLock();
+    }
     return JSON.parse(text) as unknown;
   } catch {
     return invalid("Malformed JSON request.");

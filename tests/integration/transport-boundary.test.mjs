@@ -29,6 +29,7 @@ function compile(source, stubs = {}) {
     RangeError,
     URL,
     JSON,
+    TextDecoder,
     Request,
     Response,
   });
@@ -864,7 +865,7 @@ test("actual route adapters enforce actor, validation, ownership, versions, roll
       ),
     )
   ).body.data;
-  assert.equal(recurrence.startTimeLocal, "09:00");
+  assert.equal(recurrence.startTimeLocal, "09:00:00");
   forcedFailure = true;
   const failure = await parsed(
     await terms.POST(
