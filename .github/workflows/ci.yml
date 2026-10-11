@@ -25,4 +25,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:dependencies
       - run: pnpm exec playwright install --with-deps chromium
+      # Temporary diagnostic; removed after applying formatter output.
+      - run: |
+          pnpm exec prettier docs/dependency-policy.md > /tmp/dependency-policy.formatted.md
+          diff -u docs/dependency-policy.md /tmp/dependency-policy.formatted.md || true
       - run: pnpm verify
