@@ -35,6 +35,8 @@ No schema or migration change was needed. Applied migration history and SQL-owne
 
 ## Verification and evidence limits
 
+Final verification also exposed tracked `apps/web/next-env.d.ts` switching between build/development references. The installed Next.js guide explicitly requires ignoring/removing this generated declaration from Git. It is now ignored, and web typecheck runs `next typegen` before TypeScript so a clean checkout generates the declarations it needs. The generated local file is preserved rather than hand-edited.
+
 Integrated verification passed 157 unit, 95 integration and 35 Chromium tests, including the responsive/theme/keyboard/reduced-motion/zoom-equivalent matrix and approved-preview regression. Dedicated scenarios passed 13/13 and properties 2/2 (1,000 seeded snapshots plus repeated deterministic outputs). Guarded live checks passed: repository round trips 4/4, M2 service 1/1, M4 race 1/1, M4 authoritative planner 1/1, M5 real-state 1/1, M5 protected browser 1/1 and M6 fresh-account browser 1/1. The fresh direct target applied all ten migrations from zero, reported current and returned no Prisma drift. Protected desktop light, mobile light and desktop dark captures were inspected.
 
 Final-head verification repeats the applicable commands after the last change; exact head and GitHub check URLs are reported in the PR/final handoff. Production dependency audit passes with no known vulnerabilities. Full `pnpm check:dependencies` remains **BLOCKED** by the one unpatched development-only braces advisory above. The stabilization branch must remain unmerged until the required dependency gate is green. This checkpoint does not authorize starting M7.

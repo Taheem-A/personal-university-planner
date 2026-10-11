@@ -6,6 +6,7 @@ dist/
 .next/
 apps/web/.next/
 apps/web/out/
+apps/web/next-env.d.ts
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
 *.tsbuildinfo
