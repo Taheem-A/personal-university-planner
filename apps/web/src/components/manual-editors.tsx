@@ -324,6 +324,9 @@ export function CourseEditor({
     !termId && "Choose a term.",
     !code.trim() && "Enter a course code.",
     !name.trim() && "Enter a course name.",
+    credit.trim() &&
+      (!Number.isFinite(Number(credit)) || Number(credit) <= 0) &&
+      "Credit value must be positive, or left blank if unknown.",
   ].filter((item): item is string => Boolean(item));
   async function submit(event: FormEvent) {
     event.preventDefault();

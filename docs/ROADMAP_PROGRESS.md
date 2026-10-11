@@ -1,5 +1,21 @@
 # Roadmap progress
 
+## Current state — post-M6 / pre-M7
+
+**Milestones 0–6 are complete and merged. Milestone 7 — Execution Outcomes and Dynamic Replanning — is next and has not started.** M6 [PR #9](https://github.com/Taheem-A/personal-university-planner/pull/9) merged at `30c55208398420a7c0ec9068c36b318adcb91229`. See [implementation status](./IMPLEMENTATION_STATUS.md) and [the stabilization checkpoint](./repository-stabilization.md).
+
+## 2026-10-10 — Repository stabilization checkpoint
+
+- Re-read both live authoritative documents and verified remote `master`, merged PRs and milestone gates before creating `chore/repository-stabilization-sweep`.
+- Audited M0–M6 package/service/planner/database/UI/test/configuration boundaries. Fixed bounded JSON streaming, normalized clock validation, positive course-credit validation and archived-term fixed-event relationships; strengthened public-package import enforcement and removed unused bootstrap/rename scaffolding.
+- Reconciled current documentation, environment setup and guarded verification instructions. Preserved the user-authored root agent instructions, approved references, dated milestone records and applied migrations. No M7 product functionality was added.
+- Detailed verification and evidence limits are recorded in [the checkpoint](./repository-stabilization.md).
+- Integrated local and guarded live acceptance pass. Compatible security patches clear production advisories; the full dependency audit retains one unpatched development-only braces advisory. Stabilization publication/merge is blocked on that external gate; M7 has not started.
+
+## Historical milestone records
+
+All dated records below retain the state and evidence available at that time, including pre-merge statements and earlier “next” items. They do not override the current state above.
+
 ## 2026-09-27 — Milestone 6 final acceptance GATE PASSED
 
 - Audited the literal roadmap and master-spec M6 requirements, prior milestone gates, ADRs, and all M6 commits. The [exit-gate matrix](./milestone-6-exit-gate.md) maps implementation, automated checks, fresh database assertions and authenticated browser proof requirement by requirement.

@@ -24,6 +24,30 @@ test("package-boundary policy passes against the real source tree", () => {
   assert.match(result.stdout, /Package boundaries passed/);
 });
 
+test("cross-package imports cannot bypass public entry points", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "public-boundary-"));
+  const checker = path.resolve("scripts/check-package-boundaries.mjs");
+  try {
+    mkdirSync(path.join(root, "packages/database/src"), { recursive: true });
+    mkdirSync(path.join(root, "apps/web/src/server"), { recursive: true });
+    const source = path.join(root, "apps/web/src/server/example.ts");
+    for (const specifier of [
+      "@university-planner/database/src/internal",
+      "../../../../../packages/database/src/internal",
+      "@university-planner/shared/time",
+    ]) {
+      writeFileSync(source, `import { value } from "${specifier}";\n`);
+      const result = spawnSync(process.execPath, [checker], { cwd: root, encoding: "utf8" });
+      assert.equal(result.status, 1, specifier);
+      assert.match(result.stderr, /cross-package imports must use the public/);
+    }
+    writeFileSync(source, 'import { value } from "@university-planner/database";\n');
+    assert.equal(spawnSync(process.execPath, [checker], { cwd: root }).status, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("planner boundary rejects external imports and manifest dependencies", () => {
   const root = mkdtempSync(path.join(tmpdir(), "planner-boundary-"));
   const checker = path.resolve("scripts/check-package-boundaries.mjs");

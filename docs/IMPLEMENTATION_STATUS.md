@@ -1,10 +1,22 @@
 # Implementation status
 
-## Milestone 6 — GATE PASSED
+## Current state — post-M6 / pre-M7
+
+Milestones **0–6 are complete and merged**. M6 [PR #9](https://github.com/Taheem-A/personal-university-planner/pull/9) landed at `30c55208398420a7c0ec9068c36b318adcb91229`. **Milestone 7 — Execution Outcomes and Dynamic Replanning — is next and has not started.** [The stabilization checkpoint](./repository-stabilization.md) records the repository-wide audit and subsequent verification.
+
+Production implements Auth.js identity provisioning, owned canonical persistence, versioned manual management, deterministic planner-core `heuristic-v1`, authoritative PlannerRun/WorkSession persistence, protected Today/Week/Upcoming and secondary read surfaces, onboarding, raw capture and reviewed deterministic Inbox resolution. Facts commit before follow-up planning; a failed replan preserves the last successful plan. Tests and preview data remain isolated from production.
+
+Execution outcomes, completion-driven replanning, undo, Scenario Apply, conflict mutations, provider synchronization, natural-language execution, learning and notifications remain deferred. Their stored types, package interfaces and UI entry points are preparatory. Root `pnpm verify` covers local synthetic/embedded checks and browser regressions; guarded live PostgreSQL and authenticated-browser commands require dedicated disposable targets as documented in [environments](./environments.md).
+
+## Historical implementation notes
+
+The notes below retain milestone-time behavior, branch state and test counts. Statements such as “unmerged”, “read-only” or “deferred to Milestone 6” describe those snapshots; the current state above supersedes them.
+
+## Milestone 6 — September 27 pre-merge gate snapshot
 
 Steps 1–7 established trusted manual editors, real onboarding, authoritative planning, deterministic Inbox resolution and global Manual Add. The [cross-screen audit](./milestone-6-step-7-audit.md) maps important facts to correction paths. Final acceptance used a fresh migrated disposable Neon database and authenticated Chromium against optimized protected routes. Starting with no academic facts, the browser saved a semester, commitments, constraints, preferences and workload, then verified a real PlannerRun, persisted WorkSessions and Today/Week reads without IntegrationAccounts. It corrected course, meeting, assessment, task, availability, protected-time and preference facts; exercised raw capture, proposal correction, processing and dismissal; and checked signed-out access, cross-user isolation, stale versions, validation rollback, archive/deactivation and restart persistence. The [literal evidence matrix](./milestone-6-exit-gate.md) records each requirement and its proof. The audit fixed browser-facing same-origin comparison, a server-to-client function prop, and Prisma's advisory-lock `void` result. M2 validation/ownership and M4 planning remain authoritative. Final `pnpm verify` passed 157 unit, 89 integration and 35 Chromium tests, with 158 source files checked for package boundaries; 13 planner scenarios, 2 properties and dependency audit also passed. **Milestone 6 — GATE PASSED. Exact next roadmap item: Milestone 7 — Execution Outcomes and Dynamic Replanning.** The branch remains unmerged; no M7 work was implemented.
 
-## Current milestone status
+## Milestone 5 — historical closeout
 
 **Milestone 5 — COMPLETE / GATE PASSED and merged.** [PR #7](https://github.com/Taheem-A/personal-university-planner/pull/7) merged into `master` at `53591b57f897171bc52a1b8266dbcb25b4ee0990`. Final implementation head `d26f065a0aab5cd6b5a6d651bbd94dbe638a2411` passed pinned-runtime [GitHub CI](https://github.com/Taheem-A/personal-university-planner/actions/runs/36214498969) and [dependency review](https://github.com/Taheem-A/personal-university-planner/actions/runs/36214498924). The [requirement-by-requirement exit-gate matrix](./milestone-5-exit-gate.md) maps production screens, architecture, accessibility and responsive behavior to code and proof. Guarded synthetic PostgreSQL and authenticated browser runs rendered canonical state through real read services. Local `pnpm verify` passed 150 unit, 66 integration and 28 Chromium tests. Milestones 6+ remain deferred.
 

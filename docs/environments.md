@@ -10,7 +10,7 @@ The same codebase is promoted through three isolated deployment boundaries.
 
 `APP_ENV` and `NEXT_PUBLIC_APP_ENV` must match. Vercel's `VERCEL_ENV` is accepted as the server-side fallback. Preview and production fail environment validation unless `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET` are present. Secrets are never committed or exposed through `NEXT_PUBLIC_*` variables.
 
-Copy `.env.example` to `.env.local` for development. The example contains names and non-secret placeholders only.
+Copy `.env.example` to `apps/web/.env.local` for development, because `pnpm dev` runs Next.js in `apps/web`. The example contains names and non-secret placeholders only; replace them locally. Existing local files must be preserved. Prisma and standalone test commands receive variables from their invoking process and do not automatically load the web app's environment file.
 
 Auth.js uses `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, and the deployment's `NEXTAUTH_URL` for Google OAuth callbacks (`/api/auth/callback/google`). Google sign-in requests only the OIDC `openid` scope. Configure a distinct OAuth client and callback URL for each deployment. Login does not request Calendar permissions or store Google access/refresh tokens.
 
@@ -26,4 +26,16 @@ Repository integration tests use `REPOSITORY_TEST_DATABASE_URL`, never the ambie
 
 The guarded Milestone-2 live service test command is `pnpm db:services:verify`. It requires `APP_ENV=test`, `SERVICE_TEST_DATABASE_URL` pointing to a **direct**, non-pooler Neon database named `up_m2_service_*`, and `CONFIRM_SERVICE_TEST_DATABASE=RUN_M2_SERVICE_TESTS`. Deploy migrations to that disposable database first, then run this command. Synthetic users are created and cleaned up by the test. These variables are distinct from application runtime and Milestone-1 repository test URLs.
 
-Milestone-1 final acceptance used the expiring, non-production Neon branch `milestone-1-final-gate-20260922` (`br-red-wave-b5l6p77k`). Its acceptance databases contain synthetic data only, and the branch expires on 2026-09-29.
+## Later guarded live checks
+
+Deploy migrations with a direct URL to each dedicated disposable target first. Never substitute the ambient runtime database or weaken confirmation/name guards. These checks are separate from `pnpm verify`.
+
+| Command                                             | URL / required database prefix                            | Confirmation                                         |
+| --------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------- |
+| `db:planner:races:verify`, `db:planner:live:verify` | `PLANNER_RACE_TEST_DATABASE_URL` / `up_m4_planner_races_` | `CONFIRM_PLANNER_RACE_DATABASE=RUN_M4_PLANNER_RACES` |
+| `db:ui:real-state:verify`, `db:ui:browser:verify`   | `M5_UI_TEST_DATABASE_URL` / `up_test_m5_ui_gate_`         | `CONFIRM_M5_UI_DATABASE=RUN_M5_REAL_STATE_PROOF`     |
+| `db:m6:live:verify`                                 | `M6_TEST_DATABASE_URL` / `up_test_m6_gate_`               | `CONFIRM_M6_DATABASE=RUN_M6_FINAL_ACCEPTANCE`        |
+
+Use `APP_ENV=test` for the guarded service/planner/real-state/M6 processes. M5 real-state proof requires the documented synthetic seed first. Its browser companion also needs a localhost `M5_UI_BROWSER_URL` and test-only `AUTH_SECRET` shared with the optimized server. M6 starts its own optimized server, provisions synthetic identities and enters all academic facts through protected UI; its URL must differ from `DATABASE_URL`. These signed-cookie browser checks prove protected routes and persistence, not live Google OAuth consent. Temporary credentials and captures remain outside tracked source.
+
+Historical Milestone-1 acceptance used the expiring non-production branch `milestone-1-final-gate-20260922` (`br-red-wave-b5l6p77k`), scheduled to expire on 2026-09-29. It is not a current environment dependency.

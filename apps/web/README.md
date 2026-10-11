@@ -1,5 +1,5 @@
 # Production web application
 
-This package is the production Next.js App Router boundary. It is intentionally a small Milestone-0 shell: canonical data services, authentication, and UI migration belong to later roadmap milestones.
+This package is the production Next.js App Router boundary for Milestones 0–6: protected pages, service-backed read models, onboarding, manual management and reviewed Inbox resolution. Route handlers and server actions adapt requests to `src/server/application`; services derive the actor, validate ownership and commit conditional transactions before reporting success. Post-commit planning has a separate outcome.
 
-The approved interaction preview is not bundled into this app. It remains under `prototypes/approved-preview` as a regression reference for the Milestone-5 port.
+Local Next.js environment files belong in this directory. Use the root commands and [environment guide](../../docs/environments.md). The approved preview remains isolated under `prototypes/approved-preview`; production does not import its data. Execution outcomes and dynamic replanning are Milestone 7 and have not started.

@@ -1,6 +1,6 @@
 # Milestone 6 literal exit gate
 
-**Milestone 6 — GATE PASSED.** The acceptance data below is synthetic. The branch remains unmerged; Milestone 7 has not started.
+**Milestone 6 — GATE PASSED and merged.** [PR #9](https://github.com/Taheem-A/personal-university-planner/pull/9) merged at `30c55208398420a7c0ec9068c36b318adcb91229`. Milestone 7 has not started. The acceptance evidence below records the synthetic September 27 gate; [the stabilization checkpoint](./repository-stabilization.md) records the subsequent fresh rerun.
 
 ## Evidence sources
 

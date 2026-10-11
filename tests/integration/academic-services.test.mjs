@@ -656,7 +656,7 @@ test("manual life constraints preserve recurrence, ownership, sleep and planner 
     ).error.code,
     "VALIDATION_ERROR",
   );
-  assert.equal(owned("availability", user.userId, availability.id).endTimeLocal, "12:00");
+  assert.equal(owned("availability", user.userId, availability.id).endTimeLocal, "12:00:00");
   assert.equal(
     (
       await plannedSchedule.availabilityRules.update({
@@ -824,6 +824,39 @@ test("planning preferences create once, update conditionally and classify policy
   assert.equal(owned("preferences", user.userId, created.value.id).minimumSleepMinutes, 420);
 });
 
+test("course credit values match the positive-or-unknown persistence constraint", async () => {
+  const term = (
+    await academic.academicTerms.create({
+      name: "Synthetic term",
+      startDate: "2026-09-01",
+      endDate: "2026-12-20",
+    })
+  ).value;
+  const fields = { academicTermId: term.id, code: "SYN101", name: "Synthetic course" };
+  const before = rows.courses.length;
+  for (const creditValue of [0, -0.5]) {
+    assert.equal(
+      (await academic.courses.create({ ...fields, creditValue })).error.code,
+      "VALIDATION_ERROR",
+    );
+    assert.equal(rows.courses.length, before);
+  }
+  const course = (await academic.courses.create({ ...fields, creditValue: 0.5 })).value;
+  assert.equal(
+    (await academic.courses.update({ id: course.id, expectedVersion: 0, creditValue: 0 })).error
+      .code,
+    "VALIDATION_ERROR",
+  );
+  const stored = rows.courses.find((row) => row.id === course.id);
+  assert.equal(stored.version, 0);
+  assert.equal(stored.creditValue, 0.5);
+  assert.equal(
+    (await academic.courses.update({ id: course.id, expectedVersion: 0, creditValue: null })).value
+      .creditValue,
+    null,
+  );
+});
+
 test("academic service module loads and enforces two-user scoping, dates, and optimistic versions", async () => {
   const bad = await academic.academicTerms.create({
     name: "Fall",
@@ -973,7 +1006,7 @@ test("calendar isolation, recurrence validation, inbox text and stale edits", as
       energyLevel: "HIGH",
     })
   ).value;
-  assert.equal(rule.startTimeLocal, "09:00");
+  assert.equal(rule.startTimeLocal, "09:00:00");
   assert.equal(rule.effectiveUntil, null);
   assert.equal(
     (
@@ -1021,7 +1054,7 @@ test("preferences and protected time use versions and retain local wall-clock fi
     })
   ).value;
   assert.equal(protection.spansNextDay, true);
-  assert.equal(protection.startTimeLocal, "23:00");
+  assert.equal(protection.startTimeLocal, "23:00:00");
   assert.equal(
     (await schedule.protectedTimeRules.deactivate({ id: protection.id, expectedVersion: 0 })).value
       .active,
@@ -1302,6 +1335,54 @@ test("manual academic structure uses scoped versions, archived parents and class
     (await manual.manualTasks.create({ title: "Blocked", courseId: another.id, status: "READY" }))
       .error.code,
     "NOT_FOUND",
+  );
+});
+
+test("fixed events cannot attach to a course under an archived term", async () => {
+  const term = (
+    await academic.academicTerms.create({
+      name: "Event archive regression",
+      startDate: "2026-09-01",
+      endDate: "2026-12-20",
+    })
+  ).value;
+  const course = (
+    await academic.courses.create({
+      academicTermId: term.id,
+      code: "EVENT101",
+      name: "Synthetic events",
+    })
+  ).value;
+  const fields = {
+    title: "Fixed event",
+    eventType: "OTHER",
+    startAt: "2026-10-01T12:00:00Z",
+    endAt: "2026-10-01T13:00:00Z",
+    constraintLevel: "HARD",
+  };
+  const event = (await schedule.calendarEvents.create(fields)).value;
+  await academic.academicTerms.archive({ id: term.id, expectedVersion: 0 });
+  const count = rows.events.length;
+  assert.equal(
+    (await schedule.calendarEvents.create({ ...fields, courseId: course.id })).error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(rows.events.length, count);
+  assert.equal(
+    (
+      await schedule.calendarEvents.update({
+        id: event.id,
+        expectedVersion: 0,
+        courseId: course.id,
+      })
+    ).error.code,
+    "NOT_FOUND",
+  );
+  assert.equal(owned("events", user.userId, event.id).courseId, null);
+  assert.equal(owned("events", user.userId, event.id).version, 0);
+  assert.equal(
+    (await schedule.calendarEvents.archive({ id: event.id, expectedVersion: 0 })).ok,
+    true,
   );
 });
 

@@ -32,6 +32,7 @@ function load(file, stubs = {}, globals = {}) {
       Response,
       URL,
       JSON,
+      TextDecoder,
       ...globals,
     },
     { filename: file },
@@ -142,6 +143,93 @@ test("same-origin validation uses the browser-facing Host when Next rewrites req
     body: "{}",
   });
   assert.equal((await transport.bodyOf(foreignRequest)).status, 403);
+});
+
+test("JSON transport enforces bytes before invoking a mutation, including unknown-length streams", async () => {
+  const headers = { Origin: "http://localhost:3000", "Content-Type": "application/json" };
+  const make = (body, extra = {}) =>
+    new Request("http://localhost:3000/api/v1/tasks", {
+      method: "POST",
+      headers,
+      body,
+      ...extra,
+    });
+  const exact = JSON.stringify({ text: "x".repeat(65_536 - 11) });
+  assert.equal(new TextEncoder().encode(exact).byteLength, 65_536);
+  assert.equal((await transport.bodyOf(make(exact))).text.length, 65_536 - 11);
+  let mutations = 0;
+  const oversized = JSON.stringify({ text: "é".repeat(33_000) });
+  assert.ok(oversized.length < 65_536);
+  const response = await transport.mutate(make(oversized), async () => {
+    mutations++;
+    return { ok: true, value: {} };
+  });
+  assert.equal(response.status, 413);
+  assert.equal(mutations, 0);
+  let cancelled = false;
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(65_537));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  assert.equal((await transport.bodyOf(make(stream, { duplex: "half" }))).status, 413);
+  assert.equal(cancelled, true);
+});
+
+test("JSON transport decodes split UTF-8 and rejects MIME lookalikes and malformed bodies", async () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ text: "café" }));
+  const split = bytes.indexOf(0xc3) + 1;
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes.slice(0, split));
+      controller.enqueue(bytes.slice(split));
+      controller.close();
+    },
+  });
+  const headers = {
+    Origin: "http://localhost:3000",
+    "Content-Type": "application/json; charset=utf-8",
+  };
+  assert.deepEqual(
+    await transport.bodyOf(
+      new Request("http://localhost:3000/api", {
+        method: "POST",
+        headers,
+        body: stream,
+        duplex: "half",
+      }),
+    ),
+    { text: "café" },
+  );
+  for (const mime of ["application/jsonp", "application/json-invalid", "text/plain"]) {
+    assert.equal(
+      (
+        await transport.bodyOf(
+          new Request("http://localhost:3000/api", {
+            method: "POST",
+            headers: { ...headers, "Content-Type": mime },
+            body: "{}",
+          }),
+        )
+      ).status,
+      415,
+    );
+  }
+  assert.equal(
+    (
+      await transport.bodyOf(
+        new Request("http://localhost:3000/api", {
+          method: "POST",
+          headers,
+          body: "{",
+        }),
+      )
+    ).status,
+    400,
+  );
 });
 
 test("timezone mutation keeps actor server-owned, validates and rejects cross-origin requests", async () => {

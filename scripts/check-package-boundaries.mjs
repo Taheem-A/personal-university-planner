@@ -118,6 +118,21 @@ for (const filePath of sourceFiles) {
     const specifier = match[1];
     const target = targetOf(filePath, specifier);
     const resolvedSpecifier = path.resolve(path.dirname(filePath), specifier).replaceAll("\\", "/");
+    if (target && target !== owner && target !== "web") {
+      const publicEntry = path
+        .join(repositoryRoot, "packages", target, "src")
+        .replaceAll("\\", "/");
+      const isPublicEntry =
+        specifier === `@university-planner/${target}` ||
+        (specifier.startsWith(".") &&
+          (resolvedSpecifier === publicEntry ||
+            (/^\/index(?:\.[cm]?[jt]s)?$/.test(resolvedSpecifier.slice(publicEntry.length)) &&
+              resolvedSpecifier.startsWith(publicEntry))));
+      if (!isPublicEntry)
+        violations.push(
+          `${relativeFile}: cross-package imports must use the public ${target} entry point`,
+        );
+    }
     const fixtureSource =
       /(?:^|\/)(?:prototypes\/approved-preview|docs\/regression-reference|tests)(?:\/|$)/;
     if (

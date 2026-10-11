@@ -2,9 +2,18 @@ packages:
   - apps/*
   - packages/*
 
+# Single, temporary and explicitly accepted development-tooling advisory.
+# This is NOT a fix. See docs/dependency-policy.md for scope, review date and removal.
+audit:
+  level: high
+  ignore:
+    - GHSA-vfj7-8cjw-p6xm
+
 overrides:
   deepmerge-ts: 8.0.2
   mysql2: 3.24.4
+  next>sharp: 0.35.5
+  postcss>source-map-js: 1.2.2
 
 allowBuilds:
   "@prisma/engines": true
